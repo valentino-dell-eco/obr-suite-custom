@@ -442,7 +442,7 @@ async function fetchCardData(
   signal?: AbortSignal,
 ): Promise<{ data: any; source: CardDataSource }> {
   let json: any;
-  let source: CardDataSource | undefined;
+  let source: CardDataSource = "server";
 
   if (cardId.startsWith("imported_")) {
     const localKey = `${LS_PREFIX}imported/${cardId}`;
@@ -472,7 +472,7 @@ async function fetchCardData(
 
   return {
     data: normalizeCombatGearFlags(json),
-    source: source ?? "server",
+    source: source,
   };
 }
 
