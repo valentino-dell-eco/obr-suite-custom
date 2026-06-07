@@ -96,7 +96,7 @@ function fireNameSearch(q: string): void {
 // affordances (used sparingly). Reads as "more suite", not a
 // third-party widget.
 
-const SERVER_ORIGIN = "https://obr-suite-custom.pages.dev";
+const SERVER_ORIGIN = "https://obr.dnd.center";
 
 // Broadcast id mirrored from panel-page.ts. When any client uploads,
 // refreshes, or imports a card data.json, it sends BC_CARD_UPDATED so

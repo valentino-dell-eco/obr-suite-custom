@@ -402,7 +402,7 @@ type CardDataSource = "imported" | "dirty" | "server";
 type CardCacheEntry = { data: any; source: CardDataSource };
 const cardCache = new Map<string, CardCacheEntry>();
 
-const SERVER_ORIGIN = "https://obr-suite-custom.pages.dev";
+const SERVER_ORIGIN = "https://obr.dnd.center";
 const API_BASE = `${SERVER_ORIGIN}/api/character`;
 const LS_PREFIX = "character-cards/";
 
@@ -716,7 +716,7 @@ function render(
   const lvl = d.total_level != null ? `Lv${d.total_level}` : "";
   const sub = [race, cls, lvl].filter(Boolean).join(" ");
 
-  const rawUrl = `https://obr-suite-custom.pages.dev/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`;
+  const rawUrl = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`;
 
   // Stat banner — the shared `mountStatBanner` component (the SAME one
   // the standalone DM resource tracker mounts). It owns the HP / temp HP

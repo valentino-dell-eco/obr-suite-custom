@@ -399,8 +399,8 @@ const TR: Dict = {
   mbConnect: { zh: "连接", en: "Connect" },
   mbDisconnect: { zh: "断开", en: "Disconnect" },
   mbPairHint: {
-    zh: "在 <a href=\"https://obr-suite-custom.pages.dev/studio/music-studio/\" target=\"_blank\">obr-suite-custom.pages.dev/studio/music-studio/</a> 点「配对枭熊」拿到配对码，粘到这里。<br>连接后网页里的所有播放/暂停操作会同步到所有<b>已打开本面板</b>的玩家。<br><b>提示</b>：关闭此弹窗会停止音乐 + 断开配对。要保留请点右上角「−」收起到小条。",
-    en: "At <a href=\"https://obr-suite-custom.pages.dev/studio/music-studio/\" target=\"_blank\">obr-suite-custom.pages.dev/studio/music-studio/</a> click \"Pair\" to get a code, paste it here.<br>Once connected, every play/pause on the web syncs to all players who have <b>opened this panel</b>.<br><b>Note</b>: closing this popover stops the music + unpairs. To keep it, use the \"−\" minimize button.",
+    zh: "在 <a href=\"https://obr.dnd.center/studio/music-studio/\" target=\"_blank\">obr.dnd.center/studio/music-studio/</a> 点「配对枭熊」拿到配对码，粘到这里。<br>连接后网页里的所有播放/暂停操作会同步到所有<b>已打开本面板</b>的玩家。<br><b>提示</b>：关闭此弹窗会停止音乐 + 断开配对。要保留请点右上角「−」收起到小条。",
+    en: "At <a href=\"https://obr.dnd.center/studio/music-studio/\" target=\"_blank\">obr.dnd.center/studio/music-studio/</a> click \"Pair\" to get a code, paste it here.<br>Once connected, every play/pause on the web syncs to all players who have <b>opened this panel</b>.<br><b>Note</b>: closing this popover stops the music + unpairs. To keep it, use the \"−\" minimize button.",
   },
   // pair status (dynamic)
   mbStLoadingPeer: { zh: "加载 PeerJS…", en: "Loading PeerJS…" },

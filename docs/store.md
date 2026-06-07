@@ -3,20 +3,20 @@ title: Full Suite
 description: All-in-one TRPG extension bundling dice, initiative tracker, bestiary, character cards, global search, time stop, sync viewport, and portals — designed for D&D 5e play in Chinese / English.
 author: FullPeople
 image: https://raw.githubusercontent.com/FullPeople/obr-suite/main/docs/screenshots/hero.png
-icon: https://obr-suite-custom.pages.dev/suite/exe_icon.png
+icon: https://obr.dnd.center/suite/exe_icon.png
 tags:
   - dice
   - combat
   - tool
   - automation
   - content-pack
-manifest: https://obr-suite-custom.pages.dev/suite/manifest.json
+manifest: https://obr.dnd.center/suite/manifest.json
 learn-more: https://github.com/FullPeople/obr-suite
 ---
 
 # Full Suite
 
-Full Suite is an all-in-one TRPG extension that ships eight modules under a single manifest install. Designed for D&D 5e play, fully bilingual (Chinese / English, switchable per-client), and self-hosted at [obr-suite-custom.pages.dev](https://obr-suite-custom.pages.dev).
+Full Suite is an all-in-one TRPG extension that ships eight modules under a single manifest install. Designed for D&D 5e play, fully bilingual (Chinese / English, switchable per-client), and self-hosted at [obr.dnd.center](https://obr.dnd.center).
 
 ![hero](https://raw.githubusercontent.com/FullPeople/obr-suite/main/docs/screenshots/hero.png)
 
@@ -69,4 +69,4 @@ Released under [GNU GPL-3.0](https://github.com/FullPeople/obr-suite/blob/main/L
 
 - Source code: [github.com/FullPeople/obr-suite](https://github.com/FullPeople/obr-suite)
 - Issues: <1763086701@qq.com>
-- The extension is self-hosted at obr-suite-custom.pages.dev on Alibaba Cloud, with continuous updates and bug fixes funded by Ko-fi / Afdian backers.
+- The extension is self-hosted at obr.dnd.center on Alibaba Cloud, with continuous updates and bug fixes funded by Ko-fi / Afdian backers.

@@ -1558,7 +1558,7 @@ tagSaveBtn.addEventListener("click", async () => {
 });
 
 // ============ Default catalog import ============
-const MANIFEST_URL = "https://obr-suite-custom.pages.dev/music/manifest.json";
+const MANIFEST_URL = "https://obr.dnd.center/music/manifest.json";
 // 详细信息 toggle — show/hide the duration·bitrate·size meta row and
 // compact the cards. Persisted per browser.
 function syncDetailsToggleUi() {

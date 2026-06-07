@@ -167,10 +167,10 @@ E:/枭熊插件/obr-suite/
 ### A.2.4 部署架构
 
 - 阿里云 ECS：`47.120.61.255`，Ubuntu 24.04
-- 域名：`obr-suite-custom.pages.dev`（A 记录）
+- 域名：`obr.dnd.center`（A 记录）
 - HTTPS：Let's Encrypt 自动续签
-- 主插件 URL：`https://obr-suite-custom.pages.dev/suite/manifest.json`
-- Dev 渠道：`https://obr-suite-custom.pages.dev/suite-dev/manifest-dev.json`（命名空间 `com.obr-suite-dev/`，可与 stable 并存）
+- 主插件 URL：`https://obr.dnd.center/suite/manifest.json`
+- Dev 渠道：`https://obr.dnd.center/suite-dev/manifest-dev.json`（命名空间 `com.obr-suite-dev/`，可与 stable 并存）
 - 部署脚本：`build-and-pack.sh` / `deploy-suite.sh` / `deploy-suite-dev.sh`
 
 ---

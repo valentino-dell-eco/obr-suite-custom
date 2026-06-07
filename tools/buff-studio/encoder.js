@@ -33,7 +33,7 @@ async function getFfmpeg() {
     const ffmpeg = new FFmpeg();
 
     // ffmpeg.wasm always spawns its worker as `{type:"module"}` from a
-    // URL on unpkg — cross-origin to obr-suite-custom.pages.dev, which browsers
+    // URL on unpkg — cross-origin to obr.dnd.center, which browsers
     // forbid for `new Worker()`. A plain blob of worker.js won't do
     // either: worker.js has relative imports that must resolve against
     // unpkg, not a blob: URL. The shim is a tiny same-origin module

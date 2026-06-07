@@ -66,7 +66,7 @@ async function getCurrentBinding(): Promise<string | null> {
 async function fetchCardInitiative(cardId: string): Promise<number | null> {
   try {
     const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const url = `https://obr-suite-custom.pages.dev/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+    const url = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const d = await res.json();
@@ -90,7 +90,7 @@ interface BubblesSeed {
 async function fetchCardBubblesSeed(cardId: string): Promise<BubblesSeed | null> {
   try {
     const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const url = `https://obr-suite-custom.pages.dev/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+    const url = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const d = await res.json();
@@ -122,7 +122,7 @@ interface AutoResource {
 async function fetchCardAutoResources(cardId: string): Promise<AutoResource[] | null> {
   try {
     const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const url = `https://obr-suite-custom.pages.dev/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+    const url = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const d = await res.json();

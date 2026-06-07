@@ -43,7 +43,7 @@
 
 随项目封盘，插件内嵌的音乐板（侧栏图标 + 配对弹窗 + 后台音频引擎）已停止维护并下线。独立的网页版音乐板继续可用：
 
-<span style="color:#5dade2">**https://obr-suite-custom.pages.dev/studio/music-studio/**</span>
+<span style="color:#5dade2">**https://obr.dnd.center/studio/music-studio/**</span>
 
 它现在作为一个普通的网页播放器使用，可以整理 BGM/SFX 曲库、本地试听、开语音时共享电脑音频给玩家。原有"配对枭熊让所有玩家同步播放"的能力不再可用；如果需要这个能力，请自行下载源码部署。
 
@@ -78,7 +78,7 @@ The full source code is open-sourced (repo link in <span style="color:#5dade2">*
 
 With the project closure, the in-plugin music board (sidebar tool + pairing popover + background audio engine) is no longer maintained and has been taken down. The standalone web version is still available:
 
-<span style="color:#5dade2">**https://obr-suite-custom.pages.dev/studio/music-studio/**</span>
+<span style="color:#5dade2">**https://obr.dnd.center/studio/music-studio/**</span>
 
 It works now as a regular browser-side player — organize BGM/SFX, preview locally, share your computer audio over voice chat. The "pair-with-plugin so all players hear sync'd audio" feature is no longer available; if you need it, self-host from the source.
 

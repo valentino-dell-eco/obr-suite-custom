@@ -18,8 +18,8 @@ import OBR from "@owlbear-rodeo/sdk";
 const TOOL_ID = "com.obr-suite/dev-test-tool";
 const POPOVER_ID = "com.obr-suite/dev-test-panel";
 const BASE_URL = import.meta.env.BASE_URL || "/suite/";
-const PANEL_URL = `https://obr-suite-custom.pages.dev${BASE_URL}test-panel.html`;
-const ICON_URL = `https://obr-suite-custom.pages.dev${BASE_URL}icon.svg`;
+const PANEL_URL = `https://obr.dnd.center${BASE_URL}test-panel.html`;
+const ICON_URL = `https://obr.dnd.center${BASE_URL}icon.svg`;
 
 const BC_MOVE = "com.obr-suite/dev-test-move";
 const BC_INFO = "com.obr-suite/dev-test-info";

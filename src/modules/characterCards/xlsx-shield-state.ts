@@ -135,7 +135,7 @@ export async function reconcileUploadedCardShieldState(params: {
   const equipped = await readShieldEquippedFromXlsx(params.xlsx);
   if (equipped == null) return false;
 
-  const dataUrl = `https://obr-suite-custom.pages.dev/characters/${encodeURIComponent(params.roomId)}/${encodeURIComponent(params.cardId)}/data.json`;
+  const dataUrl = `https://obr.dnd.center/characters/${encodeURIComponent(params.roomId)}/${encodeURIComponent(params.cardId)}/data.json`;
   const res = await fetch(dataUrl, { cache: "no-cache" });
   if (!res.ok) throw new Error(`fetch data.json failed: HTTP ${res.status}`);
   const data = await res.json();

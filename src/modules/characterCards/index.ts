@@ -86,7 +86,7 @@ const CTX_BIND = "com.obr-suite/cc-bind-menu";
 // alone — mid-session HP edits shouldn't be wiped by a passive
 // refresh.
 const BC_CARD_UPDATED = "com.obr-suite/cc-card-updated";
-const SERVER_ORIGIN = "https://obr-suite-custom.pages.dev";
+const SERVER_ORIGIN = "https://obr.dnd.center";
 
 // Standalone TOOL id — a top-level button in OBR's tool toolbar
 // (alongside Move / Select / Measure / …), NOT an action nested

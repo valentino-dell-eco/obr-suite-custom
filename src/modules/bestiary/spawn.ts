@@ -96,7 +96,7 @@ function probeImage(url: string): Promise<{ ok: boolean; w: number; h: number }>
   });
 }
 
-const FALLBACK_TOKEN_URL = `https://obr-suite-custom.pages.dev/5etools-img/bestiary/tokens/MM/Commoner.webp`;
+const FALLBACK_TOKEN_URL = `https://obr.dnd.center/5etools-img/bestiary/tokens/MM/Commoner.webp`;
 
 /** Detect the right MIME type from a token URL extension. OBR's
  *  image-fetcher validates the ImageContent.mime field against the
