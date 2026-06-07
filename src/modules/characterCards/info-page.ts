@@ -402,7 +402,7 @@ type CardDataSource = "imported" | "dirty" | "server";
 type CardCacheEntry = { data: any; source: CardDataSource };
 const cardCache = new Map<string, CardCacheEntry>();
 
-const SERVER_ORIGIN = "https://obr.dnd.center";
+const SERVER_ORIGIN = "https://obr-suite-custom.pages.dev";
 const API_BASE = `${SERVER_ORIGIN}/api/character`;
 const LS_PREFIX = "character-cards/";
 
