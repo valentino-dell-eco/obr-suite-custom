@@ -136,5 +136,5 @@ First public release. Renamed from "枭熊插件 / Owl Suite" (working title) to
 ### Tooling and infrastructure
 
 - Vite build with manualChunks-isolated `vendor` chunk to avoid circular ESM dep between the OBR SDK runtime and user code.
-- Self-hosted at `obr.dnd.center` (Alibaba Cloud) with Let's Encrypt HTTPS and an nginx config that disables HTML caching to prevent stale references to old hashed JS chunks after redeploys.
+- Self-hosted at `obr-suite-custom.pages.dev` (Alibaba Cloud) with Let's Encrypt HTTPS and an nginx config that disables HTML caching to prevent stale references to old hashed JS chunks after redeploys.
 - License: PolyForm Noncommercial 1.0.0.

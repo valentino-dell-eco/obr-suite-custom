@@ -13,7 +13,7 @@
 在 OBR 房间内点击右上角 ⊕ "Add Extension"，粘贴：
 
 ```
-https://obr.dnd.center/suite/manifest.json
+https://obr-suite-custom.pages.dev/suite/manifest.json
 ```
 
 ## 模块清单
@@ -164,4 +164,4 @@ obr-suite/
 
 - Email：[1763086701@qq.com](mailto:1763086701@qq.com)
 - GitHub：[@FullPeople](https://github.com/FullPeople)
-- 自托管节点：[obr.dnd.center](https://obr.dnd.center)
+- 自托管节点：[obr-suite-custom.pages.dev](https://obr-suite-custom.pages.dev)

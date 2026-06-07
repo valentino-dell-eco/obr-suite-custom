@@ -2206,7 +2206,7 @@ async function fetchCardData(cardId: string): Promise<any | null> {
   if (cardDataCache.has(cardId)) return cardDataCache.get(cardId);
   try {
     const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const url = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+    const url = `https://obr-suite-custom.pages.dev/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const d = await res.json();

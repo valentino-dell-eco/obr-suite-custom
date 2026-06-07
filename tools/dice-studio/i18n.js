@@ -3,7 +3,7 @@
 // These studio tools are plain static pages (no bundler), so each ships
 // its own tiny i18n module rather than importing the plugin's src/i18n.ts.
 // Language is read from the SAME localStorage key the OBR Suite plugin
-// uses ("obr-suite/lang") — studio + plugin share the obr.dnd.center
+// uses ("obr-suite/lang") — studio + plugin share the obr-suite-custom.pages.dev
 // origin, so a language picked in the plugin carries over. For users who
 // open a studio tool directly (no plugin visit) we fall back to the
 // browser language. A ZH/EN toggle in the top bar lets anyone override.

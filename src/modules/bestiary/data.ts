@@ -82,7 +82,7 @@ function getUnionDisabledSources(): Set<string> {
 }
 // Images: proxied through our own server so OBR can load them as WebGL textures
 // (5e.tools doesn't send CORS headers, so direct loading fails in scene rendering).
-const IMG_BASE = "https://obr.dnd.center/5etools-img";
+const IMG_BASE = "https://obr-suite-custom.pages.dev/5etools-img";
 
 const SIZE_MAP: Record<string, string> = {
   T: "超小型", S: "小型", M: "中型", L: "大型", H: "巨型", G: "超巨型",

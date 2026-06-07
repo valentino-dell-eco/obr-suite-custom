@@ -1246,7 +1246,7 @@ function renderLibrariesBody(lang: Language): string {
       </div>
       <div class="lib-studio">
         <span class="lib-studio-txt">不想手写 JSON？<b>Monster Studio</b> 是一个在线可视化怪物编辑器：导入 / 表单编辑 / 实时预览 / 导出。导出的 JSON 可直接「本地导入」或放进你的库。</span>
-        <a class="lib-studio-btn" href="https://obr.dnd.center/studio/monster-studio/" target="_blank" rel="noopener">🐲 打开 Monster Studio ↗</a>
+        <a class="lib-studio-btn" href="https://obr-suite-custom.pages.dev/studio/monster-studio/" target="_blank" rel="noopener">🐲 打开 Monster Studio ↗</a>
       </div>
     `
     : `
@@ -1257,7 +1257,7 @@ function renderLibrariesBody(lang: Language): string {
       </div>
       <div class="lib-studio">
         <span class="lib-studio-txt">Don't want to hand-write JSON? <b>Monster Studio</b> is an online visual monster editor — import / form-edit / live preview / export. The exported JSON imports directly via "Local content" or drops into your library.</span>
-        <a class="lib-studio-btn" href="https://obr.dnd.center/studio/monster-studio/" target="_blank" rel="noopener">🐲 Open Monster Studio ↗</a>
+        <a class="lib-studio-btn" href="https://obr-suite-custom.pages.dev/studio/monster-studio/" target="_blank" rel="noopener">🐲 Open Monster Studio ↗</a>
       </div>
     `;
   const list = libs.map((l) => libraryRowHtml(l, lang, isGM)).join("");
@@ -2837,7 +2837,7 @@ const TABS: TabDef[] = [
 <h4 style="margin-top:14px">网页版音乐板（独立运行）</h4>
 <p>下面这个地址依然可以正常访问，<b>无需配对、无需插件</b>，浏览器打开即用：</p>
 <p style="margin:10px 0">
-  <a href="https://obr.dnd.center/studio/music-studio/" target="_blank" rel="noopener"
+  <a href="https://obr-suite-custom.pages.dev/studio/music-studio/" target="_blank" rel="noopener"
      style="display:inline-block;padding:8px 14px;border-radius:8px;
             background:linear-gradient(180deg, var(--accent), var(--accent-dim));
             color:#fff;text-decoration:none;font-weight:600;font-size:13px">
@@ -2863,7 +2863,7 @@ const TABS: TabDef[] = [
 <h4 style="margin-top:14px">Web Music Board (standalone)</h4>
 <p>The link below still works — <b>no pairing, no plugin needed</b>, just open it in a browser:</p>
 <p style="margin:10px 0">
-  <a href="https://obr.dnd.center/studio/music-studio/" target="_blank" rel="noopener"
+  <a href="https://obr-suite-custom.pages.dev/studio/music-studio/" target="_blank" rel="noopener"
      style="display:inline-block;padding:8px 14px;border-radius:8px;
             background:linear-gradient(180deg, var(--accent), var(--accent-dim));
             color:#fff;text-decoration:none;font-weight:600;font-size:13px">

@@ -616,7 +616,7 @@ const modules: Partial<Record<keyof ReturnType<typeof getState>["enabled"], Modu
   // plugin module is no longer registered here, so even if a room
   // still has musicBoard:true in stored state, setupMusicBoard never
   // runs and no popover / audio engine / PeerJS pairing starts. The
-  // web tool at obr.dnd.center/studio/music-studio/ still works
+  // web tool at obr-suite-custom.pages.dev/studio/music-studio/ still works
   // standalone; the settings page links there.
   // fullFog stays dev-only — door / window cutting still in design.
   ...(STABLE_HIDES

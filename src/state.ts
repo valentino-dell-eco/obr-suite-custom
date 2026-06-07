@@ -204,7 +204,7 @@ export const DEFAULT_STATE: SuiteState = {
     // is kept on disk un-wired in case it's revived.
     follow: false,
     // Music board — RETIRED 2026-05-23 with project closure. The
-    // standalone web tool at obr.dnd.center/studio/music-studio/
+    // standalone web tool at obr-suite-custom.pages.dev/studio/music-studio/
     // continues to work standalone; the in-plugin module (background-
     // resident audio engine + PeerJS pairing + popover) is no longer
     // wired into background.ts's modules registry, so this flag is

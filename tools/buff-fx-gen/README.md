@@ -83,11 +83,11 @@ some clients.
 
 ## Why generate locally instead of on the server
 
-The server hosting `obr.dnd.center/suite-dev/` doesn't have ffmpeg.
+The server hosting `obr-suite-custom.pages.dev/suite-dev/` doesn't have ffmpeg.
 Generating client-side once + checking the WebMs into the repo means:
 
 - No server-side runtime dependency on ffmpeg
 - WebMs deploy as plain static files alongside the rest of the suite
 - Plugin code references them by stable URL like
-  `https://obr.dnd.center/suite-dev/buff-fx/paralysis.webm`
+  `https://obr-suite-custom.pages.dev/suite-dev/buff-fx/paralysis.webm`
 - Caching is "forever" (the files don't change between deploys)

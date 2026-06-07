@@ -13,7 +13,7 @@ A third-party extension for [Owlbear Rodeo](https://owlbear.rodeo) that ships ei
 In an OBR room, click the ⊕ "Add Extension" button (top right) and paste:
 
 ```
-https://obr.dnd.center/suite/manifest.json
+https://obr-suite-custom.pages.dev/suite/manifest.json
 ```
 
 ## Modules
@@ -162,4 +162,4 @@ Per-client preferences live in localStorage (cluster expanded, auto-popup toggle
 
 - Email: [1763086701@qq.com](mailto:1763086701@qq.com)
 - GitHub: [@FullPeople](https://github.com/FullPeople)
-- Self-hosted at [obr.dnd.center](https://obr.dnd.center)
+- Self-hosted at [obr-suite-custom.pages.dev](https://obr-suite-custom.pages.dev)

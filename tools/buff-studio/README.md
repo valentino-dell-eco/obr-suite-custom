@@ -73,8 +73,8 @@ python -m http.server 8123
 Static — shipped by `deploy-studio.sh` alongside `monster-studio`:
 
 ```
-https://obr.dnd.center/studio/buff-studio/      ← this tool
-https://obr.dnd.center/studio/monster-studio/   ← Page 1
+https://obr-suite-custom.pages.dev/studio/buff-studio/      ← this tool
+https://obr-suite-custom.pages.dev/studio/monster-studio/   ← Page 1
 ```
 
 ## Output spec (matches OBR Suite plugin)

@@ -3,7 +3,7 @@
 // `import.meta.env.BASE_URL` is the value vite injects at build time —
 // "/suite/" for stable builds and "/suite-dev/" for dev builds (set
 // via SUITE_BASE in the deploy scripts). `location.origin` is the
-// host we're served from at runtime (always obr.dnd.center on prod).
+// host we're served from at runtime (always obr-suite-custom.pages.dev on prod).
 //
 // Combining the two means every URL the plugin constructs at runtime
 // (popover URLs, modal URLs, image item URLs, sound assets, template
@@ -14,7 +14,7 @@
 // the user reported.
 //
 // Use `assetUrl("foo.html")` instead of writing a literal
-// "https://obr.dnd.center/suite/foo.html". Pass the path RELATIVE to
+// "https://obr-suite-custom.pages.dev/suite/foo.html". Pass the path RELATIVE to
 // the suite root, no leading slash.
 export const ASSET_BASE = `${location.origin}${import.meta.env.BASE_URL}`;
 
