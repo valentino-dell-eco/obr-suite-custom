@@ -278,7 +278,10 @@ function renderNameButton(name: string, clickable: boolean): string {
   if (!clickable) {
     return `<div class="name">${escapeHtml(name)}</div>`;
   }
-  const title = t(getLocalLang(), "ccInfoNameSyncTitle").replace("{name}", name);
+  const title = t(getLocalLang(), "ccInfoNameSyncTitle").replace(
+    "{name}",
+    name,
+  );
   return `<button class="name name-btn" type="button" data-name-text="${escapeHtml(name)}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(name)}</button>`;
 }
 
@@ -439,7 +442,7 @@ async function fetchCardData(
   signal?: AbortSignal,
 ): Promise<{ data: any; source: CardDataSource }> {
   let json: any;
-  let source: CardDataSource;
+  let source: CardDataSource | undefined;
 
   if (cardId.startsWith("imported_")) {
     const localKey = `${LS_PREFIX}imported/${cardId}`;
@@ -469,7 +472,7 @@ async function fetchCardData(
 
   return {
     data: normalizeCombatGearFlags(json),
-    source,
+    source: source ?? "server",
   };
 }
 
@@ -573,10 +576,7 @@ function updateSyncButtons(
 
   const loading = state === "loading";
   syncLoading = loading;
-  const cloudUi = renderSyncCloudMarkup(
-    currentCardId,
-    loading,
-  );
+  const cloudUi = renderSyncCloudMarkup(currentCardId, loading);
   cloud.className = cloudUi.className;
   cloud.title = cloudUi.title;
   cloud.innerHTML = cloudUi.html;
@@ -709,7 +709,8 @@ function render(
   const cb = d.combat || {};
   const sp = d.spellcasting || {};
 
-  const name = id.display_name || id.character_name || t(getLocalLang(), "ccInfoUnnamed");
+  const name =
+    id.display_name || id.character_name || t(getLocalLang(), "ccInfoUnnamed");
   const race = [id.race?.name, id.race?.subrace].filter(Boolean).join("·");
   const cls = classesStr(d);
   const lvl = d.total_level != null ? `Lv${d.total_level}` : "";
@@ -835,7 +836,9 @@ function render(
       const propsRaw = String(w.properties ?? "");
       const masteryName = String((w as any).mastery ?? "").trim();
       const lang = getLocalLang();
-      const masteryPrefix = masteryName ? `${t(lang, "ccInfoMasteryPrefix")}${masteryName}` : "";
+      const masteryPrefix = masteryName
+        ? `${t(lang, "ccInfoMasteryPrefix")}${masteryName}`
+        : "";
       // Merge into one string. If the raw props already contains a
       // mastery tag (legacy cards), don't double-add the dedicated one.
       const propsCombined =

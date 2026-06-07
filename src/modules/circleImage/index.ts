@@ -9,6 +9,7 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { assetUrl } from "../../asset-base";
 import { PLUGIN_ID, POPOVER_ID } from "./types";
+import { getLocalLang } from "../../state";
 
 const TOOL_ID = `${PLUGIN_ID}/tool`;
 const ICON_URL = assetUrl("circleimage-icon.svg");
@@ -47,12 +48,16 @@ async function openPopover(): Promise<void> {
 
 async function closePopover(): Promise<void> {
   if (!popoverOpen) return;
-  try { await OBR.popover.close(POPOVER_ID); } catch {}
+  try {
+    await OBR.popover.close(POPOVER_ID);
+  } catch {}
   popoverOpen = false;
 }
 
 export async function setupCircleImage(): Promise<void> {
-  try { role = (await OBR.player.getRole()) as "GM" | "PLAYER"; } catch {}
+  try {
+    role = (await OBR.player.getRole()) as "GM" | "PLAYER";
+  } catch {}
 
   // GM-only — only the DM produces circle / bg-removed images.
   if (role === "GM") {
@@ -62,7 +67,10 @@ export async function setupCircleImage(): Promise<void> {
         icons: [
           {
             icon: ICON_URL,
-            label: en ? "Circle Image / BG Remove" : "圆形图片 / 去底",
+            label:
+              getLocalLang() === "en"
+                ? "Circle Image / BG Remove"
+                : "圆形图片 / 去底",
             filter: { roles: ["GM"] },
           },
         ],
@@ -88,6 +96,8 @@ export async function setupCircleImage(): Promise<void> {
 export async function teardownCircleImage(): Promise<void> {
   await closePopover();
   if (role === "GM") {
-    try { await OBR.tool.remove(TOOL_ID); } catch {}
+    try {
+      await OBR.tool.remove(TOOL_ID);
+    } catch {}
   }
 }
