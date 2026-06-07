@@ -11,7 +11,7 @@ import {
 import { formatTagsClickable, resolveClickRollTarget } from "../dice/tags";
 import { bindRollableClickPopup } from "../dice/context-menu";
 import { subscribeToSfx } from "../dice/sfx-broadcast";
-import { applyI18nDom } from "../../i18n";
+import { applyI18nDom, t } from "../../i18n";
 import {
   getLocalIndexFile,
   getLocalDataByKeySource,
@@ -35,12 +35,25 @@ const POPOVER_ID = "com.obr-suite/search-bar";
 // Cloudflare lib's homebrew monsters show up in search alongside
 // the kiwee defaults.
 const DEFAULT_BASE = "https://5e.kiwee.top";
+let _lang: Language = (() => {
+  try {
+    return (getLocalLang() as Language) ?? "en";
+  } catch {
+    return "en";
+  }
+})();
+const T = (k: Parameters<typeof t>[1]) => t(_lang, k);
 
 function getEnabledLibraryBases(): string[] {
   try {
     const libs = getState().libraries || [];
     const bases = libs
-      .filter((l) => l.enabled && typeof l.baseUrl === "string" && l.baseUrl.trim().length > 0)
+      .filter(
+        (l) =>
+          l.enabled &&
+          typeof l.baseUrl === "string" &&
+          l.baseUrl.trim().length > 0,
+      )
       .map((l) => l.baseUrl.replace(/\/+$/, ""));
     return bases.length > 0 ? bases : [DEFAULT_BASE];
   } catch {
@@ -68,12 +81,18 @@ function getEnabledLibrarySources(): Array<{
     // loadIndex still runs, so search results will reflect just
     // imported JSON / MD files in that case.
     return libs
-      .filter((l) => l.enabled && typeof l.baseUrl === "string" && l.baseUrl.trim().length > 0)
+      .filter(
+        (l) =>
+          l.enabled &&
+          typeof l.baseUrl === "string" &&
+          l.baseUrl.trim().length > 0,
+      )
       .map((l) => ({
         base: l.baseUrl.replace(/\/+$/, ""),
-        indexPath: typeof l.indexPath === "string" && l.indexPath.length > 0
-          ? l.indexPath.replace(/^\/+/, "")
-          : "search/index.json",
+        indexPath:
+          typeof l.indexPath === "string" && l.indexPath.length > 0
+            ? l.indexPath.replace(/^\/+/, "")
+            : "search/index.json",
         // Normalise disabled list to lower-case so the per-entry check
         // is case-insensitive against whatever 5etools emits.
         disabledSources: new Set(
@@ -93,8 +112,12 @@ function dataBase(_lang: Language): string {
   // resolving). Fallback is the kiwee mirror.
   return getEnabledLibraryBases()[0];
 }
-function indexUrl(lang: Language): string { return `${dataBase(lang)}/search/index.json`; }
-function booksUrl(lang: Language): string { return `${dataBase(lang)}/data/books.json`; }
+function indexUrl(lang: Language): string {
+  return `${dataBase(lang)}/search/index.json`;
+}
+function booksUrl(lang: Language): string {
+  return `${dataBase(lang)}/data/books.json`;
+}
 
 const BAR_W_IDLE = 280;
 const BAR_W_OPEN = 720;
@@ -161,22 +184,40 @@ interface CategoryInfo {
 }
 
 const CATEGORY: Record<number, CategoryInfo> = {
-  1:  { label: "怪物", data: { fileBySource: (s) => `bestiary/bestiary-${s}.json`, key: "monster" } },
-  2:  { label: "法术", data: { fileBySource: (s) => `spells/spells-${s}.json`, key: "spell" } },
-  3:  { label: "背景", data: { file: "backgrounds.json", key: "background" } },
-  4:  { label: "物品", data: { file: "items.json", key: "item" } },
+  1: {
+    label: "怪物",
+    data: {
+      fileBySource: (s) => `bestiary/bestiary-${s}.json`,
+      key: "monster",
+    },
+  },
+  2: {
+    label: "法术",
+    data: { fileBySource: (s) => `spells/spells-${s}.json`, key: "spell" },
+  },
+  3: { label: "背景", data: { file: "backgrounds.json", key: "background" } },
+  4: { label: "物品", data: { file: "items.json", key: "item" } },
   // 5etools classes are split into one file per class —
   // `class/class-{className-slug}.json`. The search index doesn't
   // surface the parent-class slug for features, so we fetch
   // `class/index.json` and pool every file's key array together.
-  5:  { label: "职业", data: { allClassFiles: true, key: "class" } },
-  6:  { label: "状态", data: { file: "conditionsdiseases.json", key: "condition" } },
-  7:  { label: "专长", data: { file: "feats.json", key: "feat" } },
-  8:  { label: "能力", data: { file: "optionalfeatures.json", key: "optionalfeature" } },
-  9:  { label: "灵能", data: { file: "psionics.json", key: "psionic" } },
+  5: { label: "职业", data: { allClassFiles: true, key: "class" } },
+  6: {
+    label: "状态",
+    data: { file: "conditionsdiseases.json", key: "condition" },
+  },
+  7: { label: "专长", data: { file: "feats.json", key: "feat" } },
+  8: {
+    label: "能力",
+    data: { file: "optionalfeatures.json", key: "optionalfeature" },
+  },
+  9: { label: "灵能", data: { file: "psionics.json", key: "psionic" } },
   10: { label: "种族", data: { file: "races.json", key: "race" } },
   11: { label: "奖励", data: { file: "rewards.json", key: "reward" } },
-  12: { label: "副规则", data: { file: "variantrules.json", key: "variantrule" } },
+  12: {
+    label: "副规则",
+    data: { file: "variantrules.json", key: "variantrule" },
+  },
   13: { label: "冒险", data: { file: "adventures.json", key: "adventure" } },
   14: { label: "神祇", data: { file: "deities.json", key: "deity" } },
   15: { label: "载具", data: { file: "vehicles.json", key: "vehicle" } },
@@ -185,42 +226,90 @@ const CATEGORY: Record<number, CategoryInfo> = {
   18: { label: "整本书", data: { file: "books.json", key: "book" } },
   19: { label: "教派", data: { file: "cultsboons.json", key: "cult" } },
   20: { label: "恩惠", data: { file: "cultsboons.json", key: "boon" } },
-  21: { label: "疾病", data: { file: "conditionsdiseases.json", key: "disease" } },
-  22: { label: "超魔", data: { file: "optionalfeatures.json", key: "optionalfeature" } },
-  23: { label: "招式", data: { file: "optionalfeatures.json", key: "optionalfeature" } },
+  21: {
+    label: "疾病",
+    data: { file: "conditionsdiseases.json", key: "disease" },
+  },
+  22: {
+    label: "超魔",
+    data: { file: "optionalfeatures.json", key: "optionalfeature" },
+  },
+  23: {
+    label: "招式",
+    data: { file: "optionalfeatures.json", key: "optionalfeature" },
+  },
   24: { label: "表格", data: { file: "tables.json", key: "table" } },
   25: { label: "牌组" },
-  27: { label: "奥术箭", data: { file: "optionalfeatures.json", key: "optionalfeature" } },
-  29: { label: "战斗风格", data: { file: "optionalfeatures.json", key: "optionalfeature" } },
+  27: {
+    label: "奥术箭",
+    data: { file: "optionalfeatures.json", key: "optionalfeature" },
+  },
+  29: {
+    label: "战斗风格",
+    data: { file: "optionalfeatures.json", key: "optionalfeature" },
+  },
   30: { label: "职业能力", data: { allClassFiles: true, key: "classFeature" } },
   31: { label: "物品", data: { file: "items.json", key: "item" } },
-  32: { label: "盟约", data: { file: "optionalfeatures.json", key: "optionalfeature" } },
-  33: { label: "武僧能力", data: { file: "optionalfeatures.json", key: "optionalfeature" } },
-  34: { label: "灌注", data: { file: "optionalfeatures.json", key: "optionalfeature" } },
-  35: { label: "载具升级", data: { file: "vehicles.json", key: "vehicleUpgrade" } },
+  32: {
+    label: "盟约",
+    data: { file: "optionalfeatures.json", key: "optionalfeature" },
+  },
+  33: {
+    label: "武僧能力",
+    data: { file: "optionalfeatures.json", key: "optionalfeature" },
+  },
+  34: {
+    label: "灌注",
+    data: { file: "optionalfeatures.json", key: "optionalfeature" },
+  },
+  35: {
+    label: "载具升级",
+    data: { file: "vehicles.json", key: "vehicleUpgrade" },
+  },
   36: { label: "船定制" },
-  37: { label: "符文", data: { file: "optionalfeatures.json", key: "optionalfeature" } },
+  37: {
+    label: "符文",
+    data: { file: "optionalfeatures.json", key: "optionalfeature" },
+  },
   40: { label: "子职业", data: { allClassFiles: true, key: "subclass" } },
-  41: { label: "子职能力", data: { allClassFiles: true, key: "subclassFeature" } },
+  41: {
+    label: "子职能力",
+    data: { allClassFiles: true, key: "subclassFeature" },
+  },
   42: { label: "动作", data: { file: "actions.json", key: "action" } },
   43: { label: "语言", data: { file: "languages.json", key: "language" } },
   44: { label: "整本书", data: { file: "books.json", key: "book" } },
   45: { label: "页面" },
-  46: { label: "怪物概述", data: { fileBySource: (s) => `bestiary/fluff-bestiary-${s}.json`, key: "monsterFluff" } },
+  46: {
+    label: "怪物概述",
+    data: {
+      fileBySource: (s) => `bestiary/fluff-bestiary-${s}.json`,
+      key: "monsterFluff",
+    },
+  },
   47: { label: "角色选项", data: { file: "items.json", key: "item" } },
   48: { label: "食谱", data: { file: "recipes.json", key: "recipe" } },
-  49: { label: "规则", data: { file: "conditionsdiseases.json", key: "status" } },
+  49: {
+    label: "规则",
+    data: { file: "conditionsdiseases.json", key: "status" },
+  },
   50: { label: "技能" },
   51: { label: "感官" },
   52: { label: "牌组", data: { file: "decks.json", key: "deck" } },
   53: { label: "牌内容" },
-  54: { label: "武器精通", data: { itemsBaseKey: "itemMastery", key: "itemMastery" } },
+  54: {
+    label: "武器精通",
+    data: { itemsBaseKey: "itemMastery", key: "itemMastery" },
+  },
   // c=58 is a SUITE-synthesised pseudo-category for weapon properties
   // (轻型 / 灵巧 / 投掷 / …). 5etools doesn't index them, but we
   // synthesise virtual search entries from items-base.json's
   // itemProperty array so weapon-property chips on the cc-info popup
   // can resolve a definition.
-  58: { label: "武器属性", data: { itemsBaseKey: "itemProperty", key: "itemProperty" } },
+  58: {
+    label: "武器属性",
+    data: { itemsBaseKey: "itemProperty", key: "itemProperty" },
+  },
   55: { label: "地点" },
   56: { label: "物品集合", data: { file: "items.json", key: "itemGroup" } },
   57: { label: "物品", data: { file: "items.json", key: "item" } },
@@ -230,19 +319,60 @@ const CATEGORY: Record<number, CategoryInfo> = {
 // in on the EN path so every display site reading `.label` gets it for
 // free (the zh `label` above stays the source of truth for fallback).
 const CATEGORY_LABEL_EN: Record<number, string> = {
-  1: "Monster", 2: "Spell", 3: "Background", 4: "Item", 5: "Class",
-  6: "Condition", 7: "Feat", 8: "Feature", 9: "Psionic", 10: "Race",
-  11: "Reward", 12: "Variant Rule", 13: "Adventure", 14: "Deity",
-  15: "Vehicle", 16: "Trap", 17: "Hazard", 18: "Book", 19: "Cult",
-  20: "Boon", 21: "Disease", 22: "Metamagic", 23: "Maneuver", 24: "Table",
-  25: "Deck", 27: "Arcane Shot", 29: "Fighting Style", 30: "Class Feature",
-  31: "Item", 32: "Pact", 33: "Ki Feature", 34: "Infusion",
-  35: "Vehicle Upgrade", 36: "Ship Customization", 37: "Rune",
-  40: "Subclass", 41: "Subclass Feature", 42: "Action", 43: "Language",
-  44: "Book", 45: "Page", 46: "Monster Lore", 47: "Char Option",
-  48: "Recipe", 49: "Rule", 50: "Skill", 51: "Sense", 52: "Deck",
-  53: "Card", 54: "Weapon Mastery", 55: "Place", 56: "Item Group",
-  57: "Item", 58: "Weapon Property",
+  1: "Monster",
+  2: "Spell",
+  3: "Background",
+  4: "Item",
+  5: "Class",
+  6: "Condition",
+  7: "Feat",
+  8: "Feature",
+  9: "Psionic",
+  10: "Race",
+  11: "Reward",
+  12: "Variant Rule",
+  13: "Adventure",
+  14: "Deity",
+  15: "Vehicle",
+  16: "Trap",
+  17: "Hazard",
+  18: "Book",
+  19: "Cult",
+  20: "Boon",
+  21: "Disease",
+  22: "Metamagic",
+  23: "Maneuver",
+  24: "Table",
+  25: "Deck",
+  27: "Arcane Shot",
+  29: "Fighting Style",
+  30: "Class Feature",
+  31: "Item",
+  32: "Pact",
+  33: "Ki Feature",
+  34: "Infusion",
+  35: "Vehicle Upgrade",
+  36: "Ship Customization",
+  37: "Rune",
+  40: "Subclass",
+  41: "Subclass Feature",
+  42: "Action",
+  43: "Language",
+  44: "Book",
+  45: "Page",
+  46: "Monster Lore",
+  47: "Char Option",
+  48: "Recipe",
+  49: "Rule",
+  50: "Skill",
+  51: "Sense",
+  52: "Deck",
+  53: "Card",
+  54: "Weapon Mastery",
+  55: "Place",
+  56: "Item Group",
+  57: "Item",
+  58: "Weapon Property",
 };
 function categoryInfo(c: number): CategoryInfo {
   const info = CATEGORY[c] ?? { label: `?${c}` };
@@ -288,7 +418,10 @@ async function loadIndex(): Promise<IndexFile> {
     // per-library source blacklist (e.g. disabling BOOKOFEBONTIDES)
     // both invalidate the cache.
     const cacheKey = `${CACHE_KEY}:${sources
-      .map((s) => `${s.base}|${s.indexPath}|${[...s.disabledSources].sort().join(",")}`)
+      .map(
+        (s) =>
+          `${s.base}|${s.indexPath}|${[...s.disabledSources].sort().join(",")}`,
+      )
       .join("||")}:${getLocalContentSignature()}`;
     try {
       const raw = localStorage.getItem(cacheKey);
@@ -307,17 +440,22 @@ async function loadIndex(): Promise<IndexFile> {
     const perLibrary = await Promise.all(
       sources.map(async (cfg) => {
         try {
-          const res = await fetch(`${cfg.base}/${cfg.indexPath}`, { cache: "no-cache" });
+          const res = await fetch(`${cfg.base}/${cfg.indexPath}`, {
+            cache: "no-cache",
+          });
           if (!res.ok) return null;
           return { idx: (await res.json()) as IndexFile, cfg };
         } catch (e) {
-          console.warn(`[obr-suite/search] index fetch failed for ${cfg.base}/${cfg.indexPath}`, e);
+          console.warn(
+            `[obr-suite/search] index fetch failed for ${cfg.base}/${cfg.indexPath}`,
+            e,
+          );
           return null;
         }
-      })
+      }),
     );
     const valid = perLibrary.filter(
-      (x): x is { idx: IndexFile; cfg: typeof sources[number] } =>
+      (x): x is { idx: IndexFile; cfg: (typeof sources)[number] } =>
         !!x && Array.isArray(x.idx.x),
     );
     // Locally-imported homebrew gets synthesised into a virtual
@@ -325,9 +463,18 @@ async function loadIndex(): Promise<IndexFile> {
     // Local content has no `disabledSources` blacklist (per-source
     // toggling for local homebrew can be done by deleting the file).
     const localIdx = getLocalIndexFile();
-    const allValid: Array<{ idx: IndexFile; cfg: { disabledSources: Set<string> } }> =
+    const allValid: Array<{
+      idx: IndexFile;
+      cfg: { disabledSources: Set<string> };
+    }> =
       localIdx.x.length > 0
-        ? [...valid, { idx: localIdx as unknown as IndexFile, cfg: { disabledSources: new Set<string>() } }]
+        ? [
+            ...valid,
+            {
+              idx: localIdx as unknown as IndexFile,
+              cfg: { disabledSources: new Set<string>() },
+            },
+          ]
         : valid;
     if (allValid.length === 0) {
       // 2026-05-10: with all libraries disabled and no local content,
@@ -405,7 +552,8 @@ async function loadIndex(): Promise<IndexFile> {
         // BOOKOFEBONTIDES inside the partnered library). Apply BEFORE
         // dedupe so an entry available in another library where the
         // source is allowed still gets through under that library.
-        if (cfg.disabledSources.size > 0 && src && cfg.disabledSources.has(src)) continue;
+        if (cfg.disabledSources.size > 0 && src && cfg.disabledSources.has(src))
+          continue;
         const key = `${cn}|${n}|${src}|${e.c ?? ""}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -414,9 +562,7 @@ async function loadIndex(): Promise<IndexFile> {
         // and uppercase makes it easier to grep filenames). When
         // src is empty (entry has no resolvable source), preserve
         // the original `e.s` so we don't accidentally null it out.
-        const fixedEntry: Entry = src
-          ? { ...e, s: src.toUpperCase() }
-          : e;
+        const fixedEntry: Entry = src ? { ...e, s: src.toUpperCase() } : e;
         merged.x.push(fixedEntry);
       }
     }
@@ -428,15 +574,26 @@ async function loadIndex(): Promise<IndexFile> {
     try {
       for (const base of sources.map((s) => s.base)) {
         try {
-          const r = await fetch(`${base}/data/items-base.json`, { cache: "no-cache" });
+          const r = await fetch(`${base}/data/items-base.json`, {
+            cache: "no-cache",
+          });
           if (!r.ok) continue;
           const j = await r.json();
           const arr = (j.itemProperty ?? []) as any[];
           let synthId = 9_000_000;
           for (const p of arr) {
-            const inner = Array.isArray(p.entries) && p.entries[0] && typeof p.entries[0] === "object" ? p.entries[0] : null;
+            const inner =
+              Array.isArray(p.entries) &&
+              p.entries[0] &&
+              typeof p.entries[0] === "object"
+                ? p.entries[0]
+                : null;
             const cn = (p as any).name ?? inner?.name ?? "";
-            const en = (p as any).ENG_name ?? inner?.ENG_name ?? (p as any).abbreviation ?? "";
+            const en =
+              (p as any).ENG_name ??
+              inner?.ENG_name ??
+              (p as any).abbreviation ??
+              "";
             if (!cn && !en) continue;
             const dedupeKey = `${cn}|${en}|prop`;
             if (seen.has(dedupeKey)) continue;
@@ -456,11 +613,18 @@ async function loadIndex(): Promise<IndexFile> {
     indexCache = merged;
     buildSourceMap(indexCache);
     try {
-      localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: merged }));
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({ ts: Date.now(), data: merged }),
+      );
     } catch {}
     return merged;
   })();
-  try { return await indexLoading; } finally { indexLoading = null; }
+  try {
+    return await indexLoading;
+  } finally {
+    indexLoading = null;
+  }
 }
 
 function buildSourceMap(idx: IndexFile) {
@@ -479,9 +643,13 @@ async function loadBooks(): Promise<void> {
     try {
       const raw = localStorage.getItem(BOOKS_CACHE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as { ts: number; data: Record<string, string> };
+        const parsed = JSON.parse(raw) as {
+          ts: number;
+          data: Record<string, string>;
+        };
         if (Date.now() - parsed.ts < CACHE_TTL_MS) {
-          for (const [k, v] of Object.entries(parsed.data)) sourceNames.set(k, v);
+          for (const [k, v] of Object.entries(parsed.data))
+            sourceNames.set(k, v);
           return;
         }
       }
@@ -502,7 +670,7 @@ async function loadBooks(): Promise<void> {
       try {
         localStorage.setItem(
           BOOKS_CACHE_KEY,
-          JSON.stringify({ ts: Date.now(), data: map })
+          JSON.stringify({ ts: Date.now(), data: map }),
         );
       } catch {}
     } catch {}
@@ -516,8 +684,12 @@ interface FilterOpts {
   language: Language;
   isGM: boolean;
   allowPlayerMonsters: boolean;
+  sourceFilter?: string; // Filter by source code (e.g., "LLARO", "PHB"). If set, only show entries from this source.
 }
-interface Hit { entry: Entry; score: number; }
+interface Hit {
+  entry: Entry;
+  score: number;
+}
 
 const CORE_2014 = new Set(["PHB", "MM"]);
 const CORE_2024 = new Set(["XPHB", "XMM"]);
@@ -546,6 +718,9 @@ function search(query: string, idx: IndexFile, opts: FilterOpts): Entry[] {
   for (const e of idx.x) {
     const code = srcCode(e.s).toUpperCase();
     if (!passesVersion(code, opts.dataVersion)) continue;
+
+    // Filter by source code if specified (e.g., sourceFilter="LLARO")
+    if (opts.sourceFilter && code !== opts.sourceFilter.toUpperCase()) continue;
 
     if ((e.c === 1 || e.c === 46) && !opts.isGM && !opts.allowPlayerMonsters) {
       continue;
@@ -643,9 +818,9 @@ async function loadCategoryData(
     return [];
   };
   const candidatePaths = new Set<string>([
-    ...filePathsForSrc(src),                  // lowercase
-    ...filePathsForSrc(srcOriginal),          // original case
-    ...filePathsForSrc(srcOriginal.toUpperCase()),  // uppercase
+    ...filePathsForSrc(src), // lowercase
+    ...filePathsForSrc(srcOriginal), // original case
+    ...filePathsForSrc(srcOriginal.toUpperCase()), // uppercase
   ]);
   const bases = getEnabledLibraryBases();
   const p = (async () => {
@@ -669,7 +844,9 @@ async function loadCategoryData(
       bases.flatMap((base) =>
         [...candidatePaths].map(async (path) => {
           try {
-            const res = await fetch(`${base}/data/${path}`, { cache: "no-cache" });
+            const res = await fetch(`${base}/data/${path}`, {
+              cache: "no-cache",
+            });
             if (!res.ok) return null;
             okCount++;
             const json = await res.json();
@@ -692,8 +869,8 @@ async function loadCategoryData(
         loggedMissingSources.add(probeKey);
         console.warn(
           `[obr-suite/search] data file for ${cat.data!.key} source="${srcOriginal}" is missing from every enabled library. ` +
-          `Tried paths: ${[...candidatePaths].join(" / ")}. ` +
-          `Workaround: 设置 → 库设置 临时关掉对应的第三方扩展库。`,
+            `Tried paths: ${[...candidatePaths].join(" / ")}. ` +
+            `Workaround: 设置 → 库设置 临时关掉对应的第三方扩展库。`,
         );
       }
     }
@@ -710,7 +887,9 @@ async function loadCategoryData(
     }
     dataCache.set(ck, merged);
     return merged;
-  })().finally(() => { dataPending.delete(ck); });
+  })().finally(() => {
+    dataPending.delete(ck);
+  });
   dataPending.set(ck, p);
   return p;
 }
@@ -734,7 +913,9 @@ async function loadAllClassData(key: string): Promise<DataEntry[]> {
     for (const base of bases) {
       let index: Record<string, string> | null = null;
       try {
-        const res = await fetch(`${base}/data/class/index.json`, { cache: "no-cache" });
+        const res = await fetch(`${base}/data/class/index.json`, {
+          cache: "no-cache",
+        });
         if (res.ok) index = await res.json();
       } catch {}
       if (!index) continue;
@@ -743,11 +924,15 @@ async function loadAllClassData(key: string): Promise<DataEntry[]> {
       const arrays = await Promise.all(
         filenames.map(async (fn) => {
           try {
-            const r = await fetch(`${base}/data/class/${fn}`, { cache: "no-cache" });
+            const r = await fetch(`${base}/data/class/${fn}`, {
+              cache: "no-cache",
+            });
             if (!r.ok) return null;
             const j = await r.json();
             return (j[key] ?? []) as DataEntry[];
-          } catch { return null; }
+          } catch {
+            return null;
+          }
         }),
       );
       for (const arr of arrays) {
@@ -766,7 +951,9 @@ async function loadAllClassData(key: string): Promise<DataEntry[]> {
     }
     classPoolCache.set(key, merged);
     return merged;
-  })().finally(() => { classPoolPending.delete(key); });
+  })().finally(() => {
+    classPoolPending.delete(key);
+  });
   classPoolPending.set(key, p);
   return p;
 }
@@ -789,7 +976,9 @@ async function loadItemsBaseSubarray(key: string): Promise<DataEntry[]> {
     const seen = new Set<string>();
     for (const base of bases) {
       try {
-        const r = await fetch(`${base}/data/items-base.json`, { cache: "no-cache" });
+        const r = await fetch(`${base}/data/items-base.json`, {
+          cache: "no-cache",
+        });
         if (!r.ok) continue;
         const j = await r.json();
         const arr = (j[key] ?? []) as DataEntry[];
@@ -798,10 +987,19 @@ async function loadItemsBaseSubarray(key: string): Promise<DataEntry[]> {
           // first item carries `name` (CN) + `ENG_name` (EN). Hoist
           // those onto the top-level entry so the standard search
           // matcher finds them.
-          const inner = (Array.isArray(e.entries) && e.entries[0] && typeof e.entries[0] === "object") ? e.entries[0] : null;
+          const inner =
+            Array.isArray(e.entries) &&
+            e.entries[0] &&
+            typeof e.entries[0] === "object"
+              ? e.entries[0]
+              : null;
           const top: DataEntry = {
             ...e,
-            ENG_name: e.ENG_name ?? (inner as any)?.ENG_name ?? (e as any).abbreviation ?? "",
+            ENG_name:
+              e.ENG_name ??
+              (inner as any)?.ENG_name ??
+              (e as any).abbreviation ??
+              "",
             name: (e as any).name ?? (inner as any)?.name ?? "",
             entries: inner?.entries ?? e.entries,
           };
@@ -816,7 +1014,9 @@ async function loadItemsBaseSubarray(key: string): Promise<DataEntry[]> {
     }
     itemsBaseCache.set(key, merged);
     return merged;
-  })().finally(() => { itemsBasePending.delete(key); });
+  })().finally(() => {
+    itemsBasePending.delete(key);
+  });
   itemsBasePending.set(key, p);
   return p;
 }
@@ -832,14 +1032,18 @@ async function loadItemsBaseSubarray(key: string): Promise<DataEntry[]> {
 // Returns a partial breakdown so the matcher can pick the right entry
 // out of the pooled class data.
 interface ParsedClassEntry {
-  classCn: string | null;       // parent-class CN ("奇械师")
-  level: number | null;         // 1, 2, 3, …
-  featureEng: string | null;    // "Spellcasting"
-  featureCn: string | null;     // "施法"
+  classCn: string | null; // parent-class CN ("奇械师")
+  level: number | null; // 1, 2, 3, …
+  featureEng: string | null; // "Spellcasting"
+  featureCn: string | null; // "施法"
 }
 function parseClassFamilyEntry(entry: Entry): ParsedClassEntry {
-  const n = String(entry.n ?? "").replace(/\}+$/, "").trim();
-  const cn = String(entry.cn ?? "").replace(/\}+$/, "").trim();
+  const n = String(entry.n ?? "")
+    .replace(/\}+$/, "")
+    .trim();
+  const cn = String(entry.cn ?? "")
+    .replace(/\}+$/, "")
+    .trim();
   // Level + feature pattern: "<class> <level>; <feature>"
   const re = /^(.+?)\s+(\d+);\s*(.+)$/;
   const mEn = re.exec(n);
@@ -847,7 +1051,7 @@ function parseClassFamilyEntry(entry: Entry): ParsedClassEntry {
   if (mEn || mCn) {
     return {
       classCn: mCn ? mCn[1].trim() : null,
-      level: mEn ? parseInt(mEn[2], 10) : (mCn ? parseInt(mCn[2], 10) : null),
+      level: mEn ? parseInt(mEn[2], 10) : mCn ? parseInt(mCn[2], 10) : null,
       featureEng: mEn ? mEn[3].trim() : null,
       featureCn: mCn ? mCn[3].trim() : null,
     };
@@ -901,10 +1105,13 @@ async function findEntryData(entry: Entry): Promise<DataEntry | null> {
       const matchByLevel = (e: any) =>
         lvl == null || e.level == null || e.level === lvl;
       const matchByClass = (e: any) =>
-        targetClass ? (e.className === targetClass) : true;
+        targetClass ? e.className === targetClass : true;
       // Helper: case-insensitive name comparison that also tries the
       // raw `name` field (homebrew packs sometimes only set `name`).
-      const nameMatches = (e: any, target: string | null | undefined): boolean => {
+      const nameMatches = (
+        e: any,
+        target: string | null | undefined,
+      ): boolean => {
         if (!target) return false;
         const t = target.toLowerCase();
         const eng = (e.ENG_name || "").toLowerCase();
@@ -913,24 +1120,23 @@ async function findEntryData(entry: Entry): Promise<DataEntry | null> {
       };
       return (
         // 1. ENG_name + source + className + level
-        pool.find((e: any) =>
-          nameMatches(e, targetEng) &&
-          e.source?.toUpperCase() === targetSrc &&
-          matchByClass(e) &&
-          matchByLevel(e),
+        pool.find(
+          (e: any) =>
+            nameMatches(e, targetEng) &&
+            e.source?.toUpperCase() === targetSrc &&
+            matchByClass(e) &&
+            matchByLevel(e),
         ) ??
         // 2. ENG_name + className + level (any source)
-        pool.find((e: any) =>
-          nameMatches(e, targetEng) &&
-          matchByClass(e) &&
-          matchByLevel(e),
+        pool.find(
+          (e: any) =>
+            nameMatches(e, targetEng) && matchByClass(e) && matchByLevel(e),
         ) ??
         // 3. featureCn + className + level (homebrew often has
         //    only Chinese names with featureEng === featureCn)
-        pool.find((e: any) =>
-          nameMatches(e, targetCn) &&
-          matchByClass(e) &&
-          matchByLevel(e),
+        pool.find(
+          (e: any) =>
+            nameMatches(e, targetCn) && matchByClass(e) && matchByLevel(e),
         ) ??
         // 4. ENG_name alone
         pool.find((e: any) => nameMatches(e, targetEng)) ??
@@ -950,7 +1156,9 @@ async function findEntryData(entry: Entry): Promise<DataEntry | null> {
       pool.find((e) => e.ENG_name?.toLowerCase() === entry.n.toLowerCase()) ??
       // Some subrace entries store the sub name in `name` only (e.g.
       // "苍白精灵") with no separate ENG_name in the cn release.
-      pool.find((e) => (e as any).name?.toLowerCase() === entry.n.toLowerCase()) ??
+      pool.find(
+        (e) => (e as any).name?.toLowerCase() === entry.n.toLowerCase(),
+      ) ??
       null
     );
   };
@@ -980,9 +1188,15 @@ async function findEntryData(entry: Entry): Promise<DataEntry | null> {
     const cp = found._copy;
     const parentName = (cp.ENG_name || cp.name || "")?.toLowerCase();
     if (parentName) {
-      const parent = arr.find((e) => (e.ENG_name || e.name || "").toLowerCase() === parentName);
+      const parent = arr.find(
+        (e) => (e.ENG_name || e.name || "").toLowerCase() === parentName,
+      );
       if (parent?.entries) {
-        return { ...found, entries: parent.entries, _copyResolvedFrom: parent.ENG_name || parent.name };
+        return {
+          ...found,
+          entries: parent.entries,
+          _copyResolvedFrom: parent.ENG_name || parent.name,
+        };
       }
     }
   }
@@ -1034,7 +1248,7 @@ function renderEntry(e: any): string {
     const body = (e.rows || [])
       .map(
         (row: any[]) =>
-          `<tr>${row.map((c) => `<td>${renderEntryInline(c)}</td>`).join("")}</tr>`
+          `<tr>${row.map((c) => `<td>${renderEntryInline(c)}</td>`).join("")}</tr>`,
       )
       .join("");
     return `<table>${head ? `<thead><tr>${head}</tr></thead>` : ""}<tbody>${body}</tbody></table>`;
@@ -1044,7 +1258,9 @@ function renderEntry(e: any): string {
   }
   if (type === "quote") {
     const body = e.entries ? renderEntries(e.entries) : "";
-    const by = e.by ? `<div class="quote-by">— ${escapeHtml(stripTags(e.by))}</div>` : "";
+    const by = e.by
+      ? `<div class="quote-by">— ${escapeHtml(stripTags(e.by))}</div>`
+      : "";
     return `<blockquote>${body}${by}</blockquote>`;
   }
   if (type === "item" || type === "itemSub") {
@@ -1065,8 +1281,8 @@ function renderEntryInline(e: any): string {
     const inner = e.entries
       ? renderEntries(e.entries)
       : e.entry
-      ? renderEntryInline(e.entry)
-      : "";
+        ? renderEntryInline(e.entry)
+        : "";
     return name + inner;
   }
   return renderEntry(e);
@@ -1075,20 +1291,38 @@ function renderEntryInline(e: any): string {
 // --- Category-specific renderers ---
 
 const ABILITY_ZH: Record<string, string> = {
-  str: "力量", dex: "敏捷", con: "体质", int: "智力", wis: "感知", cha: "魅力",
+  str: "力量",
+  dex: "敏捷",
+  con: "体质",
+  int: "智力",
+  wis: "感知",
+  cha: "魅力",
 };
 const ABILITY_LABEL: Record<string, string> = {
-  str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA",
+  str: "STR",
+  dex: "DEX",
+  con: "CON",
+  int: "INT",
+  wis: "WIS",
+  cha: "CHA",
 };
 
 const ALIGN_ZH: Record<string, string> = {
-  L: "守序", N: "中立", C: "混乱", G: "善良", E: "邪恶", U: "无属", A: "任意",
+  L: "守序",
+  N: "中立",
+  C: "混乱",
+  G: "善良",
+  E: "邪恶",
+  U: "无属",
+  A: "任意",
 };
 function alignmentStr(a: any): string {
   if (!a) return "";
   if (typeof a === "string") return ALIGN_ZH[a] ?? a;
   if (Array.isArray(a))
-    return a.map((x) => (typeof x === "string" ? ALIGN_ZH[x] ?? x : "")).join("");
+    return a
+      .map((x) => (typeof x === "string" ? (ALIGN_ZH[x] ?? x) : ""))
+      .join("");
   return "";
 }
 function typeStr(t: any): string {
@@ -1103,33 +1337,43 @@ function chipsFor(entry: Entry, data: DataEntry | null): string {
   const c = entry.c;
   const chips: string[] = [];
   const add = (label: string, value: string) => {
-    if (value) chips.push(
-      `<span class="chip"><span class="chip-l">${escapeHtml(label)}</span><span class="chip-v">${escapeHtml(value)}</span></span>`
-    );
+    if (value)
+      chips.push(
+        `<span class="chip"><span class="chip-l">${escapeHtml(label)}</span><span class="chip-v">${escapeHtml(value)}</span></span>`,
+      );
   };
   if (c === 1 || c === 46) {
     add("CR", crStr(data.cr));
     add("AC", acStr(data.ac));
     add("HP", hpStr(data.hp));
-    add("速度", speedStr(data.speed));
+    add(T("ccSpeed"), speedStr(data.speed));
   } else if (c === 2) {
-    add("环阶", spellLevelStr(data.level));
-    add("学派", schoolStr(data.school));
-    add("施法", timeStr(data.time));
-    add("距离", rangeStr(data.range));
-    add("成分", componentsStr(data.components));
-    add("持续", durationStr(data.duration));
+    add(T("ccSpellLevelChip"), spellLevelStr(data.level));
+    add(T("ccSpellSchoolChip"), schoolStr(data.school));
+    add(T("ccCastingTimeChip"), timeStr(data.time));
+    add(T("ccRange"), rangeStr(data.range));
+    add(T("ccComponentsChip"), componentsStr(data.components));
+    add(T("ccDuration"), durationStr(data.duration));
   } else if (c === 4 || c === 56 || c === 57) {
-    add("类型", String(data.type ?? data.weaponCategory ?? data.armorCategory ?? ""));
-    if (data.weight != null) add("重量", `${data.weight} 磅`);
-    if (data.value != null) add("价值", `${data.value} cp`);
-    if (data.rarity) add("稀有度", String(data.rarity));
-    if (data.reqAttune) add("需调谐", typeof data.reqAttune === "string" ? stripTags(data.reqAttune) : "是");
+    add(
+      T("ccType"),
+      String(data.type ?? data.weaponCategory ?? data.armorCategory ?? ""),
+    );
+    if (data.weight != null)
+      add(T("ccWeight"), `${data.weight} ${T("ccLbUnit")}`);
+    if (data.value != null)
+      add(T("ccValue"), `${data.value} ${T("ccCoinCP")}`);
+    if (data.rarity) add(T("ccRarity"), String(data.rarity));
+    if (data.reqAttune)
+      add(
+        T("ccReqAttune"),
+        typeof data.reqAttune === "string" ? stripTags(data.reqAttune) : T("ccYes"),
+      );
   } else if (c === 8) {
-    if (data.prerequisite) add("先决", prerequisiteStr(data.prerequisite));
+    if (data.prerequisite) add(T("ccPrerequisite"), prerequisiteStr(data.prerequisite));
   } else if (c === 10) {
-    add("体型", sizeStr(data.size));
-    add("速度", speedStr(data.speed));
+    add(T("ccSize"), sizeStr(data.size));
+    add(T("ccSpeed"), speedStr(data.speed));
   }
   return chips.length ? `<div class="chips">${chips.join("")}</div>` : "";
 }
@@ -1142,7 +1386,8 @@ function renderMonster(entry: Entry, data: DataEntry): string {
   const al = alignmentStr(data.alignment);
   const sub = [sz, ty].filter(Boolean).join(" ");
   const subLine = al ? `${sub}，${al}` : sub;
-  if (subLine) parts.push(`<div class="prev-subtitle">${escapeHtml(subLine)}</div>`);
+  if (subLine)
+    parts.push(`<div class="prev-subtitle">${escapeHtml(subLine)}</div>`);
 
   parts.push(chipsFor(entry, data));
   parts.push(renderAbilityGrid(data));
@@ -1174,7 +1419,7 @@ function renderMonster(entry: Entry, data: DataEntry): string {
     if (data.legendaryHeader) parts.push(renderEntries(data.legendaryHeader));
     else
       parts.push(
-        `<p>本怪物可执行 ${data.legendaryActions ?? 3} 次传奇动作，从下列动作中选择，每次只能用一个传奇动作选项，且只能在另一生物的回合结束时使用。每回合开始时回复全部消耗。</p>`
+        `<p>本怪物可执行 ${data.legendaryActions ?? 3} 次传奇动作，从下列动作中选择，每次只能用一个传奇动作选项，且只能在另一生物的回合结束时使用。每回合开始时回复全部消耗。</p>`,
       );
     for (const t of data.legendary) parts.push(renderTrait(t));
   }
@@ -1202,7 +1447,7 @@ function renderAbilityGrid(data: DataEntry): string {
     const mod = Math.floor((score - 10) / 2);
     const modStr = mod >= 0 ? `+${mod}` : String(mod);
     cells.push(
-      `<div class="ab-cell"><div class="ab-label">${ABILITY_LABEL[k]}</div><div class="ab-score">${score}</div><div class="ab-mod">${modStr}</div></div>`
+      `<div class="ab-cell"><div class="ab-label">${ABILITY_LABEL[k]}</div><div class="ab-score">${score}</div><div class="ab-mod">${modStr}</div></div>`,
     );
   }
   return cells.length ? `<div class="ab-grid">${cells.join("")}</div>` : "";
@@ -1214,8 +1459,9 @@ function renderMonsterSummary(data: DataEntry): string {
     `<div class="ms-line"><span class="ms-l">${escapeHtml(label)}</span><span class="ms-v">${value}</span></div>`;
 
   if (data.save && Object.keys(data.save).length) {
-    const parts = Object.entries(data.save)
-      .map(([k, v]) => `${ABILITY_ZH[k] ?? k} ${v}`);
+    const parts = Object.entries(data.save).map(
+      ([k, v]) => `${ABILITY_ZH[k] ?? k} ${v}`,
+    );
     lines.push(mkLine("豁免", parts.join("，")));
   }
   if (data.skill && Object.keys(data.skill).length) {
@@ -1224,8 +1470,10 @@ function renderMonsterSummary(data: DataEntry): string {
   }
   if (data.resist) lines.push(mkLine("抗性", formatTypeList(data.resist)));
   if (data.immune) lines.push(mkLine("免疫", formatTypeList(data.immune)));
-  if (data.vulnerable) lines.push(mkLine("易伤", formatTypeList(data.vulnerable)));
-  if (data.conditionImmune) lines.push(mkLine("状态免疫", formatTypeList(data.conditionImmune)));
+  if (data.vulnerable)
+    lines.push(mkLine("易伤", formatTypeList(data.vulnerable)));
+  if (data.conditionImmune)
+    lines.push(mkLine("状态免疫", formatTypeList(data.conditionImmune)));
   if (data.senses) {
     const senses = Array.isArray(data.senses)
       ? data.senses.map(stripTags).join("，")
@@ -1249,7 +1497,7 @@ function formatTypeList(arr: any): string {
       if (typeof x === "string") return stripTags(x);
       if (typeof x === "object") {
         const inner = formatTypeList(
-          x.resist ?? x.immune ?? x.vulnerable ?? x.conditionImmune ?? []
+          x.resist ?? x.immune ?? x.vulnerable ?? x.conditionImmune ?? [],
         );
         return x.note ? `${inner}（${stripTags(x.note)}）` : inner;
       }
@@ -1267,14 +1515,17 @@ function renderTrait(t: any): string {
 
 function renderSpellcasting(sc: any): string {
   const parts: string[] = [];
-  parts.push(`<div class="trait"><b>${escapeHtml(stripTags(sc.name ?? "施法"))}.</b> `);
+  parts.push(
+    `<div class="trait"><b>${escapeHtml(stripTags(sc.name ?? "施法"))}.</b> `,
+  );
   if (sc.headerEntries) parts.push(renderEntries(sc.headerEntries));
   parts.push("</div>");
 
   const fmtSpells = (arr: any[]) =>
     (arr || []).map((s) => escapeHtml(stripTags(String(s)))).join("、");
 
-  if (sc.will?.length) parts.push(`<p><b>随意施放：</b>${fmtSpells(sc.will)}</p>`);
+  if (sc.will?.length)
+    parts.push(`<p><b>随意施放：</b>${fmtSpells(sc.will)}</p>`);
   if (sc.daily) {
     for (const k of ["1", "1e", "2", "2e", "3", "3e", "4", "4e", "5", "5e"]) {
       const arr = (sc.daily as any)[k];
@@ -1293,10 +1544,13 @@ function renderSpellcasting(sc: any): string {
   if (sc.spells) {
     for (const [level, info] of Object.entries(sc.spells)) {
       const lvl = level === "0" ? "戏法" : `${level} 环`;
-      const slots = (info as any).slots != null
-        ? `（${(info as any).slots} 个法术位）`
+      const slots =
+        (info as any).slots != null
+          ? `（${(info as any).slots} 个法术位）`
+          : "";
+      const ll = (info as any).lower
+        ? `（${(info as any).lower}–${level} 环）`
         : "";
-      const ll = (info as any).lower ? `（${(info as any).lower}–${level} 环）` : "";
       const arr = (info as any).spells ?? [];
       parts.push(`<p><b>${lvl}${slots}${ll}：</b>${fmtSpells(arr)}</p>`);
     }
@@ -1314,10 +1568,13 @@ function renderSpell(_entry: Entry, data: DataEntry): string {
   }
   const fromClass: string[] = [];
   if (data.classes?.fromClassList)
-    for (const c of data.classes.fromClassList) fromClass.push(stripTags(c.name));
+    for (const c of data.classes.fromClassList)
+      fromClass.push(stripTags(c.name));
   if (data.classes?.fromSubclass)
     for (const c of data.classes.fromSubclass)
-      fromClass.push(`${stripTags(c.class?.name ?? "")} (${stripTags(c.subclass?.name ?? "")})`);
+      fromClass.push(
+        `${stripTags(c.class?.name ?? "")} (${stripTags(c.subclass?.name ?? "")})`,
+      );
   if (fromClass.length)
     parts.push(`<p><b>职业列表：</b>${escapeHtml(fromClass.join("、"))}</p>`);
   return parts.join("");
@@ -1326,23 +1583,38 @@ function renderSpell(_entry: Entry, data: DataEntry): string {
 function renderItem(_entry: Entry, data: DataEntry): string {
   const parts: string[] = [];
   const weaponBits: string[] = [];
-  if (data.dmg1) weaponBits.push(`${stripTags(String(data.dmg1))} ${dmgTypeStr(data.dmgType)}`);
+  if (data.dmg1)
+    weaponBits.push(
+      `${stripTags(String(data.dmg1))} ${dmgTypeStr(data.dmgType)}`,
+    );
   if (data.dmg2) weaponBits.push(`双手 ${stripTags(String(data.dmg2))}`);
   if (Array.isArray(data.property) && data.property.length)
     weaponBits.push(`属性：${data.property.map(stripTags).join("、")}`);
   if (data.range) weaponBits.push(`射程：${stripTags(String(data.range))}`);
   if (weaponBits.length)
     parts.push(`<p>${escapeHtml(weaponBits.join("　"))}</p>`);
-  if (data.ac != null) parts.push(`<p><b>AC</b> ${escapeHtml(String(data.ac))}</p>`);
+  if (data.ac != null)
+    parts.push(`<p><b>AC</b> ${escapeHtml(String(data.ac))}</p>`);
   if (data.entries) parts.push(renderEntries(data.entries));
   return parts.join("");
 }
 
 function dmgTypeStr(t: any): string {
   const M: Record<string, string> = {
-    A: "酸", B: "钝击", C: "冷冻", F: "火焰", "FORCE": "力场", "F_": "力场",
-    L: "闪电", N: "死灵", P: "穿刺", "POISON": "毒素", "PSY": "心灵",
-    "RAD": "光耀", S: "挥砍", "T": "雷鸣",
+    A: "酸",
+    B: "钝击",
+    C: "冷冻",
+    F: "火焰",
+    FORCE: "力场",
+    F_: "力场",
+    L: "闪电",
+    N: "死灵",
+    P: "穿刺",
+    POISON: "毒素",
+    PSY: "心灵",
+    RAD: "光耀",
+    S: "挥砍",
+    T: "雷鸣",
   };
   if (typeof t === "string") return M[t] ?? t;
   return "";
@@ -1379,14 +1651,24 @@ function speedStr(sp: any): string {
   const parts: string[] = [];
   for (const [k, v] of Object.entries(sp)) {
     const n = typeof v === "object" && v != null ? (v as any).number : v;
-    const cond = typeof v === "object" && (v as any).condition ? `（${stripTags((v as any).condition)}）` : "";
+    const cond =
+      typeof v === "object" && (v as any).condition
+        ? `（${stripTags((v as any).condition)}）`
+        : "";
     if (k === "walk") parts.unshift(`${n} 尺${cond}`);
     else if (typeof n === "number") parts.push(`${k} ${n} 尺${cond}`);
   }
   return parts.join("，");
 }
 function sizeStr(size: any): string {
-  const SZ: Record<string, string> = { T: "微型", S: "小型", M: "中型", L: "大型", H: "巨型", G: "超巨" };
+  const SZ: Record<string, string> = {
+    T: "微型",
+    S: "小型",
+    M: "中型",
+    L: "大型",
+    H: "巨型",
+    G: "超巨",
+  };
   if (Array.isArray(size)) return size.map((c) => SZ[c] ?? c).join("/");
   if (typeof size === "string") return SZ[size] ?? size;
   return "";
@@ -1405,11 +1687,17 @@ function spellLevelStr(lvl: any): string {
 // The previous table had C→塑能, D→死灵, N→塑能, V→预言 — four of
 // the eight schools were displaying the wrong Chinese name. Fixed.
 const SCHOOLS: Record<string, string> = {
-  A: "防护", C: "咒法", D: "预言", E: "附魔",
-  V: "塑能", I: "幻术", N: "死灵", T: "变化",
+  A: "防护",
+  C: "咒法",
+  D: "预言",
+  E: "附魔",
+  V: "塑能",
+  I: "幻术",
+  N: "死灵",
+  T: "变化",
 };
 function schoolStr(s: any): string {
-  return typeof s === "string" ? SCHOOLS[s] ?? s : "";
+  return typeof s === "string" ? (SCHOOLS[s] ?? s) : "";
 }
 // 2026-05-16 — casting-time unit translation. 5etools sends
 // `{ number, unit }` with `unit` as raw English ("action", "bonus",
@@ -1419,9 +1707,12 @@ const CAST_TIME_UNIT_ZH: Record<string, string> = {
   action: "动作",
   bonus: "附赠动作",
   reaction: "反应",
-  minute: "分钟", minutes: "分钟",
-  hour: "小时", hours: "小时",
-  round: "回合", rounds: "回合",
+  minute: "分钟",
+  minutes: "分钟",
+  hour: "小时",
+  hours: "小时",
+  round: "回合",
+  rounds: "回合",
 };
 function castTimeUnitZh(u: unknown): string {
   if (typeof u !== "string") return "";
@@ -1438,7 +1729,8 @@ function timeStr(t: any): string {
       // Preserve any condition text ({@condition triggered when ...})
       // as a follow-on so e.g. reaction-on-trigger spells still read
       // sensibly: "1 反应（当...）".
-      const cond = typeof x.condition === "string" ? stripTags(x.condition) : "";
+      const cond =
+        typeof x.condition === "string" ? stripTags(x.condition) : "";
       return cond ? `${out}（${cond}）` : out;
     })
     .join("，");
@@ -1449,13 +1741,20 @@ function timeStr(t: any): string {
 // "cone" / "line" / "sphere" / "cube" etc. Localize both so spells
 // show "60 尺 锥形" instead of "60 feet cone".
 const DISTANCE_UNIT_ZH: Record<string, string> = {
-  feet: "尺", foot: "尺",
-  miles: "英里", mile: "英里",
-  unlimited: "无限", sight: "视野范围",
+  feet: "尺",
+  foot: "尺",
+  miles: "英里",
+  mile: "英里",
+  unlimited: "无限",
+  sight: "视野范围",
 };
 const RANGE_SHAPE_ZH: Record<string, string> = {
-  radius: "半径", cone: "锥形", line: "线状",
-  sphere: "球状", cube: "立方", hemisphere: "半球",
+  radius: "半径",
+  cone: "锥形",
+  line: "线状",
+  sphere: "球状",
+  cube: "立方",
+  hemisphere: "半球",
   cylinder: "圆柱",
 };
 function rangeStr(r: any): string {
@@ -1465,14 +1764,17 @@ function rangeStr(r: any): string {
   if (r.type === "point" && d) {
     if (d.type === "self") return "自身";
     if (d.type === "touch") return "触及";
-    const unit = DISTANCE_UNIT_ZH[String(d.type ?? "").toLowerCase()] ?? d.type ?? "";
+    const unit =
+      DISTANCE_UNIT_ZH[String(d.type ?? "").toLowerCase()] ?? d.type ?? "";
     return `${d.amount ?? ""} ${unit}`.trim();
   }
   // Shape-based range (radius / cone / line / etc.) — append the
   // distance afterwards so "60 ft cone" → "60 尺 锥形".
-  const shape = RANGE_SHAPE_ZH[String(r.type ?? "").toLowerCase()] ?? r.type ?? "";
+  const shape =
+    RANGE_SHAPE_ZH[String(r.type ?? "").toLowerCase()] ?? r.type ?? "";
   if (shape && d) {
-    const unit = DISTANCE_UNIT_ZH[String(d.type ?? "").toLowerCase()] ?? d.type ?? "";
+    const unit =
+      DISTANCE_UNIT_ZH[String(d.type ?? "").toLowerCase()] ?? d.type ?? "";
     const dist = `${d.amount ?? ""} ${unit}`.trim();
     return dist ? `${dist} ${shape}` : shape;
   }
@@ -1497,7 +1799,9 @@ function componentsStr(c: any): string {
       const cost = (c.m as any).cost;
       if (typeof cost === "number" && cost > 0) {
         // 5etools "cost" is in copper pieces; show as gp for spell-component readability.
-        mText = mText ? `${mText}（价值 ${(cost / 100).toFixed(0)} 金币）` : `（${(cost / 100).toFixed(0)} 金币材料）`;
+        mText = mText
+          ? `${mText}（价值 ${(cost / 100).toFixed(0)} 金币）`
+          : `（${(cost / 100).toFixed(0)} 金币材料）`;
       }
       if ((c.m as any).consume) mText = mText ? `${mText} · 消耗` : "消耗";
     }
@@ -1510,13 +1814,20 @@ function componentsStr(c: any): string {
 // Without this map the duration chip on Chinese cards read "10 minute"
 // instead of "10 分钟". Falls back to the raw unit when not mapped.
 const DURATION_UNIT_ZH: Record<string, string> = {
-  round: "回合", rounds: "回合",
-  minute: "分钟", minutes: "分钟",
-  hour: "小时", hours: "小时",
-  day: "天", days: "天",
-  week: "周", weeks: "周",
-  month: "月", months: "月",
-  year: "年", years: "年",
+  round: "回合",
+  rounds: "回合",
+  minute: "分钟",
+  minutes: "分钟",
+  hour: "小时",
+  hours: "小时",
+  day: "天",
+  days: "天",
+  week: "周",
+  weeks: "周",
+  month: "月",
+  months: "月",
+  year: "年",
+  years: "年",
 };
 function durationUnitZh(u: unknown): string {
   if (typeof u !== "string") return "";
@@ -1552,8 +1863,10 @@ function prerequisiteStr(prereq: any): string {
   return prereq
     .map((p) =>
       Object.entries(p)
-        .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`)
-        .join("; ")
+        .map(
+          ([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`,
+        )
+        .join("; "),
     )
     .join(" / ");
 }
@@ -1561,12 +1874,19 @@ function prerequisiteStr(prereq: any): string {
 // Adventures / books — manifest only.
 function renderAdventure(_entry: Entry, data: DataEntry): string {
   const parts: string[] = [];
-  const lvl = data.level && (data.level.start != null || data.level.end != null)
-    ? `<p><b>等级范围：</b>${escapeHtml(`${data.level.start ?? "?"} - ${data.level.end ?? "?"}`)}</p>`
+  const lvl =
+    data.level && (data.level.start != null || data.level.end != null)
+      ? `<p><b>等级范围：</b>${escapeHtml(`${data.level.start ?? "?"} - ${data.level.end ?? "?"}`)}</p>`
+      : "";
+  const author = data.author
+    ? `<p><b>作者：</b>${escapeHtml(stripTags(String(data.author)))}</p>`
     : "";
-  const author = data.author ? `<p><b>作者：</b>${escapeHtml(stripTags(String(data.author)))}</p>` : "";
-  const story = data.storyline ? `<p><b>故事线：</b>${escapeHtml(stripTags(String(data.storyline)))}</p>` : "";
-  const published = data.published ? `<p><b>出版：</b>${escapeHtml(String(data.published))}</p>` : "";
+  const story = data.storyline
+    ? `<p><b>故事线：</b>${escapeHtml(stripTags(String(data.storyline)))}</p>`
+    : "";
+  const published = data.published
+    ? `<p><b>出版：</b>${escapeHtml(String(data.published))}</p>`
+    : "";
   parts.push(lvl, author, story, published);
   if (Array.isArray(data.contents) && data.contents.length) {
     const chapters = data.contents
@@ -1575,12 +1895,18 @@ function renderAdventure(_entry: Entry, data: DataEntry): string {
           ? `<span class="chap-ord">${escapeHtml(String(ch.ordinal.identifier ?? ""))}.</span> `
           : "";
         const title = escapeHtml(stripTags(ch.name ?? ch.ENG_name ?? "?"));
-        const headers = Array.isArray(ch.headers) && ch.headers.length
-          ? `<ul>${ch.headers.map((h: any) => {
-              const t = typeof h === "string" ? h : (h?.header ?? "");
-              return t ? `<li>${escapeHtml(stripTags(String(t)))}</li>` : "";
-            }).filter(Boolean).join("")}</ul>`
-          : "";
+        const headers =
+          Array.isArray(ch.headers) && ch.headers.length
+            ? `<ul>${ch.headers
+                .map((h: any) => {
+                  const t = typeof h === "string" ? h : (h?.header ?? "");
+                  return t
+                    ? `<li>${escapeHtml(stripTags(String(t)))}</li>`
+                    : "";
+                })
+                .filter(Boolean)
+                .join("")}</ul>`
+            : "";
         return `<li>${ord}${title}${headers}</li>`;
       })
       .join("");
@@ -1591,16 +1917,22 @@ function renderAdventure(_entry: Entry, data: DataEntry): string {
 
 function renderBook(_entry: Entry, data: DataEntry): string {
   const parts: string[] = [];
-  if (data.published) parts.push(`<p><b>出版：</b>${escapeHtml(String(data.published))}</p>`);
-  if (data.author) parts.push(`<p><b>作者：</b>${escapeHtml(stripTags(String(data.author)))}</p>`);
+  if (data.published)
+    parts.push(`<p><b>出版：</b>${escapeHtml(String(data.published))}</p>`);
+  if (data.author)
+    parts.push(
+      `<p><b>作者：</b>${escapeHtml(stripTags(String(data.author)))}</p>`,
+    );
   if (Array.isArray(data.contents) && data.contents.length) {
-    const chapters = data.contents.map((ch: any) => {
-      const ord = ch.ordinal
-        ? `<span class="chap-ord">${escapeHtml(String(ch.ordinal.identifier ?? ""))}.</span> `
-        : "";
-      const title = escapeHtml(stripTags(ch.name ?? ch.ENG_name ?? "?"));
-      return `<li>${ord}${title}</li>`;
-    }).join("");
+    const chapters = data.contents
+      .map((ch: any) => {
+        const ord = ch.ordinal
+          ? `<span class="chap-ord">${escapeHtml(String(ch.ordinal.identifier ?? ""))}.</span> `
+          : "";
+        const title = escapeHtml(stripTags(ch.name ?? ch.ENG_name ?? "?"));
+        return `<li>${ord}${title}</li>`;
+      })
+      .join("");
     parts.push(`<h4>目录</h4><ol class="chap-list">${chapters}</ol>`);
   }
   return parts.join("");
@@ -1613,6 +1945,23 @@ const wrapEl = document.getElementById("wrap") as HTMLDivElement;
 const countEl = document.getElementById("count") as HTMLDivElement;
 const dropEl = document.getElementById("drop") as HTMLDivElement;
 const previewEl = document.getElementById("preview") as HTMLDivElement;
+const toolsEl = document.getElementById("tools") as HTMLDivElement;
+
+// Source filter for limiting results to a specific homebrew source (e.g., "LLARO", "PHB")
+let selectedSourceFilter: string | undefined = undefined;
+// Create and wire source filter dropdown
+const sourceSelectEl = document.createElement("select");
+sourceSelectEl.id = "source-filter";
+sourceSelectEl.style.marginLeft = "8px";
+sourceSelectEl.style.fontSize = "11px";
+sourceSelectEl.style.padding = "4px 6px";
+// Add "All sources" option
+const allOpt = document.createElement("option");
+allOpt.value = "";
+allOpt.textContent = "All sources";
+sourceSelectEl.appendChild(allOpt);
+// Options will be populated dynamically after index loads
+toolsEl.appendChild(sourceSelectEl);
 
 let isGM = false;
 let currentHits: Entry[] = [];
@@ -1685,8 +2034,8 @@ function renderResults(hits: Entry[], q: string) {
       code === "PHB" || code === "MM"
         ? "ed-2014"
         : code === "XPHB" || code === "XMM"
-        ? "ed-2024"
-        : "";
+          ? "ed-2024"
+          : "";
     parts.push(
       `<div class="row-item" data-idx="${idx}" tabindex="-1">
         <span class="cat cat-${e.c}">${escapeHtml(cat.label)}</span>
@@ -1695,7 +2044,7 @@ function renderResults(hits: Entry[], q: string) {
           ${sub ? `<span class="sub">${highlight(sub, q)}</span>` : ""}
         </span>
         <span class="src ${edClass}">${escapeHtml(code)}</span>
-      </div>`
+      </div>`,
     );
   });
   dropEl.innerHTML = parts.join("");
@@ -1708,7 +2057,9 @@ function renderResults(hits: Entry[], q: string) {
   if (pendingAutoPin && hits.length > 0) {
     pendingAutoPin = false;
     kbdActiveIdx = 0;
-    const firstRow = dropEl.querySelector<HTMLDivElement>('.row-item[data-idx="0"]');
+    const firstRow = dropEl.querySelector<HTMLDivElement>(
+      '.row-item[data-idx="0"]',
+    );
     if (firstRow) firstRow.classList.add("kbd-active");
     onRowClick(0);
     return;
@@ -1763,8 +2114,14 @@ async function sendMissingReport(
   // empty) without needing the user to type anything.
   let context = "";
   try {
-    if (bodyEl) context = (bodyEl.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 600);
-  } catch { /* ignore */ }
+    if (bodyEl)
+      context = (bodyEl.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 600);
+  } catch {
+    /* ignore */
+  }
   const payload = {
     entry: {
       id: entry.id,
@@ -1786,10 +2143,16 @@ async function sendMissingReport(
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     btn.innerHTML = `<span style="color:#7be0a0">✓ 已汇报，谢谢</span>`;
     // Restore after a moment so the user can resubmit if needed
-    setTimeout(() => { btn.innerHTML = originalLabel; btn.disabled = false; }, 2400);
+    setTimeout(() => {
+      btn.innerHTML = originalLabel;
+      btn.disabled = false;
+    }, 2400);
   } catch (e) {
     btn.innerHTML = `<span style="color:#ff7a6b">汇报失败，稍后再试</span>`;
-    setTimeout(() => { btn.innerHTML = originalLabel; btn.disabled = false; }, 2400);
+    setTimeout(() => {
+      btn.innerHTML = originalLabel;
+      btn.disabled = false;
+    }, 2400);
     console.warn("[search/missing-report]", e);
   }
 }
@@ -1826,7 +2189,10 @@ async function renderPreviewFor(entry: Entry) {
   // success/failure — see sendMissingReport below.
   const reportBtn = previewEl.querySelector<HTMLButtonElement>("#prev-report");
   if (reportBtn) {
-    reportBtn.addEventListener("click", () => void sendMissingReport(entry, bodyEl, reportBtn));
+    reportBtn.addEventListener(
+      "click",
+      () => void sendMissingReport(entry, bodyEl, reportBtn),
+    );
   }
 
   if (!cat.data) {
@@ -1835,7 +2201,9 @@ async function renderPreviewFor(entry: Entry) {
   }
 
   let data: DataEntry | null = null;
-  try { data = await findEntryData(entry); } catch {}
+  try {
+    data = await findEntryData(entry);
+  } catch {}
   if (!pinnedEntry && lastHoverEntry && lastHoverEntry.id !== entry.id) return;
 
   if (!data) {
@@ -1885,8 +2253,9 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 async function runSearch(q: string) {
   if (!indexCache) renderHint("加载索引中…（首次约 1 秒）");
   let idx: IndexFile;
-  try { idx = await loadIndex(); }
-  catch (e) {
+  try {
+    idx = await loadIndex();
+  } catch (e) {
     renderHint("索引加载失败：" + ((e as Error).message ?? "网络错误"), true);
     return;
   }
@@ -1898,8 +2267,25 @@ async function runSearch(q: string) {
     language: getLocalLang(),
     isGM,
     allowPlayerMonsters: s.allowPlayerMonsters,
+    sourceFilter: selectedSourceFilter,
   });
   renderResults(hits, q);
+  // Populate source dropdown if not yet populated
+  if (sourceSelectEl.options.length <= 1) {
+    const allSources = new Set<string>();
+    for (const e of idx.x) {
+      const code = srcCode(e.s);
+      if (code) allSources.add(code);
+    }
+    const sortedSources = Array.from(allSources).sort();
+    for (const src of sortedSources) {
+      const opt = document.createElement("option");
+      opt.value = src.toUpperCase();
+      const label = sourceLabel(src);
+      opt.textContent = label;
+      sourceSelectEl.appendChild(opt);
+    }
+  }
 }
 
 async function onQueryChange(qRaw: string) {
@@ -1929,6 +2315,12 @@ function refilter() {
   runSearch(q);
 }
 
+// Wire source filter dropdown
+sourceSelectEl.addEventListener("change", () => {
+  selectedSourceFilter = sourceSelectEl.value || undefined;
+  refilter();
+});
+
 // 2026-05-10: rollable left-click in the search preview now opens
 // the dice quick-pick popup (劣势 / 普通 / 优势 + 重击) instead of
 // auto-rolling. Same UX as the bestiary / cc-info panels. The search
@@ -1954,12 +2346,15 @@ clearEl.addEventListener("click", async () => {
 const BC_SEARCH_QUERY = "com.obr-suite/search-query";
 OBR.onReady(() => {
   OBR.broadcast.onMessage(BC_SEARCH_QUERY, (event) => {
-    const data = (event.data as { q?: string; autoPin?: boolean } | undefined) ?? {};
+    const data =
+      (event.data as { q?: string; autoPin?: boolean } | undefined) ?? {};
     const q = data.q ?? "";
     inputEl.value = q;
     if (debounceTimer) clearTimeout(debounceTimer);
     pendingAutoPin = !!data.autoPin && q.length > 0;
-    onQueryChange(q).catch(() => { pendingAutoPin = false; });
+    onQueryChange(q).catch(() => {
+      pendingAutoPin = false;
+    });
     if (q) inputEl.focus();
   });
   // Local-content imports / removals → drop the in-memory + LS
@@ -1977,7 +2372,8 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     if (pinnedEntry) {
       pinnedEntry = null;
-      dropEl.querySelectorAll<HTMLDivElement>(".row-item")
+      dropEl
+        .querySelectorAll<HTMLDivElement>(".row-item")
         .forEach((row) => row.classList.remove("pinned"));
       if (lastHoverEntry) renderPreviewFor(lastHoverEntry);
       else renderPreviewIdle();
@@ -1994,7 +2390,9 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (!wrapEl.classList.contains("has-q")) return;
-  const links = Array.from(dropEl.querySelectorAll<HTMLDivElement>(".row-item"));
+  const links = Array.from(
+    dropEl.querySelectorAll<HTMLDivElement>(".row-item"),
+  );
   if (e.key === "Enter") {
     e.preventDefault();
     const target = links[Math.max(0, kbdActiveIdx)];
@@ -2004,10 +2402,13 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowDown" || e.key === "ArrowUp") {
     if (links.length === 0) return;
     e.preventDefault();
-    kbdActiveIdx = e.key === "ArrowDown"
-      ? Math.min(kbdActiveIdx + 1, links.length - 1)
-      : Math.max(kbdActiveIdx - 1, 0);
-    links.forEach((el, i) => el.classList.toggle("kbd-active", i === kbdActiveIdx));
+    kbdActiveIdx =
+      e.key === "ArrowDown"
+        ? Math.min(kbdActiveIdx + 1, links.length - 1)
+        : Math.max(kbdActiveIdx - 1, 0);
+    links.forEach((el, i) =>
+      el.classList.toggle("kbd-active", i === kbdActiveIdx),
+    );
     links[kbdActiveIdx]?.scrollIntoView({ block: "nearest" });
     onRowHover(kbdActiveIdx);
   }
@@ -2045,7 +2446,9 @@ OBR.onReady(async () => {
   try {
     const { bindPanelDrag } = await import("../../utils/panelDrag");
     const { PANEL_IDS } = await import("../../utils/panelLayout");
-    const dragEl = document.getElementById("search-drag-handle") as HTMLElement | null;
+    const dragEl = document.getElementById(
+      "search-drag-handle",
+    ) as HTMLElement | null;
     if (dragEl) {
       bindPanelDrag(dragEl, PANEL_IDS.search);
     }
@@ -2083,7 +2486,10 @@ OBR.onReady(async () => {
   const libSig = () => {
     const libs = (getState().libraries || []).filter((l) => l.enabled);
     return JSON.stringify(
-      libs.map((l) => `${l.baseUrl}|${l.indexPath ?? ""}|${(l.disabledSources ?? []).slice().sort().join(",")}`),
+      libs.map(
+        (l) =>
+          `${l.baseUrl}|${l.indexPath ?? ""}|${(l.disabledSources ?? []).slice().sort().join(",")}`,
+      ),
     );
   };
   let lastLibSig = libSig();
@@ -2098,7 +2504,9 @@ OBR.onReady(async () => {
       // doesn't stall on a fetch. If the input is already populated,
       // re-run the filter once the new index lands.
       loadIndex()
-        .then(() => { if (inputEl.value) refilter(); })
+        .then(() => {
+          if (inputEl.value) refilter();
+        })
         .catch(() => {});
     } else if (inputEl.value) {
       refilter();

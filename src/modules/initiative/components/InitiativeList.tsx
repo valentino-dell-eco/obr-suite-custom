@@ -3,7 +3,7 @@ import { useState, useEffect } from "preact/hooks";
 import { InitiativeItem } from "../types";
 import { InitiativeItemRow } from "./InitiativeItem";
 import { RollType } from "../hooks/useInitiative";
-import { Lang, t } from "../utils/i18n";
+import { t, getStoredLang, Lang } from "../utils/i18n";
 import { ICONS } from "../../../icons";
 
 interface Props {
@@ -158,7 +158,7 @@ export function InitiativeList({
       return (
         <div
           className={`reorder-slot ${active ? "active" : ""}`}
-          title={active ? "放到这里" : ""}
+          title={active ? t(getStoredLang(), "reorderOn") : ""}
           onClick={() => { if (active) onPlaceAtSlot?.(index); }}
         />
       );
@@ -181,10 +181,10 @@ export function InitiativeList({
                 className="reorder-catch"
                 title={
                   !pickedId
-                    ? "点击拿起这张卡"
+                    ? t(getStoredLang(), "reorderOff")
                     : item.id === pickedId
-                      ? "再次点击取消"
-                      : "点击与这张卡交换位置"
+                      ? t(getStoredLang(), "cancelPreparation")
+                      : t(getStoredLang(), "reorderOn")
                 }
                 onClick={() => {
                   if (!pickedId || item.id === pickedId) {

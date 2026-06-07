@@ -97,16 +97,16 @@ html,body{
 <body>
 <div class="card">
   <div class="hdr">
-    <span class="ttl">设为我的骰子皮肤</span>
+    <span class="ttl" data-i18n="diceSkinPickerTitle">设为我的骰子皮肤</span>
     <button class="x" id="btnX" type="button">×</button>
   </div>
   <div class="body">
     <div class="preview" id="preview"></div>
-    <div class="hint">点击下面任意骰子，把这张图设为你投出该骰子时显示的皮肤。设置后全场玩家投你的骰都能看到。</div>
+    <div class="hint" data-i18n="diceSkinPickerHint">点击下面任意骰子，把这张图设为你投出该骰子时显示的皮肤。设置后全场玩家投你的骰都能看到。</div>
     <div class="die-grid" id="dieGrid"></div>
   </div>
   <div class="btn-row">
-    <button class="btn" id="btnCancel" type="button">取消</button>
+    <button class="btn" id="btnCancel" type="button" data-i18n="diceSkinPickerCancel">取消</button>
   </div>
 </div>
 <script type="module" src="/src/modules/dice/skin-picker-page.ts"></script>

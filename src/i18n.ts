@@ -1,5 +1,5 @@
 import { Language } from "./state";
-
+export type { Language };
 // Translation strings shared across all suite UI. Keep keys flat so it's
 // easy to grep. Add a key once it's used in ≥2 places, or once it appears
 // in user-facing copy that needs both languages.
@@ -160,6 +160,14 @@ const TR: Dict = {
     zh: "：术法爆发 — 骰子掷到最大点会再追加一颗。",
     en: ": exploding dice — rolling max adds another die.",
   },
+  diceRule11: {
+    zh: "：保存豁免 — 自动掷 1d20，并使用选中 token 的该属性豁免加值。",
+    en: ": save — automatically roll 1d20 and apply the selected token's save bonus for that ability.",
+  },
+  diceRule12: {
+    zh: "：检定 — 自动掷 1d20，并使用选中 token 的该属性检定或指定技能加值。",
+    en: ": check — automatically roll 1d20 and apply the selected token's ability check bonus or specified skill bonus.",
+  },
   diceRule10: {
     zh: "支持非标骰，比如",
     en: "Non-standard dice are supported, e.g.",
@@ -273,6 +281,9 @@ const TR: Dict = {
   },
 
   // === Character card bind ===
+  ccRawData: { zh: "原始数据", en: "Raw Data" },
+  ccStatBannerUnlocked: { zh: "已解锁：所有玩家可见完整 HP / AC 数值", en: "Unlocked: All players can see full HP / AC values" },
+  ccStatBannerLocked: { zh: "已上锁：玩家在战斗准备 / 战斗中只看到血条比例（ 无数值 / AC )", en: "Locked: Players see only health bar ratios (no values / AC) in combat prep / combat" },
   ccBindTitle: { zh: "绑定角色卡", en: "Bind Character Card" },
   ccBindUnbind: { zh: "解绑", en: "Unbind" },
   ccBindLoading: { zh: "加载中…", en: "Loading…" },
@@ -309,6 +320,17 @@ const TR: Dict = {
     zh: "打开本地文件选择器上传 xlsx",
     en: "Open local file picker to upload xlsx",
   },
+  ccPanelLocalOnlyTitle: { zh: "仅本地 — 点击云朵图标同步到玩家", en: "Local only - Click to sync with the room" },
+  ccPanelSyncedTitle: { zh: "已同步", en: "Synced with the room" },
+  ccPanelDirtyTitle: { zh: "未同步 — 点击云朵图标同步到玩家", en: "Unsynced changes - Click to sync with the room" },
+  ccPanelSyncedSuccess: { zh: "已同步到服务器", en: "Synced with server" },
+  ccPanelDirtyRetry: { zh: "同步失败 — 点击重试", en: "Sync failed - Click to retry" },
+  ccSaveFailSync: { zh: "同步失败", en: "Sync failed" },
+  ccDirtySave: { zh: "已保存本地 — 点击云朵图标同步到玩家", en: "Saved locally — click the cloud icon to sync with the room" },
+  ccPanelExportJson: { zh: "📤 导出 JSON", en: "📤 Export JSON" },
+  ccPanelExportJsonTitle: { zh: "导出角色卡为 JSON 格式", en: "Export character cards as JSON" },
+  ccPanelImportJson: { zh: "📥 导入 JSON", en: "📥 Import JSON" },
+  ccPanelImportJsonTitle: { zh: "从 JSON 文件导入角色卡", en: "Import character cards from a JSON file" },
   ccPanelRefreshHint: {
     zh: "每张卡片旁的 ↻ 可重新选择 xlsx 覆盖更新",
     en: "Click ↻ next to a card to re-pick xlsx and overwrite",
@@ -462,6 +484,7 @@ const TR: Dict = {
   rpEdit: { zh: "编辑", en: "Edit" },
   rpMaxZero: { zh: "最大值为 0（点 ⚙ 设置）", en: "Max is 0 (click ⚙ to set)" },
   rpEditExpr: { zh: "点击编辑：可输入数字 / +5 -3 / current+5 / max-2 等表达式", en: "Click to edit: a number, +5 / -3, current+5, max-2, …" },
+  rpDieRollLabel: { zh: "骰子投掷", en: "Die roll" },
   rpPipTitle: { zh: "{name} · 第 {i} 格 · 点击赋值 {i}（已为 {i} 时减 1）· 右键归满", en: "{name} · pip {i} · click = set to {i} (−1 if already {i}) · right-click = fill" },
   rpBarTitle: { zh: "{name} · 左键拖动设置进度，右键 +1 / 归满", en: "{name} · drag = set progress, right-click = +1 / fill" },
   rpJumpMin: { zh: "跳到最小（{min}）", en: "Jump to min ({min})" },
@@ -473,6 +496,8 @@ const TR: Dict = {
   reTypeCount: { zh: "个数", en: "Pips" },
   reTypeBar: { zh: "进度", en: "Bar" },
   reTypeNumber: { zh: "数字", en: "Number" },
+  reTypeDieRoll: { zh: "骰子", en: "Die Roll" },
+  reLblDieInfo: { zh: "骰子类型", en: "Die Type" },
   reLblCurrent: { zh: "当前", en: "Current" },
   reLblMax: { zh: "最大", en: "Max" },
   reLblIcon: { zh: "图标", en: "Icon" },
@@ -588,6 +613,21 @@ const TR: Dict = {
   stManageFootHint: { zh: "拖到 <b>其他角色</b> = 转移 · 拖到 <b>外面</b> = 取消", en: "Drag onto <b>another character</b> = transfer · Drag <b>outside</b> = cancel" },
   // ===== Character card v2 (fullscreen-page.tsx) — segment 4 =====
   // tabs
+  ccAbbrStr: { zh: "力", en: "STR" },
+  ccAbbrDex: { zh: "敏", en: "DEX" },
+  ccAbbrCon: { zh: "体", en: "CON" },
+  ccAbbrInt: { zh: "智", en: "INT" },
+  ccAbbrWis: { zh: "感", en: "WIS" },
+  ccAbbrCha: { zh: "魅", en: "CHA" },
+  ccFullStr: { zh: "力量", en: "Strength" },
+  ccFullDex: { zh: "敏捷", en: "Dexterity" },
+  ccFullCon: { zh: "体质", en: "Constitution" },
+  ccFullInt: { zh: "智力", en: "Intelligence" },
+  ccFullWis: { zh: "感知", en: "Wisdom" },
+  ccFullCha: { zh: "魅力", en: "Charisma" },
+  ccSearchTitle: { zh: "搜索", en: "Search" },
+  ccMasterySearchTitle: { zh: "搜索精通词条", en: "Search Masteries" },
+  ccMasteryLabel: { zh: "精通", en: "Mastery" },
   ccTabOverview: { zh: "概览", en: "Overview" },
   ccTabSpells: { zh: "法术", en: "Spells" },
   ccTabFeatures: { zh: "特性", en: "Features" },
@@ -642,7 +682,12 @@ const TR: Dict = {
   // stat banner labels (HP / AC stay as-is)
   ccTemp: { zh: "临时", en: "Temp" },
   ccInit: { zh: "先攻", en: "Init" },
+  ccFullInit: { zh: "先攻", en: "Initiative" },
   ccSpeed: { zh: "速度", en: "Speed" },
+  ccPassivePerception: { zh: "被动察觉", en: "Passive Perception" },
+  ccProfBonus: { zh: "熟练", en: "Prof Bonus" },
+  ccSaveDC: { zh: "豁免DC", en: "Save DC" },
+  ccSpellcastingAbility: { zh: "施法关键属性", en: "Spellcasting Ability" },
   ccFtUnit: { zh: "尺", en: "ft" },
   ccPassivePerc: { zh: "被察", en: "Pass." },
   ccProf: { zh: "熟练", en: "Prof" },
@@ -701,9 +746,17 @@ const TR: Dict = {
   // app-level errors
   ccErrNoParams: { zh: "URL 缺少 room 或 card 参数", en: "URL is missing the room or card parameter" },
   ccLoadFailedPrefix: { zh: "加载失败：", en: "Load failed: " },
+  ccErrImportedMissing: {
+    zh: "本地导入数据未找到",
+    en: "Imported local data not found",
+  },
   // spells section
   ccSpellLevelTip: { zh: "环阶（0 = 戏法）", en: "Spell level (0 = cantrip)" },
+  ccSpellLevelChip: { zh: "环阶", en: "Level" },
+  ccSpellSchoolChip: { zh: "学派", en: "School" },
+  ccCastingTimeChip: { zh: "施法", en: "Time" },
   ccSpellNamePh: { zh: "法术名", en: "Spell name" },
+  ccComponentsChip: { zh: "成分", en: "Components" },
   ccSpellExpandTip: { zh: "点击展开法术详情", en: "Click to expand spell details" },
   ccCantripBadge: { zh: "戏", en: "C" },
   ccRing: { zh: "环", en: "" },
@@ -714,8 +767,10 @@ const TR: Dict = {
   ccDuration: { zh: "持续", en: "Duration" },
   ccSecSpells: { zh: "法术", en: "Spells" },
   ccSpellAbility: { zh: "关键属性", en: "Ability" },
-  ccSaveDC: { zh: "豁免DC", en: "Save DC" },
-  ccSpellAttack: { zh: "攻击", en: "Attack" },
+  ccSpellAttack: { zh: "法术攻击", en: "Spell Attack" },
+  ccWeaponAttack: { zh: "武器攻击", en: "Weapon Attack" },
+  ccSecWeapons: { zh: "武器 / 攻击", en: "Weapons / Attacks" },
+  ccMeleeRangedSpellAttack: { zh: "近战/远程法术攻击", en: "Melee/Ranged Spell Attack" },
   ccMaxPrepared: { zh: "最大准备", en: "Max prepared" },
   ccCantrips: { zh: "戏法", en: "Cantrips" },
   ccAddCantripTitle: { zh: "从法术库挑选戏法加入", en: "Pick a cantrip from the library" },
@@ -761,6 +816,8 @@ const TR: Dict = {
   ccNoBackground: { zh: "暂无背景信息", en: "No background info yet" },
   // abilities section header
   ccSecAbilities: { zh: "属性 · 豁免 · 技能", en: "Abilities · Saves · Skills" },
+  ccTabAbilities: { zh: "属性", en: "Abilities" },
+  ccTabResources: { zh: "资源", en: "Resources" },
   ccSecAbilitiesEditHint: { zh: "（编辑中 — 点击 ●/○/★ 切换熟练）", en: " (editing — click ●/○/★ to toggle proficiency)" },
   // defenses section
   ccSecDefenses: { zh: "防御 · 语言 · 工具", en: "Defenses · Languages · Tools" },
@@ -792,6 +849,239 @@ const TR: Dict = {
   ccSavedEdit: { zh: "已保存的编辑", en: "saved edits" },
   ccJsonParseFailColon: { zh: "✕ JSON 解析失败：{err}", en: "✕ JSON parse failed: {err}" },
   ccPasteSource: { zh: "粘贴文本", en: "pasted text" },
+
+  // Layout editor
+  layoutNoPositions: { zh: "未读取到任何面板的位置信息", en: "No panel position data found" },
+  layoutDragHint: { zh: "拖动整体移动，拖右下角调整大小（虚线 = 当前未打开）", en: "Drag to move, drag bottom-right to resize (dashed = currently closed)" },
+  layoutResetConfirm: { zh: "重置所有面板位置和大小到默认?", en: "Reset all panel positions and sizes to default?" },
+  layoutResetDone: { zh: "已重置 · 拖动整体移动，拖右下角调整大小", en: "Reset · Drag to move, drag bottom-right to resize" },
+
+  // Transform page
+  transformPreview: { zh: "预览", en: "Preview" },
+  transformCantReadDimensions: { zh: "无法读取尺寸", en: "Can't read dimensions" },
+  transformLoadFailed: { zh: "加载失败", en: "Load failed" },
+  transforming: { zh: "变身中…", en: "Transforming…" },
+  layoutCluster: { zh: "快捷键按钮", en: "Floating Button" },
+  layoutClusterRow: { zh: "快捷键栏", en: "Floating Button Row" },
+  layoutDiceHistory: { zh: "投骰记录面板", en: "Dice History Panel" },
+  layoutPerfWindow: { zh: "性能监视器", en: "Performance Monitor" },
+  layoutInitiative: { zh: "先攻条", en: "Initiative Tracker" },
+  layoutBestiaryPanel: { zh: "怪物图鉴", en: "Bestiary Panel" },
+  layoutBestiaryInfo: { zh: "怪物详情", en: "Bestiary Info" },
+  layoutCcInfo: { zh: "角色卡信息", en: "Character Card Info" },
+  layoutSearch: { zh: "搜索栏", en: "Search Bar" },
+  layoutPortalEdit: { zh: "传送门编辑", en: "Portal Edit" },
+  layoutStatusPalette: { zh: "状态调色板", en: "Status Palette" },
+  layoutHpBar: { zh: "血条组件", en: "HP Bar" },
+  layoutMusicBoard: { zh: "音乐板", en: "Music Board" },
+  layoutEditorTitle: { zh: "布局编辑", en: "Layout Edit" },
+  layoutEditorHint: { zh: "拖动面板代理到任意位置", en: "Drag panel proxy to any position" },
+  layoutEditorReset: { zh: "重置全部", en: "Reset All" },
+  layoutEditorSave: { zh: "保存", en: "Save" },
+  // HP Bar page
+  hpBarPinned: { zh: "已置顶（取消则恢复随选择关闭）", en: "Pinned (uncheck to restore auto-close)" },
+  hpBarPinTooltip: { zh: "置顶面板（取消选中也保持显示）", en: "Pin panel (remains visible even when unchecked)" },
+  hpBarLocked: { zh: "已锁定：战斗外玩家看不到血条详情。点击解锁让所有人可见。", en: "Locked: non-combatants can't see details. Click to unlock." },
+  hpBarUnlocked: { zh: "已解锁：所有人可见血条与 AC。点击锁定恢复战斗外隐藏。", en: "Unlocked: everyone sees HP & AC. Click to lock." },
+
+  // Drag preview labels
+  dragPreviewCluster: { zh: "悬浮按钮", en: "Floating Button" },
+  dragPreviewDiceHistory: { zh: "投骰记录", en: "Dice History" },
+  dragPreviewPerfWindow: { zh: "性能监视器", en: "Performance Monitor" },
+  dragPreviewInitiative: { zh: "先攻条", en: "Initiative Tracker" },
+  dragPreviewBestiaryPanel: { zh: "怪物图鉴", en: "Bestiary Panel" },
+  dragPreviewBestiaryInfo: { zh: "怪物详情", en: "Bestiary Info" },
+  dragPreviewCcInfo: { zh: "角色卡", en: "Character Card" },
+  ccPanelPinned: { zh: "已置顶（取消则恢复随选择关闭）", en: "Pinned (uncheck to restore auto-close)" },
+  ccPanelPinTooltip: { zh: "置顶面板（取消选中也保持显示）", en: "Pin panel (remains visible even when unchecked)" },
+  ccPanelPrivateLabel: { zh: "仅部分人可见", en: "Visible to a limited number of people" },
+  ccPanelHiddenLabel: { zh: "仅 DM 可见", en: "Visible to DM only" },
+  ccPanelPublicTitle: { zh: "公开 — 点击改为仅 DM 可见", en: "Public — Click to make visible to DM only" },
+  ccPanelHiddenTitle: { zh: "仅 DM 可见 — 点击改为公开", en: "DM only — Click to make public" },
+
+  // DM Announcement panel
+  announcementTitle: { zh: "Full Suite", en: "Full Suite" },
+  announcementSubtitle: { zh: "公告 / Announcement", en: "Announcement" },
+  announcementLoadingPlaceholder: { zh: "加载公告中…", en: "Loading announcement…" },
+  announcementCloseBtn: { zh: "我知道了", en: "Got it" },
+  announcementLangCn: { zh: "CN", en: "CN" },
+  announcementLangEn: { zh: "EN", en: "EN" },
+  announcementLoadFailed: { zh: "加载公告失败", en: "Failed to load announcement" },
+  
+  // Announcement issue tags
+  announcementBugTag: { zh: "缺陷", en: "bug" },
+  announcementFeatureTag: { zh: "功能", en: "feature" },
+  announcementWipTag: { zh: "进行中", en: "wip" },
+  announcementDoneTag: { zh: "完成", en: "done" },
+  
+  // Announcement severity tags
+  announcementCriticalTag: { zh: "严重", en: "critical" },
+  announcementHighTag: { zh: "高", en: "high" },
+  announcementMediumTag: { zh: "中", en: "medium" },
+  announcementLowTag: { zh: "低", en: "low" },
+
+  // === Dice history panel ===
+  diceHistDelTitle: { zh: "删除这条记录", en: "Delete this entry" },
+  diceHistDelTitleColl: { zh: "删除这条记录（含 {n} 个掷骰）", en: "Delete this entry ({n} rolls)" },
+  diceHistDelAriaLabel: { zh: "删除", en: "Delete" },
+
+  // === Dice skin panel (renderSkinsTab) ===
+  diceSkinWebmFallbackTitle: { zh: "webm 缩略图无法预览（CORS / 解码失败）", en: "webm thumbnail unavailable (CORS / decode error)" },
+  diceSkinHintLocal: { zh: "⚠ <b>本地电脑文件不能直接用</b> — 必须先把图片 / webm <b>上传到枭熊</b>：把它拖进场景作为「附件」，再右键附件选 <b>「设为我的骰子皮肤」</b>，或在下方粘贴该附件的 URL（须为 https:// 开头的绝对地址）。", en: "⚠ <b>Local files don't work directly</b> — you must first <b>upload</b> the image/webm to OBR: drag it into the scene as an attachment, then right-click and choose <b>\"Set as my dice skin\"</b>, or paste the attachment URL below (must start with https://)." },
+  diceSkinSetsTitle: { zh: "皮肤套组", en: "Skin Sets" },
+  diceSkinSetSaveBtn: { zh: "+ 保存当前为套组", en: "+ Save current as set" },
+  diceSkinSetSaveBtnTitle: { zh: "把当前 7 个骰子的活动皮肤存为一个套组", en: "Save the current 7 active die skins as a set" },
+  diceSkinSetsEmpty: { zh: "还没有套组。配好你想要的 7 个骰子皮肤后，点上面「+ 保存当前为套组」。", en: "No sets yet. Configure your 7 die skins, then click '+ Save current as set'." },
+  diceSkinSetChipTitleLoad: { zh: "一键载入「{name}」（覆盖 {n}/7 个骰子）", en: "Load \"{name}\" (overwrites {n}/7 dice)" },
+  diceSkinSetDelTitle: { zh: "删除该套组", en: "Delete this set" },
+  diceSkinDefaultActive: { zh: "当前正在使用默认皮肤", en: "Currently using default skin" },
+  diceSkinDefaultTitle: { zh: "点击恢复为默认皮肤", en: "Click to restore default skin" },
+  diceSkinActiveTitle: { zh: "当前活动皮肤", en: "Active skin" },
+  diceSkinSetTitle: { zh: "点击设为当前皮肤", en: "Click to set as active skin" },
+  diceSkinLibDelTitle: { zh: "从皮肤库移除", en: "Remove from skin library" },
+  diceSkinLibEmpty: { zh: "右键场景里的附件「设为我的骰子皮肤」，或下方粘贴 URL，加入这里", en: "Right-click an attachment and choose \"Set as my dice skin\", or paste a URL below." },
+  diceSkinStatusRandom: { zh: "随机 ({n})", en: "Random ({n})" },
+  diceSkinStatusCustom: { zh: "自定义", en: "Custom" },
+  diceSkinStatusDefault: { zh: "默认", en: "Default" },
+
+  // === Bestiary panel ===
+  bestiaryTransformForm: { zh: "变身形态", en: "Transform Form" },
+  bestiaryBulkBadge: { zh: "（群体绑定 · {n} 个 token）", en: "(Bulk bind · {n} tokens)" },
+  bestiaryDragTitle: { zh: "拖动面板", en: "Drag panel" },
+  bestiaryFilterSourceHint: { zh: "按来源代码筛选（如 PHB / kiwee / 你的本子英文名）", en: "Filter by source code (e.g. PHB / kiwee / your supplement name)" },
+  bestiaryAutoHideHint: { zh: "加入场景时自动隐藏新生成的怪物（仅 DM 可见，方便先布阵再揭面）", en: "Auto-hide newly spawned monsters (DM-only; lets you set up before reveal)" },
+  bestiaryAutoInitHint: { zh: "加入场景时自动加入先攻", en: "Auto-add to initiative when spawned" },
+  bestiaryAutoNameHint: { zh: "加入场景时自动把怪物名字写到 token 的 plainText（OBR 原生显示在 token 下方的小字标签）", en: "Auto-write monster name to token's plainText label (shown below token in OBR)" },
+
+  // === Follow module notifications ===
+  followClickHint: { zh: "请左键点击要跟随的目标 token（按 Esc 取消）", en: "Left-click the target token to follow (Esc to cancel)" },
+  followCycleError: { zh: "跟随会形成循环，无法绑定", en: "Following would create a cycle — cannot bind" },
+  followSource: { zh: "源", en: "Source" },
+  followTarget: { zh: "目标", en: "Target" },
+  followBound: { zh: "已绑定跟随：{source} → {target}", en: "Follow bound: {source} → {target}" },
+
+  // === Character card info page static UI ===
+  ccInfoNameSyncTitle: { zh: "点击 → 同步 / 清除 token 名字：{name}", en: "Click → sync / clear token name: {name}" },
+  ccInfoUnnamed: { zh: "未命名", en: "Unnamed" },
+  ccInfoEmpty: { zh: "无", en: "None" },
+  ccInfoPinnedTitle: { zh: "已置顶（取消则恢复随选择关闭）", en: "Pinned (unpin to close on deselect)" },
+  ccInfoPinTitle: { zh: "置顶面板（取消选中也保持显示）", en: "Pin panel (stays open after deselect)" },
+  ccInfoSkillSuffix: { zh: "检定", en: " Check" },
+  ccInfoSaveSuffix: { zh: "豁免", en: " Save" },
+  ccInfoHitSuffix: { zh: " 命中", en: " Hit" },
+  ccInfoDmgSuffix: { zh: " 伤害", en: " Damage" },
+  ccInfoExtraDmg: { zh: " + 附加", en: " + Bonus" },
+  ccInfoMasteryPrefix: { zh: "精通：", en: "Mastery: " },
+
+  // === Character card panel timestamps ===
+  ccPanelTimestampMin: { zh: "{n}分钟前", en: "{n} min ago" },
+  ccPanelTimestampHour: { zh: "{n}小时前", en: "{n} h ago" },
+  ccPanelTimestampDay: { zh: "{n}天前", en: "{n} d ago" },
+  ccPanelDownload2014: { zh: "下载 5E2014（传统 5e）角色卡模板", en: "Download 5E2014 (Classic 5e) Character Sheet Template" },
+  ccPanelDownload2024: { zh: "下载 5E2024（5e 修订）角色卡模板", en: "Download 5E2024 (Revised 5e) Character Sheet Template" },
+
+  // Settings dialogs
+  settingsDeleteLibraryConfirm: { zh: "删除此库？这不会影响数据本身，只会从设置里移除。", en: "Delete this library? This won't affect the data itself, only remove it from settings." },
+
+  // === Trickster edit panel ===
+  tricksterTitle: { zh: "捣蛋鬼在哪？", en: "Where's the Trickster?" },
+  tricksterFiredBadge: { zh: "已触发", en: "Triggered" },
+  tricksterLblName: { zh: "名称（仅 GM 自查看）", en: "Name (GM-only)" },
+  tricksterNamePh: { zh: "如：哥布林伏击点", en: "e.g. Goblin Ambush Point" },
+  tricksterLblTarget: { zh: "触发对象", en: "Trigger target" },
+  tricksterTargetAll: { zh: "所有角色 / 坐骑", en: "All characters / mounts" },
+  tricksterTargetPlayer: { zh: "仅玩家单位", en: "Player tokens only" },
+  tricksterTargetNpc: { zh: "仅 NPC（GM 控制）", en: "NPC only (GM-controlled)" },
+  tricksterOneShot: { zh: "仅触发一次", en: "One-shot trigger" },
+  tricksterOneShotDesc: { zh: "触发后自动锁定，再进入也不会触发，可在此处重置", en: "Auto-locks after triggering; entering again won't re-trigger. Reset here to re-enable." },
+  tricksterVisible: { zh: "玩家可见", en: "Visible to players" },
+  tricksterVisibleDesc: { zh: "关闭后玩家看不到图标，GM 仍能看到半透明残影", en: "When off, players see nothing; GM still sees a faint ghost." },
+  tricksterLocked: { zh: "锁定", en: "Locked" },
+  tricksterLockedDesc: { zh: "防止编辑时把触发区误拖动", en: "Prevents accidental dragging of the trigger zone while editing." },
+  tricksterDelete: { zh: "删除", en: "Delete" },
+  tricksterReset: { zh: "重置已触发", en: "Reset Triggered" },
+  tricksterCancel: { zh: "取消", en: "Cancel" },
+  tricksterSave: { zh: "保存", en: "Save" },
+  tricksterDeleteConfirm: { zh: "确定删除此捣蛋鬼？此操作不可撤销。", en: "Delete this trickster zone? This cannot be undone." },
+
+  // === Circle image panel ===
+  circleImageTitle: { zh: "图片处理", en: "Image Tool" },
+  circleImageTabCircle: { zh: "圆形裁剪", en: "Circle Crop" },
+  circleImageTabBgRemove: { zh: "白底黑底剔除", en: "Remove Background" },
+  circleImageDropHint: { zh: "拖入图片 / 点击选择 / Ctrl+V 粘贴", en: "Drop image / click to choose / Ctrl+V paste" },
+  circleImageDropSub: { zh: "支持 JPG / PNG / WebP / SVG，最大 10 MB", en: "Supports JPG / PNG / WebP / SVG, max 10 MB" },
+  circleImageLblSize: { zh: "大小", en: "Size" },
+  circleImageLblZoom: { zh: "缩放", en: "Zoom" },
+  circleImageLblRingColor: { zh: "环颜色", en: "Ring color" },
+  circleImageLblBg: { zh: "背景", en: "Background" },
+  circleImageBgWhite: { zh: "剔除白底", en: "Remove white" },
+  circleImageBgBlack: { zh: "剔除黑底", en: "Remove black" },
+  circleImageLblTolerance: { zh: "容差", en: "Tolerance" },
+  circleImageLblFeather: { zh: "羽化", en: "Feather" },
+  circleImageBtnReset: { zh: "换图", en: "Change image" },
+  circleImageBtnUpload: { zh: "⤴ 添加到资源库", en: "⤴ Add to library" },
+  circleImageUploadTitle: { zh: "把当前裁剪结果上传到 OBR 资源库；之后可从资源库拖到场景使用", en: "Upload the cropped result to the OBR asset library; drag it into the scene from there." },
+  circleImageErrNotImage: { zh: "请选择图片文件（JPG / PNG / WebP / SVG）", en: "Please select an image file (JPG / PNG / WebP / SVG)" },
+  circleImageErrTooLarge: { zh: "图片大于 10 MB，太大了。先压缩一下吧。", en: "Image exceeds 10 MB. Please compress it first." },
+  circleImageErrLoad: { zh: "图片加载失败", en: "Failed to load image" },
+  circleImageErrRead: { zh: "读取失败", en: "Read failed" },
+  circleImageErrObrNotReady: { zh: "OBR 还在初始化，稍后再试", en: "OBR is still initializing, please try again shortly" },
+  circleImageErrGenerate: { zh: "生成图片失败：", en: "Failed to generate image: " },
+  circleImageErrUpload: { zh: "上传到资源库失败：", en: "Upload to asset library failed: " },
+  circleImageUploading: { zh: "上传中…", en: "Uploading…" },
+  circleImageUploaded: { zh: "✓ 已上传，从资源库拖入场景", en: "✓ Uploaded — drag from library into scene" },
+  circleImageNameCircle: { zh: "圆形图片", en: "circle-image" },
+  circleImageNameBgRemove: { zh: "去底图片", en: "bg-removed" },
+
+  // === Dice skin picker ===
+  diceSkinPickerTitle: { zh: "设为我的骰子皮肤", en: "Set as My Dice Skin" },
+  diceSkinPickerHint: { zh: "点击下面任意骰子，把这张图设为你投出该骰子时显示的皮肤。设置后全场玩家投你的骰都能看到。", en: "Click any die below to set this image as your skin for that die. All players will see it when you roll." },
+  diceSkinPickerCancel: { zh: "取消", en: "Cancel" },
+  diceSkinPickerErrPreview: { zh: "未能读取图片信息，请重试。", en: "Could not read image info, please try again." },
+  diceSkinPickerUnnamed: { zh: "（未命名附件）", en: "(unnamed asset)" },
+  diceSkinPickerVideo: { zh: "动图 webm", en: "Animated webm" },
+  diceSkinPickerStatic: { zh: "静态图片", en: "Static image" },
+
+  // === Dice replay ===
+  diceReplayHintOverlay: { zh: "点击气泡或再次点击词条关闭", en: "Click bubble or click row again to close" },
+
+  // === Bestiary group saves ===
+  bestiaryGroupSavesTitle: { zh: "群体豁免 / 属性", en: "Group Saves / Stats" },
+  bestiaryGroupSavesTitleInit: { zh: "群体先攻", en: "Group Initiative" },
+  bestiaryGroupSavesHint: { zh: "左键投掷 · 右键更多", en: "Left-click roll · Right-click more" },
+  bestiaryGroupSavesHintInit: { zh: "战斗准备阶段 · 1d20 + 各自敏捷调整值", en: "Combat prep · 1d20 + each token's DEX mod" },
+  bestiaryGroupSavesCountSel: { zh: "{n} 个目标", en: "{n} targets" },
+  bestiaryGroupSavesIvAdv: { zh: "优势", en: "Adv" },
+  bestiaryGroupSavesIvNormal: { zh: "普通", en: "Normal" },
+  bestiaryGroupSavesIvDis: { zh: "劣势", en: "Dis" },
+
+  // === Bestiary group resolve ===
+  bestiaryGroupResolveTitle: { zh: "⚖ 群体豁免结算", en: "⚖ Group Save Resolve" },
+  bestiaryGroupResolveDC: { zh: "本次豁免DC", en: "Save DC" },
+  bestiaryGroupResolveFieldTitle: { zh: "选择要修改的字段", en: "Select field to modify" },
+  bestiaryGroupResolveValuePh: { zh: "数值", en: "Value" },
+  bestiaryGroupResolveBtnDmg: { zh: "−（失败全额 / 成功减半向下取整）", en: "− (fail: full / success: half, floor)" },
+  bestiaryGroupResolveBtnOk: { zh: "好了", en: "Done" },
+  bestiaryGroupResolveNoResult: { zh: "（暂无投掷结果，等待动画结束…）", en: "(No roll results yet — waiting for animation…)" },
+  bestiaryGroupResolveErrNoValue: { zh: "请填写数值", en: "Enter a value" },
+  bestiaryGroupResolveErrNoDC: { zh: "扣血请先填 DC", en: "DC required for damage" },
+  bestiaryGroupResolveAppliedDmg: { zh: "已应用：失败者 −{v}，成功者 −{half}", en: "Applied: fail −{v}, success −{half}" },
+  bestiaryGroupResolveAppliedAll: { zh: "已应用：全员 +{v}", en: "Applied: +{v} to all" },
+  bestiaryGroupResolveAppliedSet: { zh: "已应用：全员 = {v}", en: "Applied: set to {v} for all" },
+  bestiaryGroupResolveSaveSuffix: { zh: "豁免", en: " Save" },
+
+  // === Drag preview ===
+  dragPreviewFallback: { zh: "面板", en: "Panel" },
+
+  // === HP bar hardcoded ===
+  hpBarResetTitle: { zh: "重置画面血条 — 清掉缓存重画，修复偶发的位置漂移", en: "Reset on-screen HP bar — clear cache and redraw, fixes occasional drift" },
+  hpBarDragTitle: { zh: "拖动重新定位", en: "Drag to reposition" },
+  hpBarLockTitle: { zh: "锁定 = 战斗外向玩家隐藏血条详情；解锁 = 全员可见", en: "Locked = hide HP details from players outside combat; Unlocked = everyone sees" },
+
+  // === Misc module labels (inline en?...: strings) ===
+  circleImageContextLabel: { zh: "圆形图片 / 去底", en: "Circle Image / BG Remove" },
+  dragPreviewGhostLabel: { zh: "面板", en: "Panel" },
+  rollerFallback: { zh: "投骰人", en: "Roller" },
 };
 
 export function t(lang: Language, key: keyof typeof TR): string {
@@ -833,3 +1123,4 @@ export function applyI18nDom(lang: Language, root: Document | HTMLElement = docu
     if (key && TR[key]) el.setAttribute("aria-label", t(lang, key));
   });
 }
+

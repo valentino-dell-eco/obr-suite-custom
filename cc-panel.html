@@ -1,245 +1,736 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh">
-<head>
-<meta charset="UTF-8">
-<title>角色卡面板</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#eee}
-html{background:transparent}
-body{background:rgba(10,10,20,0.3);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+    <title>角色卡面板</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #eee;
+      }
+      html {
+        background: transparent;
+      }
+      body {
+        background: rgba(10, 10, 20, 0.3);
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
+      }
 
-/* The mini-btn (the old circular blue floating button) was removed —
+      /* The mini-btn (the old circular blue floating button) was removed —
    the suite cluster's "角色卡界面" button is now the only way to open
    this panel, and it always opens already maximized. */
-.mini-wrap{display:none}
-.mini-btn{display:none}
+      .mini-wrap {
+        display: none;
+      }
+      .mini-btn {
+        display: none;
+      }
 
-/* overflow:hidden — the panel itself is a fixed-size box; any pane
+      /* overflow:hidden — the panel itself is a fixed-size box; any pane
    whose content is too tall scrolls INTERNALLY (each pane sets its
    own overflow), the outer frame never gets a scrollbar. */
-.panel{display:flex;height:100%;padding:20px;gap:14px;overflow:hidden}
+      .panel {
+        display: flex;
+        height: 100%;
+        padding: 20px;
+        gap: 14px;
+        overflow: hidden;
+      }
 
-/* === Left: card viewer (no drop) === */
-.viewer{
-  flex:1;min-width:0;min-height:0;
-  /* Match the loaded sheet's canvas (cc-fullscreen --bg #1c2030) so the
+      /* === Left: card viewer (no drop) === */
+      .viewer {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        /* Match the loaded sheet's canvas (cc-fullscreen --bg #1c2030) so the
      iframe-load gap on first open / card switch / refresh reads as the
      card color instead of a jarring white flash. */
-  background:#1c2030;border-radius:10px;overflow:hidden;
-  box-shadow:0 8px 40px rgba(0,0,0,0.5);
-  position:relative;
-}
-.viewer iframe{border:none;width:100%;height:100%;display:block;position:absolute;inset:0;background:#1c2030}
-.viewer .empty-state{
-  position:absolute;inset:0;
-  background:rgba(255,255,255,0.04);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  color:rgba(255,255,255,0.4);font-size:15px;
-  border:1px dashed rgba(255,255,255,0.15);border-radius:10px;
-  text-align:center;padding:20px;gap:10px;
-}
-.viewer.has-content{background:#1c2030}
-.viewer.is-empty .empty-state{display:flex}
-.viewer:not(.is-empty) .empty-state{display:none}
-.viewer .empty-state .big{font-size:48px;opacity:.5}
+        background: #1c2030;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+        position: relative;
+      }
+      .viewer iframe {
+        border: none;
+        width: 100%;
+        height: 100%;
+        display: block;
+        position: absolute;
+        inset: 0;
+        background: #1c2030;
+      }
+      .viewer .empty-state {
+        position: absolute;
+        inset: 0;
+        background: rgba(255, 255, 255, 0.04);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 15px;
+        border: 1px dashed rgba(255, 255, 255, 0.15);
+        border-radius: 10px;
+        text-align: center;
+        padding: 20px;
+        gap: 10px;
+      }
+      .viewer.has-content {
+        background: #1c2030;
+      }
+      .viewer.is-empty .empty-state {
+        display: flex;
+      }
+      .viewer:not(.is-empty) .empty-state {
+        display: none;
+      }
+      .viewer .empty-state .big {
+        font-size: 48px;
+        opacity: 0.5;
+      }
 
-/* === Resource tab column (DM only) === */
-.res-col{
-  width:72px;flex-shrink:0;min-height:0;
-  background:rgba(22,33,62,0.85);
-  border-radius:10px;
-  display:flex;flex-direction:column;gap:4px;padding:10px 6px;
-  box-shadow:0 8px 30px rgba(0,0,0,0.4);
-  backdrop-filter:blur(4px);
-  overflow-y:auto;
-}
-.res-col::-webkit-scrollbar{width:3px}
-.res-col::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:2px}
-.res-tab{
-  border:1px solid rgba(255,255,255,0.08);
-  background:rgba(255,255,255,0.03);
-  color:#ccc;
-  border-radius:6px;
-  padding:10px 4px;
-  font-size:11px;
-  font-weight:600;
-  cursor:pointer;
-  font-family:inherit;
-  transition:all .15s;
-  display:flex;flex-direction:column;align-items:center;gap:4px;
-  line-height:1.2;
-}
-.res-tab:hover{background:rgba(255,255,255,0.08);color:#fff;border-color:rgba(255,255,255,0.2)}
-.res-tab.active{background:rgba(52,152,219,0.22);color:#fff;border-color:rgba(52,152,219,0.6)}
-.res-tab .ico{font-size:18px;line-height:1}
-.res-tab .lbl{font-size:10px}
+      /* === Resource tab column (DM only) === */
+      .res-col {
+        width: 72px;
+        flex-shrink: 0;
+        min-height: 0;
+        background: rgba(22, 33, 62, 0.85);
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 10px 6px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(4px);
+        overflow-y: auto;
+      }
+      .res-col::-webkit-scrollbar {
+        width: 3px;
+      }
+      .res-col::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 2px;
+      }
+      .res-tab {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.03);
+        color: #ccc;
+        border-radius: 6px;
+        padding: 10px 4px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.15s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        line-height: 1.2;
+      }
+      .res-tab:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+      .res-tab.active {
+        background: rgba(52, 152, 219, 0.22);
+        color: #fff;
+        border-color: rgba(52, 152, 219, 0.6);
+      }
+      .res-tab .ico {
+        font-size: 18px;
+        line-height: 1;
+      }
+      .res-tab .lbl {
+        font-size: 10px;
+      }
 
-/* === Right: sidebar (drop target) === */
-.side{
-  width:260px;flex-shrink:0;
-  background:rgba(22,33,62,0.85);
-  border-radius:10px;
-  display:flex;flex-direction:column;overflow:hidden;
-  /* min-height:0 — without it the flexbox `min-height:auto` default
+      /* === Right: sidebar (drop target) === */
+      .side {
+        width: 260px;
+        flex-shrink: 0;
+        background: rgba(22, 33, 62, 0.85);
+        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        /* min-height:0 — without it the flexbox `min-height:auto` default
      lets the column's content force `.side` taller than the frame
      instead of staying boxed; the card list below then can't scroll
      internally. With it, `.side` is exactly the frame height and
      `.card-list` gets its own scrollbar. */
-  min-height:0;
-  box-shadow:0 8px 30px rgba(0,0,0,0.4);
-  backdrop-filter:blur(4px);
-  position:relative;
-  transition:background .15s, outline .15s;
-  outline:3px dashed transparent;
-  outline-offset:-6px;
-}
-.side.drag-over{
-  background:rgba(52,152,219,0.35);
-  outline-color:#3498db;
-}
-.side.busy::after{
-  content:"⏳ 上传中…";
-  position:absolute;inset:0;background:rgba(0,0,0,0.6);
-  display:flex;align-items:center;justify-content:center;
-  color:#fff;font-size:16px;font-weight:600;z-index:20;
-}
+        min-height: 0;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(4px);
+        position: relative;
+        transition:
+          background 0.15s,
+          outline 0.15s;
+        outline: 3px dashed transparent;
+        outline-offset: -6px;
+      }
+      .side.drag-over {
+        background: rgba(52, 152, 219, 0.35);
+        outline-color: #3498db;
+      }
+      .side.busy::after {
+        content: "⏳ 上传中…";
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 16px;
+        font-weight: 600;
+        z-index: 20;
+      }
 
-.side-head{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;gap:6px}
-.side-head .title{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;flex:1;min-width:0}
-.side-head .head-actions{display:flex;align-items:center;gap:4px;flex-shrink:0}
-.side-head .icon-btn{background:transparent;border:1px solid rgba(255,255,255,0.1);color:#aaa;cursor:pointer;font-size:11px;padding:3px 8px;font-family:inherit;border-radius:4px;line-height:1.3;text-decoration:none;display:inline-block}
-.side-head .icon-btn:hover{background:rgba(255,255,255,0.08);color:#fff;border-color:rgba(255,255,255,0.25)}
-.side-head .icon-btn.off{color:#666;text-decoration:line-through;opacity:.7}
-.side-head .icon-btn.on{color:#5dade2;border-color:rgba(93,173,226,0.35)}
-.side-head .close{background:transparent;border:none;color:#aaa;cursor:pointer;font-size:18px;padding:2px 6px;font-family:inherit;border-radius:4px}
-.side-head .close:hover{background:rgba(255,255,255,0.08);color:#fff}
+      .side-head {
+        padding: 12px 14px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+      }
+      .side-head .title {
+        font-size: 13px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 1;
+        min-width: 0;
+      }
+      .side-head .head-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+      .side-head .icon-btn {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #aaa;
+        cursor: pointer;
+        font-size: 11px;
+        padding: 3px 8px;
+        font-family: inherit;
+        border-radius: 4px;
+        line-height: 1.3;
+        text-decoration: none;
+        display: inline-block;
+      }
+      .side-head .icon-btn:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.25);
+      }
+      .side-head .icon-btn.off {
+        color: #666;
+        text-decoration: line-through;
+        opacity: 0.7;
+      }
+      .side-head .icon-btn.on {
+        color: #5dade2;
+        border-color: rgba(93, 173, 226, 0.35);
+      }
+      .side-head .close {
+        background: transparent;
+        border: none;
+        color: #aaa;
+        cursor: pointer;
+        font-size: 18px;
+        padding: 2px 6px;
+        font-family: inherit;
+        border-radius: 4px;
+      }
+      .side-head .close:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+      }
 
-.side-hint{padding:10px 14px;font-size:11px;color:#7aa;background:rgba(52,152,219,0.08);border-bottom:1px solid rgba(255,255,255,0.06);text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
-.link-local-btn{
-  background:rgba(46,204,113,0.12);border:1px solid rgba(46,204,113,0.40);
-  color:#7be0a0;cursor:pointer;font-family:inherit;font-size:11px;
-  padding:5px 10px;border-radius:4px;transition:background .12s, border-color .12s;
-}
-.link-local-btn:hover{background:rgba(46,204,113,0.22);border-color:rgba(46,204,113,0.65)}
-.side-hint-sub{font-size:10px;color:rgba(122,170,170,0.65);margin-top:2px}
-.card-refresh{
-  position:absolute;top:4px;right:24px;
-  background:transparent;border:none;color:#7be0a0;cursor:pointer;
-  width:18px;height:18px;font-size:14px;border-radius:3px;
-  font-family:inherit;padding:0;line-height:1;
-  opacity:0.55;transition:opacity .12s, background .12s;
-}
-.card:hover .card-refresh{opacity:1}
-.card-refresh:hover{background:rgba(46,204,113,0.22);opacity:1}
-.card-refresh.spinning{opacity:1;animation:cc-spin 0.8s linear infinite}
-@keyframes cc-spin { to { transform:rotate(360deg) } }
+      .side-hint {
+        padding: 10px 14px;
+        font-size: 11px;
+        color: #7aa;
+        background: rgba(52, 152, 219, 0.08);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+      .link-local-btn {
+        background: rgba(46, 204, 113, 0.12);
+        border: 1px solid rgba(46, 204, 113, 0.4);
+        color: #7be0a0;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 11px;
+        padding: 5px 10px;
+        border-radius: 4px;
+        transition:
+          background 0.12s,
+          border-color 0.12s;
+      }
+      .link-local-btn:hover {
+        background: rgba(46, 204, 113, 0.22);
+        border-color: rgba(46, 204, 113, 0.65);
+      }
+      .cc-btn {
+        background: rgba(52, 152, 219, 0.12);
+        border: 1px solid rgba(52, 152, 219, 0.4);
+        color: #7ab8e8;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 11px;
+        padding: 5px 10px;
+        border-radius: 4px;
+        width: 100%;
+      }
+      .cc-btn:hover {
+        background: rgba(52, 152, 219, 0.22);
+        border-color: rgba(52, 152, 219, 0.65);
+      }
+      .cc-btn-sub {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.15);
+        color: #aaa;
+      }
+      .cc-btn-sub:hover {
+        background: rgba(255, 255, 255, 0.09);
+        border-color: rgba(255, 255, 255, 0.3);
+        color: #ddd;
+      }
+      .side-hint-sub {
+        font-size: 10px;
+        color: rgba(122, 170, 170, 0.65);
+        margin-top: 2px;
+      }
+      .card-cloud {
+        position: absolute;
+        top: 4px;
+        right: 62px;
+        background: transparent;
+        border: none;
+        cursor: default;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.12s, background 0.12s;
+      }
+      .card-cloud svg {
+        width: 14px;
+        height: 14px;
+      }
+      .card:hover .card-cloud,
+      .card-cloud.is-local {
+        opacity: 1;
+      }
+      .card-cloud.is-synced {
+        color: #2ecc71;
+        cursor: default;
+      }
+      .card-cloud.is-dirty {
+        color: #f39c12;
+        cursor: pointer;
+        opacity: 1;
+      }
+      .card-cloud.is-dirty:hover {
+        background: rgba(243, 156, 18, 0.15);
+        color: #f5b942;
+      }
+      .card-cloud.is-local {
+        color: #e74c3c;
+        cursor: pointer;
+      }
+      .card-cloud.is-local:hover {
+        background: rgba(231, 76, 60, 0.15);
+        color: #ff6b6b;
+      }
+      .card-cloud.is-spinning {
+        color: #7ab8e8;
+        cursor: default;
+        opacity: 1;
+      }
+      .card-cloud.spinning {
+        opacity: 1;
+        animation: cc-spin 0.8s linear infinite;
+        pointer-events: none;
+      }
+      .card-refresh {
+        position: absolute;
+        top: 4px;
+        right: 24px;
+        background: transparent;
+        border: none;
+        color: #7be0a0;
+        cursor: pointer;
+        width: 18px;
+        height: 18px;
+        font-size: 14px;
+        border-radius: 3px;
+        font-family: inherit;
+        padding: 0;
+        line-height: 1;
+        opacity: 0.55;
+        transition:
+          opacity 0.12s,
+          background 0.12s;
+      }
+      .card:hover .card-refresh {
+        opacity: 1;
+      }
+      .card-refresh:hover {
+        background: rgba(46, 204, 113, 0.22);
+        opacity: 1;
+      }
+      .card-refresh.spinning {
+        opacity: 1;
+        animation: cc-spin 0.8s linear infinite;
+      }
+      @keyframes cc-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
 
-.card-list{flex:1;min-height:0;overflow-y:auto;padding:6px 8px 10px}
-.card-list::-webkit-scrollbar{width:3px}
-.card-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.15);border-radius:2px}
+      .card-list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 6px 8px 10px;
+      }
+      .card-list::-webkit-scrollbar {
+        width: 3px;
+      }
+      .card-list::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 2px;
+      }
 
-.card{padding:9px 10px;margin-bottom:3px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid transparent;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:2px;position:relative}
-.card:hover{background:rgba(255,255,255,0.08)}
-.card.active{background:rgba(52,152,219,0.18);border-color:rgba(52,152,219,0.5)}
-.card-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:42px}
-.card-sub{font-size:10px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.card-del{position:absolute;top:4px;right:4px;background:transparent;border:none;color:#666;cursor:pointer;width:18px;height:18px;font-size:13px;display:none;border-radius:3px;font-family:inherit;padding:0;line-height:1}
-.card:hover .card-del{display:block}
-.card-del:hover{background:rgba(231,76,60,0.25);color:#e74c3c}
+      .card {
+        padding: 9px 10px;
+        margin-bottom: 3px;
+        border-radius: 6px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: all 0.15s;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        position: relative;
+      }
+      .card:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .card.active {
+        background: rgba(52, 152, 219, 0.18);
+        border-color: rgba(52, 152, 219, 0.5);
+      }
+      .card-name {
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding-right: 88px;
+      }
+      .card-sub {
+        font-size: 10px;
+        color: #888;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .card-del {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        background: transparent;
+        border: none;
+        color: #666;
+        cursor: pointer;
+        width: 18px;
+        height: 18px;
+        font-size: 13px;
+        display: none;
+        border-radius: 3px;
+        font-family: inherit;
+        padding: 0;
+        line-height: 1;
+      }
+      .card:hover .card-del {
+        display: block;
+      }
+      .card-del:hover {
+        background: rgba(231, 76, 60, 0.25);
+        color: #e74c3c;
+      }
 
-/* Visibility toggle (DM only). Sits next to the refresh button at
+      /* Visibility toggle (DM only). Sits next to the refresh button at
    the right edge of the card row. Hidden until row hover or "active"
    state — pinned visible for cards already in dm-only mode so the
    DM can re-public them with one click. */
-.card-vis{
-  position:absolute;top:4px;right:42px;
-  background:transparent;border:none;color:#888;cursor:pointer;
-  width:18px;height:18px;font-size:11px;line-height:1;
-  border-radius:3px;font-family:inherit;padding:0;
-  display:none;opacity:0.55;
-  transition:opacity .12s, background .12s, color .12s;
-}
-.card:hover .card-vis,
-.card.is-hidden .card-vis{display:block;opacity:1}
-.card-vis:hover{background:rgba(245,166,35,0.22);color:#f5a623}
+      .card-vis {
+        position: absolute;
+        top: 4px;
+        right: 82px;
+        background: transparent;
+        border: none;
+        color: #888;
+        cursor: pointer;
+        width: 18px;
+        height: 18px;
+        font-size: 11px;
+        line-height: 1;
+        border-radius: 3px;
+        font-family: inherit;
+        padding: 0;
+        display: none;
+        opacity: 0.55;
+        transition:
+          opacity 0.12s,
+          background 0.12s,
+          color 0.12s;
+      }
+      .card:hover .card-vis,
+      .card.is-hidden .card-vis {
+        display: block;
+        opacity: 1;
+      }
+      .card-vis:hover {
+        background: rgba(245, 166, 35, 0.22);
+        color: #f5a623;
+      }
 
-/* DM-side visual for hidden cards: dim + amber-tinted border so the
+      /* DM-side visual for hidden cards: dim + amber-tinted border so the
    DM at a glance knows "this card is NOT visible to players". */
-.card.is-hidden{
-  background:rgba(245,166,35,0.06);
-  border-color:rgba(245,166,35,0.30);
-  opacity:0.85;
-}
-.card.is-hidden:hover{opacity:1}
-.card.is-hidden .card-name{color:#f5d76e}
-.card.is-hidden .card-sub{color:rgba(245,166,35,0.65)}
+      .card.is-hidden {
+        background: rgba(245, 166, 35, 0.06);
+        border-color: rgba(245, 166, 35, 0.3);
+        opacity: 0.85;
+      }
+      .card.is-hidden:hover {
+        opacity: 1;
+      }
+      .card.is-hidden .card-name {
+        color: #f5d76e;
+      }
+      .card.is-hidden .card-sub {
+        color: rgba(245, 166, 35, 0.65);
+      }
 
-.empty-list{padding:30px 12px;text-align:center;color:#666;font-size:11px;line-height:1.6;white-space:pre-line}
-.err{padding:8px 12px;font-size:11px;color:#e74c3c;background:rgba(231,76,60,0.1);border-top:1px solid rgba(231,76,60,0.2)}
-.status{padding:6px 12px;font-size:10px;color:#5dade2;text-align:center}
-
-</style>
-</head>
-<body>
-<div class="mini-wrap"><button class="mini-btn" id="miniBtn" data-i18n-title="ccPanelMiniTitle" title="角色卡面板">📇</button></div>
-<div class="panel">
-  <div class="viewer is-empty" id="viewer">
-    <div class="empty-state" id="emptyState">
-      <div class="big">📇</div>
-      <div id="emptyText" data-i18n="ccPanelEmpty">从右侧选择一张角色卡</div>
-      <div style="font-size:11px;opacity:.7" data-i18n="ccPanelEmpty2">拖拽 xlsx 到右侧栏上传</div>
+      .empty-list {
+        padding: 30px 12px;
+        text-align: center;
+        color: #666;
+        font-size: 11px;
+        line-height: 1.6;
+        white-space: pre-line;
+      }
+      .err {
+        padding: 8px 12px;
+        font-size: 11px;
+        color: #e74c3c;
+        background: rgba(231, 76, 60, 0.1);
+        border-top: 1px solid rgba(231, 76, 60, 0.2);
+      }
+      .status {
+        padding: 6px 12px;
+        font-size: 10px;
+        color: #5dade2;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="mini-wrap">
+      <button
+        class="mini-btn"
+        id="miniBtn"
+        data-i18n-title="ccPanelMiniTitle"
+        title="角色卡面板"
+      >
+        📇
+      </button>
     </div>
-  </div>
-  <aside class="res-col" id="resCol" style="display:none"></aside>
-  <aside class="side" id="side">
-    <div class="side-head">
-      <div class="title">📇 <span data-i18n="ccPanelTitle">角色卡</span></div>
-      <div class="head-actions">
-        <!-- Two template versions live side-by-side. Same xlsx schema,
-             only the rules edition differs (2014 = traditional 5e,
-             2024 = the 5e revised). The cc-panel parser handles both
-             with one rule set. -->
-        <!-- Relative hrefs so dev (/suite-dev/) and stable (/suite/)
-             installs each download their own deploy's templates. -->
-        <a
-          class="icon-btn"
-          href="DND5E人物卡_悲灵_弗人_枭熊适配版.xlsx"
-          download="DND5E人物卡_悲灵_弗人_枭熊适配版.xlsx"
-          target="_blank"
-          rel="noopener"
-          data-i18n="ccPanelDownloadTpl2014"
-          data-i18n-title="ccPanelDownloadTpl2014Title"
-          title="下载 5E2014（传统 5e）角色卡模板"
-        >2014 模板</a>
-        <a
-          class="icon-btn"
-          href="DND5R人物卡_悲灵_弗人_枭熊适配版.xlsx"
-          download="DND5R人物卡_悲灵_弗人_枭熊适配版.xlsx"
-          target="_blank"
-          rel="noopener"
-          data-i18n="ccPanelDownloadTpl2024"
-          data-i18n-title="ccPanelDownloadTpl2024Title"
-          title="下载 5E2024（5e 修订）角色卡模板"
-        >2024 模板</a>
-        <button class="close" id="closeBtn" data-i18n-title="ccPanelClose" title="关闭 (Esc)">✕</button>
+    <div class="panel">
+      <div class="viewer is-empty" id="viewer">
+        <div class="empty-state" id="emptyState">
+          <div class="big">📇</div>
+          <div id="emptyText" data-i18n="ccPanelEmpty">
+            从右侧选择一张角色卡
+          </div>
+          <div style="font-size: 11px; opacity: 0.7" data-i18n="ccPanelEmpty2">
+            拖拽 xlsx 到右侧栏上传
+          </div>
+        </div>
+      </div>
+      <aside class="res-col" id="resCol" style="display: none"></aside>
+      <aside class="side" id="side">
+        <div class="side-head">
+          <div class="title">
+            📇 <span data-i18n="ccPanelTitle">角色卡</span>
+          </div>
+          <div class="head-actions" id="headActions">
+            <!-- Template download links rendered dynamically by panel-page.ts
+             based on current language. Chinese: 2014 & 2024 versions.
+             English: GSheet v2.1. -->
+            <button
+              class="close"
+              id="closeBtn"
+              data-i18n-title="ccPanelClose"
+              title="Close (Esc)"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        <div class="side-hint">
+          <span data-i18n="ccPanelDragHint">拖拽 xlsx 到此处上传，或</span>
+          <button
+            id="btnLinkLocal"
+            class="link-local-btn"
+            type="button"
+            data-i18n="ccPanelChooseFile"
+            data-i18n-title="ccPanelChooseFileTitle"
+            title="打开本地文件选择器上传 xlsx"
+          >
+            📁 选择文件
+          </button>
+          <button
+            id="btnImportJson"
+            class="cc-btn"
+            type="button"
+            title="Import from JSON file"
+          >
+            📥 Import JSON
+          </button>
+          <button
+            id="btnPasteJson"
+            class="cc-btn cc-btn-sub"
+            type="button"
+            title="Paste JSON text"
+          >
+            📋 Paste JSON
+          </button>
+          <div class="side-hint-sub" data-i18n="ccPanelRefreshHint">
+            每张卡片旁的 ↻ 可重新选择 xlsx 覆盖更新
+          </div>
+        </div>
+        <div id="status" class="status" style="display: none"></div>
+        <div id="error" class="err" style="display: none"></div>
+        <div class="card-list" id="list"></div>
+      </aside>
+    </div>
+    <div
+      id="pasteJsonOverlay"
+      style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(3px);
+        align-items: center;
+        justify-content: center;
+      "
+    >
+      <div
+        style="
+          background: #16213e;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 10px;
+          padding: 18px;
+          width: 340px;
+          max-width: 90vw;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        "
+      >
+        <div style="font-size: 13px; font-weight: 700; color: #eee">
+          📋 Paste JSON
+        </div>
+        <textarea
+          id="pasteJsonInput"
+          rows="12"
+          placeholder='{"name":"Gandalf", ...}'
+          style="
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 6px;
+            color: #eee;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 8px;
+            resize: vertical;
+            width: 100%;
+            box-sizing: border-box;
+          "
+        ></textarea>
+        <div style="display: flex; gap: 8px; justify-content: flex-end">
+          <button
+            id="pasteJsonCancel"
+            style="
+              background: transparent;
+              border: 1px solid rgba(255, 255, 255, 0.15);
+              color: #aaa;
+              border-radius: 4px;
+              padding: 5px 14px;
+              font-family: inherit;
+              font-size: 12px;
+              cursor: pointer;
+            "
+          >
+            Annulla
+          </button>
+          <button
+            id="pasteJsonConfirm"
+            style="
+              background: rgba(52, 152, 219, 0.2);
+              border: 1px solid rgba(52, 152, 219, 0.5);
+              color: #7ab8e8;
+              border-radius: 4px;
+              padding: 5px 14px;
+              font-family: inherit;
+              font-size: 12px;
+              cursor: pointer;
+              font-weight: 600;
+            "
+          >
+            ✔ Importa
+          </button>
+        </div>
       </div>
     </div>
-    <div class="side-hint">
-      <span data-i18n="ccPanelDragHint">拖拽 xlsx 到此处上传，或</span>
-      <button id="btnLinkLocal" class="link-local-btn" type="button"
-              data-i18n="ccPanelChooseFile"
-              data-i18n-title="ccPanelChooseFileTitle"
-              title="打开本地文件选择器上传 xlsx">
-        📁 选择文件
-      </button>
-      <div class="side-hint-sub" data-i18n="ccPanelRefreshHint">每张卡片旁的 ↻ 可重新选择 xlsx 覆盖更新</div>
-    </div>
-    <div id="status" class="status" style="display:none"></div>
-    <div id="error" class="err" style="display:none"></div>
-    <div class="card-list" id="list"></div>
-  </aside>
-</div>
-<script type="module" src="/src/modules/characterCards/panel-page.ts"></script>
-</body>
+    <script
+      type="module"
+      src="/src/modules/characterCards/panel-page.ts"
+    ></script>
+  </body>
 </html>

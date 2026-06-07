@@ -8,6 +8,30 @@ import { reconcileUploadedCardShieldState } from "./xlsx-shield-state";
 let lang = getLocalLang();
 const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
 
+// Template file configuration per language
+interface TemplateConfig {
+  files: { name: string; filename: string }[];
+  langCode: "zh" | "en";
+}
+
+const TEMPLATES: Record<"zh" | "en", TemplateConfig> = {
+  zh: {
+    langCode: "zh",
+    files: [
+      { name: "2014 模板", filename: "DND5E人物卡_悲灵_弗人_枭熊适配版.xlsx" },
+      { name: "2024 模板", filename: "DND5R人物卡_悲灵_弗人_枭熊适配版.xlsx" },
+    ],
+  },
+  en: {
+    langCode: "en",
+    files: [{ name: "Character Sheet", filename: "GSheet v2.1.xlsx" }],
+  },
+};
+
+function getTemplateConfigForLang(language: string): TemplateConfig {
+  return language === "zh" ? TEMPLATES.zh : TEMPLATES.en;
+}
+
 // LOCAL broadcast: when the local-file refresh succeeds, every cc
 // panel instance reloads the affected card iframe so other clients
 // (DM + players) see the new content without re-uploading.
@@ -60,11 +84,14 @@ function canSeeCard(card: CardEntry, isGM: boolean, playerId: string): boolean {
   if (isGM) return true;
   const v = card.visibility ?? "public";
   if (v === "public") return true;
-  if (v === "owners") return Array.isArray(card.owner_ids) && card.owner_ids.includes(playerId);
-  return false;  // "dm" or unknown
+  if (v === "owners")
+    return Array.isArray(card.owner_ids) && card.owner_ids.includes(playerId);
+  return false; // "dm" or unknown
 }
 
-function nextVisibilityLevel(v: CardEntry["visibility"]): CardEntry["visibility"] {
+function nextVisibilityLevel(
+  v: CardEntry["visibility"],
+): CardEntry["visibility"] {
   // Cycle: public → dm → public.
   // (owners level is set via the owner-picker dialog; the cycle button
   // skips it to keep the one-click flow simple.)
@@ -130,15 +157,25 @@ function saveState() {
     if (current.type === "card") {
       activeCardId = current.id;
       const f = cardIframes.get(current.id);
-      try { scrollY = f?.contentWindow?.scrollY || 0; } catch {}
+      try {
+        scrollY = f?.contentWindow?.scrollY || 0;
+      } catch {}
     } else if (current.type === "resource") {
       activeResource = current.slug;
     }
-    localStorage.setItem(stateKey(), JSON.stringify({ activeCardId, activeResource, scrollY, maximized }));
+    localStorage.setItem(
+      stateKey(),
+      JSON.stringify({ activeCardId, activeResource, scrollY, maximized }),
+    );
   } catch {}
 }
 
-function loadState(): { activeCardId: string | null; activeResource: string | null; scrollY: number; maximized: boolean } {
+function loadState(): {
+  activeCardId: string | null;
+  activeResource: string | null;
+  scrollY: number;
+  maximized: boolean;
+} {
   try {
     const raw = localStorage.getItem(stateKey());
     if (raw) {
@@ -151,7 +188,12 @@ function loadState(): { activeCardId: string | null; activeResource: string | nu
       };
     }
   } catch {}
-  return { activeCardId: null, activeResource: null, scrollY: 0, maximized: false };
+  return {
+    activeCardId: null,
+    activeResource: null,
+    scrollY: 0,
+    maximized: false,
+  };
 }
 
 async function setMaximized(next: boolean) {
@@ -170,7 +212,9 @@ async function setMaximized(next: boolean) {
       // reliable on every close path; the async OBR broadcast this
       // replaced got killed mid-unload on the click-outside path —
       // the root of the click-twice-to-reopen bug.
-      try { localStorage.removeItem(PANEL_OPEN_KEY); } catch {}
+      try {
+        localStorage.removeItem(PANEL_OPEN_KEY);
+      } catch {}
       await OBR.modal.close(PANEL_MODAL_ID);
       return;
     }
@@ -202,7 +246,10 @@ function showStatus(msg: string) {
   // messages render. Callers must HTML-escape any untrusted text first.
   statusEl.innerHTML = msg;
   statusEl.style.display = msg ? "block" : "none";
-  if (msg) setTimeout(() => { statusEl.style.display = "none"; }, 3000);
+  if (msg)
+    setTimeout(() => {
+      statusEl.style.display = "none";
+    }, 3000);
 }
 
 function minimize() {
@@ -235,18 +282,19 @@ async function writeCardsToScene(list: CardEntry[]) {
 }
 
 async function refreshFromScene() {
-  cards = await readCardsFromScene();
-  // Clean up iframes for cards no longer in scene
-  for (const [id, frame] of cardIframes) {
-    if (!cards.find((c) => c.id === id)) {
-      frame.remove();
-      cardIframes.delete(id);
-    }
-  }
-  // If current card was deleted, fall back to empty
+  const fromScene = await readCardsFromScene();
+  const importedInScene = new Set(fromScene.map((c) => c.id).filter((id) => id.startsWith("imported_")));
+  const localImported = cards.filter((c) => c.id.startsWith("imported_") && !importedInScene.has(c.id));
+  cards = [...fromScene, ...localImported];
+
+  // Con la policy "distruggi e ricrea", non serve pulizia manuale degli
+  // iframe — ensureCardIframe li gestisce da solo ad ogni selezione.
+  // Dobbiamo solo controllare se la carta corrente è stata eliminata.
   if (current.type === "card") {
     const curId = current.id;
-    if (!cards.find((c) => c.id === curId)) current = { type: "empty" };
+    if (!curId.startsWith("imported_") && !cards.find((c) => c.id === curId)) {
+      current = { type: "empty" };
+    }
   }
   render();
 }
@@ -277,23 +325,28 @@ async function uploadFile(file: File) {
       });
       if (corrected) {
         try {
-          // 2026-05-14 — LOCAL+REMOTE so this client's background
-          // also propagates the new stats to bound tokens. Without
-          // LOCAL, the uploader sees stale HP/AC on the canvas until
-          // they re-bind manually.
           const payload = { cardId: entry.id, url: `${entry.url}data.json` };
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "LOCAL" });
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "REMOTE" });
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+            destination: "LOCAL",
+          });
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+            destination: "REMOTE",
+          });
         } catch {}
       }
     } catch (e) {
-      console.warn("[cc-panel] shield equipped reconcile after upload failed", e);
+      console.warn(
+        "[cc-panel] shield equipped reconcile after upload failed",
+        e,
+      );
     }
     const updated = [entry, ...cards];
     await writeCardsToScene(updated);
     cards = updated;
     current = { type: "card", id: entry.id };
-    showStatus(`${ICONS.check} ${tt("ccPanelUploaded")}: ${escapeHtml(entry.name)}`);
+    showStatus(
+      `${ICONS.check} ${tt("ccPanelUploaded")}: ${escapeHtml(entry.name)}`,
+    );
     render();
   } catch (e: any) {
     showError(
@@ -301,6 +354,94 @@ async function uploadFile(file: File) {
     );
   } finally {
     sideEl?.classList.remove("busy");
+  }
+}
+
+// Upload an imported_ card to the server by POSTing its localStorage
+// JSON as a .json file to /api/character/upload. On success, the old
+// imported_ entry is replaced by the new server CardEntry in scene
+// metadata and localStorage is cleaned up.
+async function uploadImportedCardToServer(card: CardEntry): Promise<void> {
+  if (!card.id.startsWith("imported_")) return;
+
+  const localKey = `${LS_PREFIX}imported/${card.id}`;
+  const storedData = localStorage.getItem(localKey);
+  if (!storedData) {
+    showError(`Dati locali non trovati per ${escapeHtml(card.name)}`);
+    return;
+  }
+
+  // Find the cloud button to show spinner feedback
+  const row = document.querySelector<HTMLElement>(`.card[data-id="${card.id}"]`);
+  const cloudBtn = row?.querySelector<HTMLButtonElement>(".card-cloud");
+  if (cloudBtn) {
+    cloudBtn.innerHTML = CLOUD_SPINNER_SVG;
+    cloudBtn.className = "card-cloud is-spinning";
+    cloudBtn.style.pointerEvents = "none";
+  }
+
+  try {
+    // Wrap the JSON string as a File so the existing /upload endpoint
+    // receives a multipart file it already knows how to handle.
+    const blob = new Blob([storedData], { type: "application/json" });
+    const fileName = `${card.name.replace(/[^a-zA-Z0-9_\-]/g, "_")}.json`;
+    const file = new File([blob], fileName, { type: "application/json" });
+
+    const fd = new FormData();
+    fd.append("file", file);
+    const u = encodeURIComponent(playerName);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const r = await fetch(`${API_BASE}/upload?room=${roomId}&uploader=${u}`, {
+      method: "POST",
+      body: fd,
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!r.ok) {
+      const errText = await r.text();
+      throw new Error(errText || `HTTP ${r.status}`);
+    }
+
+    const newEntry = (await r.json()) as CardEntry;
+
+    // Replace the imported_ entry with the new server entry in scene.
+    // Preserve position in the list so the sidebar order doesn't jump.
+    const updated = cards.map((c) => (c.id === card.id ? newEntry : c));
+    cards = updated;
+    if (current.type === "card" && current.id === card.id) {
+      current = { type: "card", id: newEntry.id };
+    }
+
+    // Move the iframe: create new one for server id, remove old.
+    const oldIframe = cardIframes.get(card.id);
+    if (oldIframe) {
+      oldIframe.remove();
+      cardIframes.delete(card.id);
+    }
+
+    // Clean up localStorage — data now lives on the server.
+    try { localStorage.removeItem(localKey); } catch {}
+
+    await writeCardsToScene(updated);
+
+    // Broadcast so other clients refresh their panel list.
+    try {
+      const payload = { cardId: newEntry.id, url: `${newEntry.url}data.json` };
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "LOCAL" });
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "REMOTE" });
+    } catch {}
+
+    showStatus(`${ICONS.check} Caricata sul server: ${escapeHtml(newEntry.name)}`);
+    render();
+  } catch (e: any) {
+    showError(`Upload fallito: ${e?.message || e}`);
+    if (cloudBtn) {
+      cloudBtn.innerHTML = CLOUD_LOCAL_SVG;
+      cloudBtn.className = "card-cloud is-local";
+      cloudBtn.style.pointerEvents = "";
+    }
   }
 }
 
@@ -371,6 +512,120 @@ async function uploadFilesBatch(files: File[]): Promise<void> {
   }
 }
 
+// Pick a JSON file from disk (for import)
+function pickJsonFile(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = () => resolve(input.files?.[0] ?? null);
+    input.addEventListener("cancel", () => resolve(null));
+    input.click();
+  });
+}
+
+// Export the currently selected card's data as JSON
+async function exportCurrentCardAsJson(): Promise<void> {
+  if (current.type !== "card") {
+    showError("Nessuna scheda selezionata");
+    return;
+  }
+  const cardId = current.id;
+  const card = cards.find((c) => c.id === cardId);
+  if (!card) {
+    showError("Scheda non trovata");
+    return;
+  }
+  try {
+    let jsonData;
+
+    // Check if this is an imported card
+    if (card.id.startsWith("imported_")) {
+      const localKey = `${LS_PREFIX}imported/${card.id}`;
+      const storedData = localStorage.getItem(localKey);
+      if (!storedData) {
+        showError("Dati della scheda non trovati");
+        return;
+      }
+      jsonData = JSON.parse(storedData);
+    } else {
+      // Load from server
+      const url = `${card.url}data.json`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        showError(`Errore nel caricamento dei dati: HTTP ${response.status}`);
+        return;
+      }
+      jsonData = await response.json();
+    }
+
+    // Download the JSON file
+    const dataStr = JSON.stringify(jsonData, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${card.name || "character"}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    showStatus(`${ICONS.check} Esportato: ${escapeHtml(card.name)}`);
+  } catch (e: any) {
+    showError(`Errore nell'esportazione: ${e?.message || e}`);
+  }
+}
+
+// Import a JSON file as a new card
+async function importJsonAsCard(): Promise<void> {
+  const file = await pickJsonFile();
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith(".json")) {
+    showError("Solo file .json sono supportati");
+    return;
+  }
+  try {
+    const text = await file.text();
+
+    let jsonData: any;
+    try {
+      jsonData = JSON.parse(text);
+    } catch (parseErr: any) {
+      console.error("[cc-panel] ❌ JSON.parse fallito:", parseErr);
+      throw parseErr;
+    }
+
+    // Il JSON del personaggio ha identity.display_name, non name al top level
+    const cardName =
+      jsonData?.identity?.display_name ||
+      jsonData?.identity?.character_name ||
+      jsonData?.name ||
+      file.name.replace(/\.json$/i, "");
+
+    const importedId = `imported_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const localKey = `${LS_PREFIX}imported/${importedId}`;
+    localStorage.setItem(localKey, text);
+
+    const newCard: CardEntry = {
+      id: importedId,
+      name: cardName,
+      uploader: playerName,
+      uploaded_at: new Date().toISOString(),
+      url: "",
+      visibility: "public",
+    };
+    const updated = [newCard, ...cards];
+    // Aggiorna stato locale E mostra l'iframe PRIMA di scrivere in OBR,
+    // così onMetadataChange non può arrivare e resettare current="empty"
+    // mentre l'iframe di Preact sta ancora caricando i dati.
+    cards = updated;
+    current = { type: "card", id: newCard.id };
+    render();
+    showStatus(`${ICONS.check} Importato: ${escapeHtml(cardName)}`);
+    await writeCardsToScene(updated);
+  } catch (e: any) {
+    console.error("[cc-panel] ❌ importJsonAsCard errore:", e);
+    showError(`Errore nell'importazione: ${e?.message || e}`);
+  }
+}
+
 // Refresh a card by re-picking the xlsx from disk. Cross-origin
 // iframes can't persist a FileSystemFileHandle, so the user has to
 // confirm the file each time — but the browser remembers the last
@@ -382,7 +637,9 @@ async function refreshCardFromPicker(card: CardEntry): Promise<void> {
     showError(tt("ccPanelOnlyXlsx"));
     return;
   }
-  const row = document.querySelector<HTMLElement>(`.card[data-id="${card.id}"]`);
+  const row = document.querySelector<HTMLElement>(
+    `.card[data-id="${card.id}"]`,
+  );
   const btn = row?.querySelector<HTMLButtonElement>(".card-refresh");
   btn?.classList.add("spinning");
   try {
@@ -404,13 +661,23 @@ async function refreshCardFromPicker(card: CardEntry): Promise<void> {
       if (corrected) {
         try {
           // 2026-05-14 — see same LOCAL+REMOTE comment in uploadFile.
-          const reconcilePayload = { cardId: updated.id, url: `${updated.url}data.json` };
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, { destination: "LOCAL" });
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, { destination: "REMOTE" });
+          const reconcilePayload = {
+            cardId: updated.id,
+            url: `${updated.url}data.json`,
+          };
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, {
+            destination: "LOCAL",
+          });
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, {
+            destination: "REMOTE",
+          });
         } catch {}
       }
     } catch (e) {
-      console.warn("[cc-panel] shield equipped reconcile after refresh failed", e);
+      console.warn(
+        "[cc-panel] shield equipped reconcile after refresh failed",
+        e,
+      );
     }
     cards = cards.map((c) => (c.id === updated.id ? { ...c, ...updated } : c));
     await writeCardsToScene(cards);
@@ -423,10 +690,16 @@ async function refreshCardFromPicker(card: CardEntry): Promise<void> {
       // the refresh to bound tokens. Without LOCAL the refresher's own
       // canvas still shows stale HP/AC until they re-bind manually.
       const refreshPayload = { cardId: card.id, url: updated.url };
-      OBR.broadcast.sendMessage(BC_CARD_UPDATED, refreshPayload, { destination: "LOCAL" });
-      OBR.broadcast.sendMessage(BC_CARD_UPDATED, refreshPayload, { destination: "REMOTE" });
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, refreshPayload, {
+        destination: "LOCAL",
+      });
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, refreshPayload, {
+        destination: "REMOTE",
+      });
     } catch {}
-    showStatus(`${ICONS.check} ${tt("ccPanelRefreshed")}: ${escapeHtml(updated.name)}`);
+    showStatus(
+      `${ICONS.check} ${tt("ccPanelRefreshed")}: ${escapeHtml(updated.name)}`,
+    );
     render();
   } catch (e: any) {
     showError(`${tt("ccPanelRefreshFailed")}: ${e?.message || e}`);
@@ -440,10 +713,15 @@ async function deleteCard(id: string) {
   await writeCardsToScene(updated);
   cards = updated;
   const f = cardIframes.get(id);
-  if (f) { f.remove(); cardIframes.delete(id); }
+  if (f) {
+    f.remove();
+    cardIframes.delete(id);
+  }
   if (current.type === "card" && current.id === id) current = { type: "empty" };
   render();
-  try { await fetch(`${API_BASE}/${roomId}/${id}`, { method: "DELETE" }); } catch {}
+  try {
+    await fetch(`${API_BASE}/${roomId}/${id}`, { method: "DELETE" });
+  } catch {}
 }
 
 function selectCard(id: string) {
@@ -472,25 +750,36 @@ function buildCardIframeSrc(card: CardEntry, cacheBust = false): string {
 }
 
 function ensureCardIframe(card: CardEntry): HTMLIFrameElement {
-  let f = cardIframes.get(card.id);
-  if (!f) {
-    f = document.createElement("iframe");
-    f.src = buildCardIframeSrc(card);
-    f.setAttribute("scrolling", "yes");
-    f.dataset.kind = "card";
-    f.dataset.id = card.id;
-    f.style.display = "none";
-    f.addEventListener("load", () => {
-      try {
-        const st = loadState();
-        if (st.activeCardId === card.id && f!.contentWindow) {
-          f!.contentWindow.scrollTo({ top: st.scrollY || 0 });
-        }
-      } catch {}
-    });
-    viewer.appendChild(f);
-    cardIframes.set(card.id, f);
+  // Distruggi sempre l'iframe esistente e ricrealo da zero.
+  // Evita il problema del paint mancato su iframe nascosti (display:none)
+  // e qualsiasi stato stale di Preact tra una selezione e l'altra.
+  const old = cardIframes.get(card.id);
+  if (old) {
+    old.remove();
+    cardIframes.delete(card.id);
   }
+  // Distruggi anche tutti gli altri iframe di carte — teniamo solo
+  // quello attivo in memoria, come già facciamo per le risorse.
+  for (const [id, f] of cardIframes) {
+    f.remove();
+    cardIframes.delete(id);
+  }
+  const f = document.createElement("iframe");
+  f.src = buildCardIframeSrc(card);
+  f.setAttribute("scrolling", "yes");
+  f.dataset.kind = "card";
+  f.dataset.id = card.id;
+  f.style.display = "none";
+  f.addEventListener("load", () => {
+    try {
+      const st = loadState();
+      if (st.activeCardId === card.id && f.contentWindow) {
+        f.contentWindow.scrollTo({ top: st.scrollY || 0 });
+      }
+    } catch {}
+  });
+  viewer.appendChild(f);
+  cardIframes.set(card.id, f);
   return f;
 }
 
@@ -522,6 +811,107 @@ function ensureResourceIframe(def: ResourceDef): HTMLIFrameElement {
   return f;
 }
 
+// Render template download buttons based on current language
+function renderTemplateButtons() {
+  const headActions = document.getElementById("headActions") as HTMLElement;
+  if (!headActions) return;
+
+  const config = getTemplateConfigForLang(lang);
+
+  let templateHtml = "";
+  for (const file of config.files) {
+    const title =
+      lang === "zh"
+        ? file.name.includes("2014")
+          ? tt("ccPanelDownload2014")
+          : tt("ccPanelDownload2024")
+        : "Download Character Sheet Template";
+    templateHtml += `<a class="icon-btn" href="${file.filename}"
+      download="${file.filename}" target="_blank" rel="noopener"
+      title="${title}">${file.name}</a>`;
+  }
+
+  headActions.innerHTML =
+    templateHtml +
+    `<button class="close" id="closeBtn"
+       data-i18n-title="ccPanelClose" title="Close (Esc)">✕</button>`;
+
+  headActions
+    .querySelector<HTMLButtonElement>("#closeBtn")
+    ?.addEventListener("click", minimize);
+}
+
+// SVG cloud icons usati sia in render() che nel listener dirty-changed.
+const CLOUD_SYNCED_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>`;
+const CLOUD_DIRTY_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="12" y1="16" x2="12" y2="18"/></svg>`;
+const CLOUD_LOCAL_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><line x1="4" y1="4" x2="20" y2="20"/></svg>`;
+const CLOUD_SPINNER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation:cc-spin 0.8s linear infinite"><circle cx="12" cy="12" r="9" stroke-dasharray="28 56" stroke-linecap="round"/></svg>`;
+
+// Invia al server i dati dirty salvati localmente per una carta server.
+async function uploadDirtyCardToServer(card: CardEntry): Promise<void> {
+  if (!card || card.id.startsWith("imported_")) return;
+  const dirtyKey = `cc-dirty/${card.id}`;
+  const stored = localStorage.getItem(dirtyKey);
+  if (!stored) return;
+
+  const row = document.querySelector<HTMLElement>(`.card[data-id="${card.id}"]`);
+  const cloudBtn = row?.querySelector<HTMLButtonElement>(".card-cloud");
+  if (cloudBtn) {
+    cloudBtn.innerHTML = CLOUD_SPINNER_SVG;
+    cloudBtn.className = "card-cloud is-spinning";
+    cloudBtn.style.pointerEvents = "none";
+  }
+
+  try {
+    const parsed = JSON.parse(stored);
+    const url = `${API_BASE}/${encodeURIComponent(roomId)}/${encodeURIComponent(card.id)}/data`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsed),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`HTTP ${res.status} — ${errText.slice(0, 120)}`);
+    }
+
+    // Successo — rimuovi dirty e aggiorna nuvola a verde
+    localStorage.removeItem(dirtyKey);
+    try { localStorage.removeItem(`cc-dirty-ts/${card.id}`); } catch {}
+    if (cloudBtn) {
+      cloudBtn.innerHTML = CLOUD_SYNCED_SVG;
+      cloudBtn.className = "card-cloud is-synced";
+      cloudBtn.style.pointerEvents = "";
+      cloudBtn.title = tt("ccPanelSyncedSuccess");
+      cloudBtn.onclick = null;
+    }
+
+    // Broadcast per aggiornare altri client
+    try {
+      const payload = { cardId: card.id, url: `${card.url}data.json` };
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "LOCAL" });
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "REMOTE" });
+    } catch {}
+
+    showStatus(`${ICONS.check} ${tt("ccPanelSyncedSuccess")}: ${escapeHtml(card.name)}`);
+  } catch (e: any) {
+    showError(`${tt("ccSaveFailSync")}: ${e?.message || e}`);
+    // Ripristina nuvola gialla
+    if (cloudBtn) {
+      cloudBtn.innerHTML = CLOUD_DIRTY_SVG;
+      cloudBtn.className = "card-cloud is-dirty";
+      cloudBtn.style.pointerEvents = "";
+      cloudBtn.title = tt("ccPanelDirtyRetry");
+      cloudBtn.onclick = (ev) => { ev.stopPropagation(); void uploadDirtyCardToServer(card); };
+    }
+  }
+}
+
 function render() {
   // Sidebar list — filter by visibility per requestor's role + id.
   // DM sees everything; players only see public + (owners they're in).
@@ -547,8 +937,9 @@ function render() {
       const card = document.createElement("div");
       const isActive = current.type === "card" && current.id === c.id;
       const v = c.visibility ?? "public";
-      const isHidden = v !== "public";  // DM-only flag for visual dim
-      card.className = "card" + (isActive ? " active" : "") + (isHidden ? " is-hidden" : "");
+      const isHidden = v !== "public"; // DM-only flag for visual dim
+      card.className =
+        "card" + (isActive ? " active" : "") + (isHidden ? " is-hidden" : "");
       card.dataset.id = c.id;
       card.addEventListener("click", () => selectCard(c.id));
 
@@ -559,9 +950,13 @@ function render() {
       const sub = document.createElement("div");
       sub.className = "card-sub";
       const visLabel = isHidden
-        ? (v === "dm" ? "仅 DM 可见" : `仅 ${(c.owner_ids || []).length + 1} 人可见`)
+        ? v === "dm"
+          ? tt("ccPanelHiddenLabel")
+          : tt("ccPanelPrivateLabel")
         : "";
-      sub.textContent = `${c.uploader} · ${timeAgo(c.uploaded_at)}` + (visLabel ? ` · ${visLabel}` : "");
+      sub.textContent =
+        `${c.uploader} · ${timeAgo(c.uploaded_at)}` +
+        (visLabel ? ` · ${visLabel}` : "");
 
       // 👁 / 🔒 visibility toggle — DM only. Cycles public ↔ dm.
       // owners-mode (specific player allowlist) is set via a separate
@@ -571,8 +966,8 @@ function render() {
         visBtn.className = "card-vis";
         visBtn.textContent = isHidden ? "🔒" : "👁";
         visBtn.title = isHidden
-          ? "仅 DM 可见 — 点击改为公开"
-          : "公开 — 点击改为仅 DM 可见";
+          ? tt("ccPanelHiddenTitle")
+          : tt("ccPanelPublicTitle");
         visBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
           await toggleCardVisibility(c.id);
@@ -580,9 +975,41 @@ function render() {
         card.appendChild(visBtn);
       }
 
-      // ↻ refresh — every card row has one. Clicking opens a file
-      // picker so the user can re-pick the (possibly newly-saved)
-      // xlsx; the server overwrites the existing card's data.
+      // ☁ cloud status button
+      // imported_: nuvola rossa (solo locale) → click = upload server
+      // server dirty: nuvola gialla con ! → click = reinvia al server
+      // server synced: nuvola verde → non cliccabile
+      const isImported = c.id.startsWith("imported_");
+      const isDirty = !isImported && !!localStorage.getItem(`cc-dirty/${c.id}`);
+      const isSyncedTitle = tt("ccPanelSyncedTitle");
+      const  isDirtyTitle = tt("ccPanelDirtyTitle");
+      const isImportedTitle = tt("ccPanelLocalOnlyTitle");
+      const cloudBtn = document.createElement("button");
+      cloudBtn.className = "card-cloud " + (
+        isImported ? "is-local" : isDirty ? "is-dirty" : "is-synced"
+      );
+      cloudBtn.title = isImported
+        ? isImportedTitle
+        : isDirty
+          ? isDirtyTitle
+          : isSyncedTitle;
+      cloudBtn.innerHTML = isImported
+        ? CLOUD_LOCAL_SVG
+        : isDirty
+          ? CLOUD_DIRTY_SVG
+          : CLOUD_SYNCED_SVG;
+      if (isImported) {
+        cloudBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await uploadImportedCardToServer(c);
+        });
+      } else if (isDirty) {
+        cloudBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          void uploadDirtyCardToServer(c);
+        });
+      }
+      card.appendChild(cloudBtn);
       const refresh = document.createElement("button");
       refresh.className = "card-refresh";
       refresh.textContent = "↻";
@@ -599,7 +1026,8 @@ function render() {
       del.title = tt("ccPanelDeleteTitle");
       del.addEventListener("click", async (e) => {
         e.stopPropagation();
-        const promptText = lang === "zh" ? `删除 "${c.name}"？` : `Delete "${c.name}"?`;
+        const promptText =
+          lang === "zh" ? `删除 "${c.name}"？` : `Delete "${c.name}"?`;
         if (confirm(promptText)) await deleteCard(c.id);
       });
 
@@ -614,7 +1042,10 @@ function render() {
   const curView = current;
   for (const btn of resCol.querySelectorAll<HTMLButtonElement>(".res-tab")) {
     const slug = btn.dataset.slug!;
-    btn.classList.toggle("active", curView.type === "resource" && curView.slug === slug);
+    btn.classList.toggle(
+      "active",
+      curView.type === "resource" && curView.slug === slug,
+    );
   }
 
   // Viewer: ensure the target iframe exists, then toggle visibility
@@ -629,16 +1060,32 @@ function render() {
   // Hide every iframe except the active one
   viewer.querySelectorAll<HTMLIFrameElement>("iframe").forEach((f) => {
     let show = false;
-    if (curView.type === "card" && f.dataset.kind === "card" && f.dataset.id === curView.id) show = true;
-    if (curView.type === "resource" && f.dataset.kind === "resource" && f.dataset.slug === curView.slug) show = true;
+    if (
+      curView.type === "card" &&
+      f.dataset.kind === "card" &&
+      f.dataset.id === curView.id
+    )
+      show = true;
+    if (
+      curView.type === "resource" &&
+      f.dataset.kind === "resource" &&
+      f.dataset.slug === curView.slug
+    )
+      show = true;
     f.style.display = show ? "block" : "none";
+    if (show && f.dataset.kind === "card") {
+      try {
+        f.contentWindow?.postMessage({ type: "cc-fullscreen-show" }, "*");
+      } catch {}
+    }
   });
 
   const hasContent = current.type !== "empty";
   viewer.classList.toggle("is-empty", !hasContent);
   viewer.classList.toggle("has-content", hasContent);
   if (!hasContent) {
-    emptyText.textContent = cards.length > 0 ? tt("ccPanelEmpty") : tt("ccPanelNoCards");
+    emptyText.textContent =
+      cards.length > 0 ? tt("ccPanelEmpty") : tt("ccPanelNoCards");
   }
 }
 
@@ -668,37 +1115,52 @@ function timeAgo(isoZ: string): string {
     const diff = (Date.now() - ts) / 1000;
     if (diff < 60) return tt("ccPanelJustNow");
     if (lang === "zh") {
-      if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
-      return `${Math.floor(diff / 86400)}天前`;
+      if (diff < 3600) return tt("ccPanelTimestampMin").replace("{n}", String(Math.floor(diff / 60)));
+      if (diff < 86400) return tt("ccPanelTimestampHour").replace("{n}", String(Math.floor(diff / 3600)));
+      return tt("ccPanelTimestampDay").replace("{n}", String(Math.floor(diff / 86400)));
     }
     if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)} h ago`;
     return `${Math.floor(diff / 86400)} d ago`;
-  } catch { return ""; }
+  } catch {
+    return "";
+  }
 }
 
 // --- setup ---
 onLangChange((next) => {
   lang = next;
   applyI18nDom(lang);
+  renderTemplateButtons(); // Update template buttons for new language
   render();
 });
 
 OBR.onReady(async () => {
   applyI18nDom(lang);
   roomId = safeRoomId(OBR.room.id || "default");
-  try { playerName = (await OBR.player.getName()) || "anonymous"; } catch {}
-  try { myPlayerId = await OBR.player.getId(); } catch {}
-  try { isGM = (await OBR.player.getRole()) === "GM"; } catch {}
+  try {
+    playerName = (await OBR.player.getName()) || "anonymous";
+  } catch {}
+  try {
+    myPlayerId = await OBR.player.getId();
+  } catch {}
+  try {
+    isGM = (await OBR.player.getRole()) === "GM";
+  } catch {}
   // Watch for role / id changes (rare, but happens after disconnect-
   // reconnect or if the DM passes ownership). Re-render the list so
   // the visibility filter follows.
   OBR.player.onChange(async (p) => {
     const nextGM = p.role === "GM";
     let changed = false;
-    if (nextGM !== isGM) { isGM = nextGM; changed = true; }
-    if (p.id && p.id !== myPlayerId) { myPlayerId = p.id; changed = true; }
+    if (nextGM !== isGM) {
+      isGM = nextGM;
+      changed = true;
+    }
+    if (p.id && p.id !== myPlayerId) {
+      myPlayerId = p.id;
+      changed = true;
+    }
     if (changed) render();
   });
   // Resource column is visible to ALL players now (not just GM) — with only
@@ -711,7 +1173,10 @@ OBR.onReady(async () => {
   // Only restore a resource slug if it still exists in RESOURCES (handles
   // legacy saved slugs like "spells" from before we removed 5etool pages).
   const saved = loadState();
-  if (saved.activeResource && RESOURCES.some((r) => r.slug === saved.activeResource)) {
+  if (
+    saved.activeResource &&
+    RESOURCES.some((r) => r.slug === saved.activeResource)
+  ) {
     current = { type: "resource", slug: saved.activeResource };
   } else if (saved.activeCardId) {
     current = { type: "card", id: saved.activeCardId };
@@ -754,33 +1219,180 @@ OBR.onReady(async () => {
     await uploadFilesBatch(files);
   });
 
-  document.addEventListener("dragover", (e) => { e.preventDefault(); });
-  document.addEventListener("drop", (e) => { e.preventDefault(); });
+  document.addEventListener("dragover", (e) => {
+    e.preventDefault();
+  });
+  document.addEventListener("drop", (e) => {
+    e.preventDefault();
+  });
+
+  // Render template buttons based on current language
+  renderTemplateButtons();
 
   // 📁 选择文件 button — alternate upload path for users who don't
   // want to drag. Shown on every browser (uses plain `<input type=file>`,
   // not the FSA picker which is blocked in cross-origin iframes).
-  const linkBtn = document.getElementById("btnLinkLocal") as HTMLButtonElement | null;
+  const linkBtn = document.getElementById(
+    "btnLinkLocal",
+  ) as HTMLButtonElement | null;
   if (linkBtn) {
     linkBtn.style.display = "";
-    linkBtn.addEventListener("click", () => { void linkLocalFile(); });
+    linkBtn.addEventListener("click", () => {
+      void linkLocalFile();
+    });
+  }
+  // 📥 Import JSON — file picker
+  const importJsonBtn = document.getElementById(
+    "btnImportJson",
+  ) as HTMLButtonElement | null;
+  if (importJsonBtn) {
+    importJsonBtn.addEventListener("click", () => {
+      void importJsonAsCard();
+    });
   }
 
+  // 📋 Paste JSON — overlay
+  const pasteJsonBtn = document.getElementById(
+    "btnPasteJson",
+  ) as HTMLButtonElement | null;
+  const pasteOverlay = document.getElementById(
+    "pasteJsonOverlay",
+  ) as HTMLDivElement | null;
+  const pasteInput = document.getElementById(
+    "pasteJsonInput",
+  ) as HTMLTextAreaElement | null;
+  const pasteCancel = document.getElementById(
+    "pasteJsonCancel",
+  ) as HTMLButtonElement | null;
+  const pasteConfirm = document.getElementById(
+    "pasteJsonConfirm",
+  ) as HTMLButtonElement | null;
+
+  if (pasteJsonBtn && pasteOverlay) {
+    pasteJsonBtn.addEventListener("click", () => {
+      if (pasteInput) pasteInput.value = "";
+      pasteOverlay.style.display = "flex";
+      pasteInput?.focus();
+    });
+    pasteCancel?.addEventListener("click", () => {
+      pasteOverlay.style.display = "none";
+    });
+    pasteOverlay.addEventListener("click", (e) => {
+      if (e.target === pasteOverlay) pasteOverlay.style.display = "none";
+    });
+    pasteConfirm?.addEventListener("click", async () => {
+      const raw = pasteInput?.value.trim() ?? "";
+      if (!raw) return;
+      try {
+        let jsonData: any;
+        try {
+          jsonData = JSON.parse(raw);
+        } catch (parseErr: any) {
+          console.error("[cc-panel] ❌ Paste JSON.parse fallito:", parseErr);
+          throw parseErr;
+        }
+
+        const cardName =
+          typeof jsonData?.identity?.display_name === "string" && jsonData.identity.display_name
+            ? jsonData.identity.display_name
+            : typeof jsonData?.identity?.character_name === "string" && jsonData.identity.character_name
+              ? jsonData.identity.character_name
+              : typeof jsonData.name === "string" && jsonData.name
+                ? jsonData.name
+                : "Imported Card";
+
+        const importedId = `imported_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        const lsKey = `${LS_PREFIX}imported/${importedId}`;
+        localStorage.setItem(lsKey, raw);
+
+        const newCard: CardEntry = {
+          id: importedId,
+          name: cardName,
+          uploader: playerName,
+          uploaded_at: new Date().toISOString(),
+          url: "",
+          visibility: "public",
+        };
+        const updated = [newCard, ...cards];
+        // Stato locale + render PRIMA di scrivere in OBR (stessa race fix di importJsonAsCard)
+        cards = updated;
+        current = { type: "card", id: newCard.id };
+        pasteOverlay.style.display = "none";
+        render();
+        showStatus(`${ICONS.check} Imported: ${escapeHtml(cardName)}`);
+        await writeCardsToScene(updated);
+      } catch {
+        showError("Invalid JSON — check the text and try again.");
+      }
+    });
+  }
   // Listen for refresh broadcasts from other clients. When the DM (or
   // any other player) refreshes a linked card, we just bump our own
   // iframe's src with a cache-buster so the new index.html is fetched.
+  // Smart versioning: if local dirty version is newer, don't reload yet,
+  // and attempt to re-upload instead.
   OBR.broadcast.onMessage(BC_CARD_UPDATED, (event) => {
     const data = event.data as { cardId?: string; url?: string } | undefined;
     if (!data?.cardId) return;
-    const iframe = cardIframes.get(data.cardId);
+    // Non ricaricare mai le carte importate — vivono in localStorage
+    // e non hanno un server URL da cui re-fetchare. Un broadcast
+    // BC_CARD_UPDATED per una imported_ viene mandato da applyJsonObject
+    // solo per aggiornare il pannello info, non per ricaricare l'iframe.
+    if (data.cardId.startsWith("imported_")) return;
+    
     const card = cards.find((c) => c.id === data.cardId);
+    if (!card) return;
+    
+    // Check smart versioning: compare local dirty timestamp with server
+    const dirtyTs = localStorage.getItem(`cc-dirty-ts/${data.cardId}`);
+    const isDirty = !!localStorage.getItem(`cc-dirty/${data.cardId}`);
+    if (isDirty && dirtyTs) {
+      const localTime = new Date(dirtyTs).getTime();
+      const serverTime = new Date(card.uploaded_at).getTime();
+      if (localTime > serverTime) {
+        // Local version is newer — don't reload, attempt to re-upload
+        void uploadDirtyCardToServer(card);
+        return;
+      }
+    }
+    
+    const iframe = cardIframes.get(data.cardId);
     if (iframe && card) {
       iframe.src = buildCardIframeSrc(card, true);
     }
   });
 
+  // Ascolta cc-dirty-changed — quando fullscreen salva localmente per
+  // fallback, aggiorna la nuvola nella sidebar senza refreshare tutta la lista.
+  OBR.broadcast.onMessage("com.obr-suite/cc-dirty-changed", (event) => {
+    const data = event.data as { cardId?: string; render?: boolean; ts?: string } | undefined;
+    if (!data?.cardId) return;
+    const cardId = data.cardId;
+    // Se richiesto un re-render completo (es. dopo save fallito dalla
+    // fullscreen), ricostruiamo tutta la lista così la nuvola gialla
+    // appare immediatamente senza aspettare la prossima interazione.
+    if (data.render) {
+      render();
+      return;
+    }
+    // Altrimenti aggiorna solo il bottone della carta interessata.
+    const row = document.querySelector<HTMLElement>(`.card[data-id="${cardId}"]`);
+    if (!row) return;
+    const cloudBtn = row.querySelector<HTMLButtonElement>(".card-cloud");
+    if (!cloudBtn) return;
+    const isDirty = !!localStorage.getItem(`cc-dirty/${cardId}`);
+    cloudBtn.className = "card-cloud " + (isDirty ? "is-dirty" : "is-synced");
+    cloudBtn.title = isDirty
+      ? tt("ccPanelDirtyTitle")
+      : tt("ccPanelSyncedSuccess");
+    cloudBtn.innerHTML = isDirty ? CLOUD_DIRTY_SVG : CLOUD_SYNCED_SVG;
+    cloudBtn.onclick = isDirty
+      ? (e) => { e.stopPropagation(); void uploadDirtyCardToServer(cards.find(c => c.id === cardId)!); }
+      : null;
+  });
+
   // Close via X button in the sidebar header, Esc, or clicking backdrop.
-  closeBtn?.addEventListener("click", minimize);
+  // closeBtn?.addEventListener("click", minimize);
 
   // About handler removed — centralized in suite About panel.
 
@@ -805,7 +1417,7 @@ OBR.onReady(async () => {
         OBR.broadcast.sendMessage(
           "com.obr-suite/cc-shortcut-toggle",
           {},
-          { destination: "LOCAL" }
+          { destination: "LOCAL" },
         );
       } catch {}
     }
@@ -827,7 +1439,9 @@ OBR.onReady(async () => {
   const onPanelUnload = () => {
     clearInterval(saveInterval);
     saveState();
-    try { localStorage.removeItem(PANEL_OPEN_KEY); } catch {}
+    try {
+      localStorage.removeItem(PANEL_OPEN_KEY);
+    } catch {}
   };
   window.addEventListener("pagehide", onPanelUnload);
   window.addEventListener("beforeunload", onPanelUnload);

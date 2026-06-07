@@ -159,55 +159,55 @@ html,body{
 <div class="card">
   <div class="hdr">
     <span class="ic">❓</span>
-    <span class="ttl">捣蛋鬼在哪？</span>
-    <span class="fired-badge" id="firedBadge" style="display:none">已触发</span>
+    <span class="ttl" data-i18n="tricksterTitle">捣蛋鬼在哪？</span>
+    <span class="fired-badge" id="firedBadge" style="display:none" data-i18n="tricksterFiredBadge">已触发</span>
     <button class="x" id="btnClose" type="button">×</button>
   </div>
   <div class="body">
     <div class="row">
-      <div class="lbl">名称（仅 GM 自查看）</div>
-      <input type="text" id="name" maxlength="32" placeholder="如：哥布林伏击点" />
+      <div class="lbl" data-i18n="tricksterLblName">名称（仅 GM 自查看）</div>
+      <input type="text" id="name" maxlength="32" placeholder="如：哥布林伏击点" data-i18n-placeholder="tricksterNamePh" />
     </div>
 
     <div class="row">
-      <div class="lbl">触发对象</div>
+      <div class="lbl" data-i18n="tricksterLblTarget">触发对象</div>
       <select id="targetMode">
-        <option value="all">所有角色 / 坐骑</option>
-        <option value="playerOnly">仅玩家单位</option>
-        <option value="npcOnly">仅 NPC（GM 控制）</option>
+        <option value="all" data-i18n="tricksterTargetAll">所有角色 / 坐骑</option>
+        <option value="playerOnly" data-i18n="tricksterTargetPlayer">仅玩家单位</option>
+        <option value="npcOnly" data-i18n="tricksterTargetNpc">仅 NPC（GM 控制）</option>
       </select>
     </div>
 
     <div class="toggle-row">
       <div>
-        <div class="label">仅触发一次</div>
-        <div class="desc">触发后自动锁定，再进入也不会触发，可在此处重置</div>
+        <div class="label" data-i18n="tricksterOneShot">仅触发一次</div>
+        <div class="desc" data-i18n="tricksterOneShotDesc">触发后自动锁定，再进入也不会触发，可在此处重置</div>
       </div>
       <div class="switch" id="swOneShot"></div>
     </div>
 
     <div class="toggle-row">
       <div>
-        <div class="label">玩家可见</div>
-        <div class="desc">关闭后玩家看不到图标，GM 仍能看到半透明残影</div>
+        <div class="label" data-i18n="tricksterVisible">玩家可见</div>
+        <div class="desc" data-i18n="tricksterVisibleDesc">关闭后玩家看不到图标，GM 仍能看到半透明残影</div>
       </div>
       <div class="switch" id="swVisible"></div>
     </div>
 
     <div class="toggle-row">
       <div>
-        <div class="label">锁定</div>
-        <div class="desc">防止编辑时把触发区误拖动</div>
+        <div class="label" data-i18n="tricksterLocked">锁定</div>
+        <div class="desc" data-i18n="tricksterLockedDesc">防止编辑时把触发区误拖动</div>
       </div>
       <div class="switch" id="swLocked"></div>
     </div>
   </div>
   <div class="btn-row">
-    <button class="btn danger" id="btnDelete" type="button">删除</button>
-    <button class="btn warm" id="btnReset" type="button" style="display:none">重置已触发</button>
+    <button class="btn danger" id="btnDelete" type="button" data-i18n="tricksterDelete">删除</button>
+    <button class="btn warm" id="btnReset" type="button" style="display:none" data-i18n="tricksterReset">重置已触发</button>
     <span style="flex:1"></span>
-    <button class="btn" id="btnCancel" type="button">取消</button>
-    <button class="btn primary" id="btnSave" type="button">保存</button>
+    <button class="btn" id="btnCancel" type="button" data-i18n="tricksterCancel">取消</button>
+    <button class="btn primary" id="btnSave" type="button" data-i18n="tricksterSave">保存</button>
   </div>
 </div>
 <script type="module" src="/src/modules/trickster/edit-page.ts"></script>

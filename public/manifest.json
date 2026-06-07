@@ -4,11 +4,11 @@
   "manifest_version": 1,
   "author": "FullPeople",
   "homepage_url": "https://github.com/FullPeople/obr-suite",
-  "description": "All-in-one TRPG suite / TRPG 全能套装：骰子、先攻、怪物图鉴、角色卡、搜索、时停、视口、传送门",
+  "description": "All-in-one TRPG suite: Dice, Initiative, Monster Compendium, Character Sheet, Search, Time Stop, Viewport, Portal",
   "icon": "/suite/exe_icon.png",
   "background_url": "/suite/background.html",
   "action": {
-    "title": "骰子 / Dice",
+    "title": "Dice",
     "icon": "/suite/d20.png",
     "popover": "/suite/dice-panel.html",
     "width": 380,

@@ -13,8 +13,9 @@ export const RESOURCES_KEY = `${PLUGIN_ID}/data`;
 /** Display style for a resource. */
 export type ResourceType =
   | "count"     // N discrete clickable icons (e.g. spell slots: 2/2)
-  | "bar"      // single icon + horizontal progress bar
-  | "number";  // single icon + readable "current / max" text
+  | "bar"       // single icon + horizontal progress bar
+  | "number"    // single icon + readable "current / max" text
+  | "dieRoll";  // discrete uses that trigger a die roll on consumption
 
 export type IconId =
   | "gem"        // 紫水晶棱形
@@ -23,6 +24,7 @@ export type IconId =
   | "starFive"   // 五芒星
   | "skull"      // 骷髅
   | "hourglass"  // 沙漏
+  | "coin"       // 金币
   | "catEye"     // 猫眼石
   | "gear"       // 齿轮
   | "swords"     // 交叉双剑
@@ -41,7 +43,24 @@ export type IconId =
   | "bloodDrop"  // 血滴
   | "leaf"       // 树叶
   | "waterDrop"  // 水滴
-  | "spellbook"; // 魔法书
+  | "spellbook"  // 魔法书
+  | "d4"        // 四面体骰
+  | "d6"        // 六面体骰
+  | "d10"       // 十面体骰
+  | "d8"        // 八面体骰
+  | "d12"       // 十二面体骰
+  | "d20"       // 二十面体骰
+  | "d100";     // 百面体/百分骰
+
+export type DieInfo =
+  | "D2"
+  | "D4"
+  | "D6"
+  | "D8"
+  | "D10"
+  | "D12"
+  | "D20"
+  | "D100"
 
 export interface Resource {
   /** Stable id — `${Date.now()}-${Math.random()}` works. */
@@ -54,6 +73,8 @@ export interface Resource {
   current: number;
   max: number;
   icon: IconId;
+  /** Optional die roll configuration used only by `dieRoll` resources. */
+  dieInfo?: DieInfo | null;
   /** Optional sort hint — lower values render first. Defaults to
    *  insertion order via the array index when undefined. */
   order?: number;

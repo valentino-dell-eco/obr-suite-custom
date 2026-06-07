@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "preact/compat";
 import { RollType } from "../hooks/useInitiative";
+import { t } from "../utils/i18n";
+import { getStoredLang } from "../utils/i18n";
 // (D20 icons removed — roll buttons are now plain colored brackets.)
 
 interface Props {
@@ -228,22 +230,22 @@ export function InitiativeItemRow({
             className="roll-btn roll-dis"
             onClick={() => onRoll(id, "disadvantage")}
             disabled={disableRoll}
-            title="劣势 / Disadvantage (2d20 取较低)"
-            aria-label="劣势"
+            title={`${t(getStoredLang(), "rollDisadvantage")} (2d20 取较低)`}
+            aria-label={t(getStoredLang(), "rollDisadvantage")}
           />
           <button
             className="roll-btn roll-normal"
             onClick={() => onRoll(id, "normal")}
             disabled={disableRoll}
-            title="正常 / Normal (1d20)"
-            aria-label="正常"
+            title={`${t(getStoredLang(), "rollNormal")} (1d20)`}
+            aria-label={t(getStoredLang(), "rollNormal")}
           />
           <button
             className="roll-btn roll-adv"
             onClick={() => onRoll(id, "advantage")}
             disabled={disableRoll}
-            title="优势 / Advantage (2d20 取较高)"
-            aria-label="优势"
+            title={`${t(getStoredLang(), "rollAdvantage")} (2d20 取较高)`}
+            aria-label={t(getStoredLang(), "rollAdvantage")}
           />
         </div>
       )}
@@ -254,7 +256,7 @@ export function InitiativeItemRow({
         <button
           className="end-turn-btn"
           onClick={(e) => { e.stopPropagation(); onEndTurn?.(); }}
-          title="结束当前回合，进入下一个"
+          title={t(getStoredLang(), "endTurn")}
         >
           {endTurnLabel ?? "结束回合"}
         </button>

@@ -839,7 +839,7 @@ function render(m: any) {
           <path d="M3.2 3 V5.5 H5.5"/>
         </svg>
       </button>
-      <div class="drag-handle" id="drag-handle" title="${en ? "Drag" : "拖动 / Drag"}" aria-label="${en ? "Drag panel" : "拖动面板"}">
+      <div class="drag-handle" id="drag-handle" title="${en ? "Drag to reposition" : "拖动重新定位"}" aria-label="${en ? "Drag to reposition" : "拖动重新定位"}">
         <svg viewBox="0 0 12 18" aria-hidden="true">
           <circle cx="3" cy="3" r="1.2" fill="currentColor"/>
           <circle cx="9" cy="3" r="1.2" fill="currentColor"/>

@@ -28,6 +28,8 @@
 
 import OBR from "@owlbear-rodeo/sdk";
 import { PLUGIN_ID, POPOVER_ID } from "./types";
+import { applyI18nDom, t } from "../../i18n";
+import { getLocalLang } from "../../state";
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const $b = (id: string) => document.getElementById(id) as HTMLButtonElement;
@@ -126,11 +128,11 @@ new ResizeObserver(() => resizeCanvas()).observe(canvasWrap);
 
 function loadFromFile(file: File): void {
   if (!file.type.startsWith("image/")) {
-    alert("请选择图片文件（JPG / PNG / WebP / SVG）");
+    alert(t(getLocalLang(), "circleImageErrNotImage"));
     return;
   }
   if (file.size > 10 * 1024 * 1024) {
-    alert("图片大于 10 MB，太大了。先压缩一下吧。");
+    alert(t(getLocalLang(), "circleImageErrTooLarge"));
     return;
   }
   const reader = new FileReader();
@@ -151,10 +153,10 @@ function loadFromFile(file: File): void {
         draw();
       });
     };
-    img.onerror = () => alert("图片加载失败");
+    img.onerror = () => alert(t(getLocalLang(), "circleImageErrLoad"));
     img.src = url;
   };
-  reader.onerror = () => alert("读取失败");
+  reader.onerror = () => alert(t(getLocalLang(), "circleImageErrRead"));
   reader.readAsDataURL(file);
 }
 
@@ -521,12 +523,12 @@ btnClose.addEventListener("click", () => { void OBR.popover.close(POPOVER_ID); }
 // dragging any other library asset).
 
 let obrReady = false;
-OBR.onReady(() => { obrReady = true; resizeCanvas(); });
+OBR.onReady(() => { obrReady = true; applyI18nDom(getLocalLang()); resizeCanvas(); });
 
 async function uploadToLibrary(): Promise<void> {
   if (!srcImg) return;
   if (!obrReady) {
-    alert("OBR 还在初始化，稍后再试");
+    alert(t(getLocalLang(), "circleImageErrObrNotReady"));
     return;
   }
   setBtnState("uploading");
@@ -536,7 +538,7 @@ async function uploadToLibrary(): Promise<void> {
   } catch (err) {
     console.error("[circleImage/popover] bake failed", err);
     setBtnState("idle");
-    alert("生成图片失败：" + (err as Error).message);
+    alert(t(getLocalLang(), "circleImageErrGenerate") + (err as Error).message);
     return;
   }
   if (!baked) {
@@ -547,8 +549,8 @@ async function uploadToLibrary(): Promise<void> {
   const half = { x: baked.width / 2, y: baked.height / 2 };
   const stamp = Date.now();
   const name = mode === "circle"
-    ? `圆形图片-${stamp}`
-    : `去底图片-${stamp}`;
+    ? `${t(getLocalLang(), "circleImageNameCircle")}-${stamp}`
+    : `${t(getLocalLang(), "circleImageNameBgRemove")}-${stamp}`;
   console.log("[circleImage/popover] uploading", {
     mode,
     width: baked.width,
@@ -631,7 +633,7 @@ async function uploadToLibrary(): Promise<void> {
       detail = String(err);
     }
     setBtnState("idle");
-    alert("上传到资源库失败：" + detail);
+    alert(t(getLocalLang(), "circleImageErrUpload") + detail);
   }
 }
 
@@ -639,18 +641,18 @@ function setBtnState(state: "idle" | "uploading" | "ok"): void {
   switch (state) {
     case "idle":
       btnDrag.disabled = false;
-      btnDrag.textContent = "⤴ 添加到资源库";
+      btnDrag.textContent = t(getLocalLang(), "circleImageBtnUpload");
       btnDrag.classList.remove("uploading", "ok");
       break;
     case "uploading":
       btnDrag.disabled = true;
-      btnDrag.textContent = "上传中…";
+      btnDrag.textContent = t(getLocalLang(), "circleImageUploading");
       btnDrag.classList.add("uploading");
       btnDrag.classList.remove("ok");
       break;
     case "ok":
       btnDrag.disabled = false;
-      btnDrag.textContent = "✓ 已上传，从资源库拖入场景";
+      btnDrag.textContent = t(getLocalLang(), "circleImageUploaded");
       btnDrag.classList.remove("uploading");
       btnDrag.classList.add("ok");
       break;

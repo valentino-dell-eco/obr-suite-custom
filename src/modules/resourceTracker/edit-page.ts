@@ -28,6 +28,7 @@ import {
   Resource,
   IconId,
   ResourceType,
+  DieInfo,
   PLUGIN_ID,
 } from "./types";
 import { ICON_LIBRARY, ICON_LABELS, ICON_IDS } from "./icons";
@@ -49,6 +50,7 @@ interface ResourcePreset {
   type: ResourceType;
   max: number;
   icon: IconId;
+  dieInfo?: DieInfo | null;
 }
 
 const BC_RESOURCE_SAVE = `${PLUGIN_ID}/edit-save`;
@@ -67,6 +69,8 @@ const inpMax = $i("max");
 const iconGrid = $("iconGrid");
 const previewIconEl = $("previewIcon");
 const previewLabelEl = $("previewLabel");
+const dieInfoField = $("dieInfoField");
+const dieInfoSelect = $i("dieInfo");
 const btnX = $("btnX");
 const btnCancel = $("btnCancel");
 const btnSave = $("btnSave");
@@ -76,6 +80,7 @@ const chipsPresets = $("chipsPresets");
 const cardEl = document.querySelector<HTMLElement>(".card");
 
 let selectedIcon: IconId = "gem";
+let selectedDieInfo: DieInfo = "D6";
 let editingResourceId: string | null = null;
 let itemId = "";
 
@@ -94,7 +99,7 @@ function readPresets(): ResourcePreset[] {
     // schema drift from older versions of this same key.
     return parsed.filter((p) =>
       p && typeof p.name === "string"
-      && (p.type === "count" || p.type === "bar" || p.type === "number")
+      && (p.type === "count" || p.type === "bar" || p.type === "number" || p.type === "dieRoll")
       && typeof p.max === "number"
       && typeof p.icon === "string"
     );
@@ -122,7 +127,8 @@ function renderPresets(): void {
   // Click chip body → load this preset into the form. Click × → drop it.
   chipsPresets.innerHTML = arr.map((p, idx) => {
     const iconSvg = ICON_LIBRARY[p.icon] ?? ICON_LIBRARY.gem;
-    return `<span class="chip" data-idx="${idx}" title="${escHtml(p.name)} · ${p.type} · ${escHtml(T("rePresetMax"))} ${p.max}">
+    const extra = p.type === "dieRoll" && p.dieInfo ? ` · ${p.dieInfo}` : "";
+    return `<span class="chip" data-idx="${idx}" title="${escHtml(p.name)} · ${p.type}${escHtml(extra)} · ${escHtml(T("rePresetMax"))} ${p.max}">
       <span class="ico">${iconSvg}</span>
       <span class="lab">${escHtml(p.name)}</span>
       <button class="del" type="button" data-del="${idx}" title="${escHtml(T("rePresetDel"))}">×</button>
@@ -134,6 +140,7 @@ function applyPresetIntoForm(p: ResourcePreset): void {
   inpName.value = p.name;
   selectedType = p.type;
   selectedIcon = p.icon;
+  selectedDieInfo = p.dieInfo || "D6";
   inpMax.value = String(p.max);
   // For "count" type the new resource starts FULL by convention; for
   // bar/number we mirror max into current too — the user can tweak after.
@@ -175,6 +182,7 @@ btnAddPreset.addEventListener("click", () => {
     type: selectedType,
     max,
     icon: selectedIcon,
+    ...(selectedType === "dieRoll" ? { dieInfo: selectedDieInfo } : {}),
   };
   const arr = readPresets();
   // Replace any existing preset with the same name + type combo so users
@@ -192,12 +200,15 @@ function applyTypeToggleClasses(): void {
   for (const b of typeToggle.querySelectorAll<HTMLButtonElement>("button[data-type]")) {
     b.classList.toggle("on", b.dataset.type === selectedType);
   }
+  if (dieInfoField) {
+    dieInfoField.style.display = selectedType === "dieRoll" ? "block" : "none";
+  }
 }
 typeToggle?.addEventListener("click", (e) => {
   const t = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-type]");
   if (!t) return;
   const v = t.dataset.type as ResourceType | undefined;
-  if (!v || (v !== "count" && v !== "bar" && v !== "number")) return;
+  if (!v || (v !== "count" && v !== "bar" && v !== "number" && v !== "dieRoll")) return;
   selectedType = v;
   applyTypeToggleClasses();
   updatePreview();
@@ -241,7 +252,8 @@ function updatePreview(): void {
   const cur = inpCurrent.value || "0";
   const max = inpMax.value || "0";
   const name = inpName.value.trim() || T("rtUnnamed");
-  previewLabelEl.textContent = `${name} · ${cur} / ${max}`;
+  const extra = selectedType === "dieRoll" ? ` · ${selectedDieInfo}` : "";
+  previewLabelEl.textContent = `${name} · ${cur} / ${max}${extra}`;
 }
 
 // ---------- payload (initial paint) -----------------------------------------
@@ -256,6 +268,8 @@ function applyPayload(p: HashPayload): void {
     inpCurrent.value = String(p.resource.current);
     inpMax.value = String(p.resource.max);
     selectedIcon = p.resource.icon;
+    selectedDieInfo = p.resource.dieInfo || "D6";
+    if (dieInfoSelect) dieInfoSelect.value = selectedDieInfo;
   } else {
     editingResourceId = null;
     titleEl.textContent = T("reNewTitle");
@@ -281,6 +295,12 @@ function applyPayload(p: HashPayload): void {
 [inpName, inpCurrent, inpMax].forEach((el) => {
   el.addEventListener("input", updatePreview);
 });
+if (dieInfoSelect) {
+  dieInfoSelect.addEventListener("change", () => {
+    selectedDieInfo = dieInfoSelect.value as DieInfo;
+    updatePreview();
+  });
+}
 
 // Click-to-replace: focus on any of the three text/number inputs selects
 // the whole value so a single keystroke replaces it. Mirrors OBR's HP-bar
@@ -336,6 +356,7 @@ btnSave.addEventListener("click", () => {
     current,
     max,
     icon: selectedIcon,
+    ...(type === "dieRoll" ? { dieInfo: selectedDieInfo } : {}),
   };
   broadcast(BC_RESOURCE_SAVE, { itemId, resource });
 });

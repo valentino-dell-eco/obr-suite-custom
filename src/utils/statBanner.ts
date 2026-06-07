@@ -26,7 +26,11 @@ import {
   parseStatInput,
   clampStat,
 } from "./statEdit";
+import { getLocalLang } from "../state";
+import { t } from "../i18n";
 
+let lang = getLocalLang();
+const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
 export interface StatBannerOptions {
   container: HTMLElement;
   /** Bound token id, or null when nothing is bound. */
@@ -41,8 +45,9 @@ export interface StatBannerOptions {
 }
 
 const LOCK_TITLE_LOCKED =
-  "已上锁：玩家在战斗准备 / 战斗中只看到血条比例（无数值 / AC）";
-const LOCK_TITLE_UNLOCKED = "已解锁：所有玩家可见完整 HP / AC 数值";
+  tt("ccStatBannerLocked") ||
+  "已上锁：玩家在战斗准备 / 战斗中只看到血条比例（ 无数值 / AC )";
+const LOCK_TITLE_UNLOCKED = tt("ccStatBannerUnlocked") || "已解锁：所有玩家可见完整 HP / AC 数值";
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) =>

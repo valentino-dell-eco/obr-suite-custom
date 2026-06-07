@@ -266,7 +266,7 @@ function saveLastExpr(v: string) { try { localStorage.setItem(LS_LAST_EXPR, v); 
 
 interface ExprGroup { type: string; count: number }
 interface PlainExpr { groups: ExprGroup[]; modifier: number }
-type WrapperKind = "adv" | "dis" | "max" | "min" | "reset" | "resetmin" | "resetmax" | "same" | "burst" | "repeat";
+type WrapperKind = "adv" | "dis" | "max" | "min" | "reset" | "resetmin" | "resetmax" | "same" | "burst" | "repeat" | "save" | "check";
 interface Wrapper {
   kind: WrapperKind;
   // adv/dis: extra sets (N from "adv(...,N)"); default 1.
@@ -275,8 +275,11 @@ interface Wrapper {
   //   resetmin(d, X) — TRIGGERED reroll when value <= X.
   //   resetmax(d, X) — TRIGGERED reroll when value >= X.
   // repeat: iteration count.
+  // save/check: ability key and optional skill name.
   // same/burst: undefined.
   param?: number;
+  arg?: string;
+  arg2?: string;
 }
 // One independently-wrapped sub-expression. `adv(1d6)+adv(1d4)` parses
 // to TWO segments — {plain:[d6], wrappers:[adv]} and {plain:[d4],
@@ -400,7 +403,7 @@ function readWrapperHead(s: string): {
   inner: string;
   tail: string;
 } | null {
-  const m = /^(adv|dis|max|min|resetmin|resetmax|reset|same|burst|repeat)\(/i.exec(s);
+  const m = /^(adv|dis|max|min|resetmin|resetmax|reset|same|burst|repeat|save|check)\(/i.exec(s);
   if (!m) return null;
   const fnName = m[1].toLowerCase() as WrapperKind;
   const innerStart = m[0].length;
@@ -450,10 +453,66 @@ function readWrapperHead(s: string): {
     const n = Math.max(1, Math.min(20, parseInt(head, 10) || 1));
     wrapper = { kind: "repeat", param: n };
     inner = innerRaw.slice(firstComma + 1);
+  } else if (fnName === "save" || fnName === "check") {
+    const args = splitTopLevelArgs(innerRaw);
+    const ability = normalizeAbilityKey(args.length > 0 ? args[0] : "");
+    const skill = args.length > 1 ? normalizeSkillKey(args[1]) : "";
+    wrapper = {
+      kind: fnName,
+      arg: ability || undefined,
+      arg2: skill || undefined,
+    };
+    inner = "";
   } else {
     wrapper = { kind: fnName }; // same / burst
   }
   return { wrapper, inner, tail };
+}
+
+function splitTopLevelArgs(s: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i <= s.length; i++) {
+    const c = i < s.length ? s[i] : "";
+    if (c === "(") depth++;
+    else if (c === ")") depth = Math.max(0, depth - 1);
+    if (depth === 0 && (i === s.length || c === ",")) {
+      const arg = s.slice(start, i).trim();
+      if (arg) out.push(arg);
+      start = i + 1;
+    }
+  }
+  return out;
+}
+
+function normalizeAbilityKey(raw: string): string {
+  const key = raw.trim().toLowerCase();
+  return {
+    str: "str", strength: "str", 力量: "str", 力: "str",
+    dex: "dex", dexterity: "dex", 敏捷: "dex", 敏: "dex",
+    con: "con", constitution: "con", 体质: "con", 体: "con",
+    int: "int", intelligence: "int", 智力: "int", 智: "int",
+    wis: "wis", wisdom: "wis", 感知: "wis", 感: "wis",
+    cha: "cha", charisma: "cha", 魅力: "cha", 魅: "cha",
+  }[key] ?? key;
+}
+
+function normalizeSkillKey(raw: string): string {
+  const key = raw.trim().toLowerCase();
+  return {
+    acrobatics: "acrobatics", acro: "acrobatics", "敏捷运动": "acrobatics",
+    "animal handling": "animal handling", animalhandling: "animal handling", "animal": "animal handling", "驯兽": "animal handling",
+    arcana: "arcana", athletics: "athletics", ath: "athletics", 运动: "athletics",
+    deception: "deception", 欺瞒: "deception",
+    history: "history", insight: "insight", 洞悉: "insight",
+    intimidation: "intimidation", 恐吓: "intimidation", "威吓": "intimidation",
+    investigation: "investigation", 调查: "investigation",
+    medicine: "medicine", nature: "nature", perception: "perception", 察觉: "perception",
+    performance: "performance", persuasion: "persuasion", religion: "religion",
+    "sleight of hand": "sleight of hand", sleightofhand: "sleight of hand", sleight: "sleight of hand", "巧手": "sleight of hand",
+    stealth: "stealth", survival: "survival", 隐匿: "stealth", 侦查: "perception",
+  }[key] ?? key;
 }
 
 // Apply `sign` to a PlainExpr — flips dice counts and modifier sign.
@@ -619,27 +678,34 @@ function parseExprInner(s: string): {
   for (const term of splitTopLevel(s)) {
     const head = readWrapperHead(term.body);
     if (head) {
-      // Wrapped term. Recursively parse the inner, then push THIS
-      // wrapper onto every inner segment AND lift the inner outer-plain
-      // into its own segment under this wrapper.
-      const innerParsed = parseExprInner(head.inner);
-      // Inner outer-plain → fresh segment with [this wrapper] applied.
-      const innerOuter = innerParsed.outerPlain;
-      if (innerOuter.groups.length || innerOuter.modifier !== 0) {
+      // Wrapped term. Recursively parse the inner unless this is a
+      // save/check wrapper, which has no inner dice expression.
+      if (head.wrapper.kind === "save" || head.wrapper.kind === "check") {
         const seg: ParsedSegment = {
-          plain: term.sign === -1 ? negatePlain(innerOuter) : innerOuter,
+          plain: { groups: [], modifier: 0 },
           wrappers: [head.wrapper],
         };
         segments.push(seg);
-      }
-      // Each existing inner segment: push this wrapper at the END
-      // (outer-of-inner = applied later by rollExpr).
-      for (const innerSeg of innerParsed.segments) {
-        const seg: ParsedSegment = {
-          plain: term.sign === -1 ? negatePlain(innerSeg.plain) : innerSeg.plain,
-          wrappers: [...innerSeg.wrappers, head.wrapper],
-        };
-        segments.push(seg);
+      } else {
+        const innerParsed = parseExprInner(head.inner);
+        // Inner outer-plain → fresh segment with [this wrapper] applied.
+        const innerOuter = innerParsed.outerPlain;
+        if (innerOuter.groups.length || innerOuter.modifier !== 0) {
+          const seg: ParsedSegment = {
+            plain: term.sign === -1 ? negatePlain(innerOuter) : innerOuter,
+            wrappers: [head.wrapper],
+          };
+          segments.push(seg);
+        }
+        // Each existing inner segment: push this wrapper at the END
+        // (outer-of-inner = applied later by rollExpr).
+        for (const innerSeg of innerParsed.segments) {
+          const seg: ParsedSegment = {
+            plain: term.sign === -1 ? negatePlain(innerSeg.plain) : innerSeg.plain,
+            wrappers: [...innerSeg.wrappers, head.wrapper],
+          };
+          segments.push(seg);
+        }
       }
       // Trailing modifier after the wrapper, e.g. `adv(1d20)+5` has
       // tail "+5" — fold into outerPlain.
@@ -672,7 +738,7 @@ function finalizeParse(p: {
   // Drop segments whose plain has no dice and no modifier — happens
   // when an empty wrapper inner gets pushed.
   const segments = p.segments.filter(
-    (seg) => seg.plain.groups.length > 0 || seg.plain.modifier !== 0,
+    (seg) => seg.plain.groups.length > 0 || seg.plain.modifier !== 0 || seg.wrappers.length > 0,
   );
   const outerPlain = p.outerPlain;
   // Backward-compat shim: legacy callers read `parsed.plain` and
@@ -759,6 +825,14 @@ function formatSegment(seg: ParsedSegment): string {
       case "repeat":
         body = `repeat(${w.param ?? 1},${body})`;
         break;
+      case "save":
+      case "check": {
+        const args = [w.arg, w.arg2].filter(Boolean).join(",");
+        body = body && body !== "—"
+          ? `${w.kind}(${args},${body})`
+          : `${w.kind}(${args})`;
+        break;
+      }
     }
   }
   return body;
@@ -777,9 +851,6 @@ function formatExpr(p: ParsedExpr): string {
   const outer = p.outerPlain ? formatPlain(p.outerPlain) : "";
   if (outer && outer !== "—") pieces.push(outer);
   if (pieces.length === 0) return "—";
-  // Join with ` + ` — formatPlain already inserts leading "-" for
-  // negative modifiers, so we just splice with " + " and the user sees
-  // "adv(1d20) + -1" → not pretty. Fix by detecting leading "-".
   let out = pieces[0];
   for (let i = 1; i < pieces.length; i++) {
     const next = pieces[i];
@@ -868,6 +939,13 @@ function rollExpr(plain: PlainExpr, wrappers: Wrapper[]): { dice: DieResult[]; w
   const innerResult = rollExpr(plain, inner);
   let dice = innerResult.dice;
   let winnerIdx = innerResult.winnerIdx;
+
+  if (outer.kind === "save" || outer.kind === "check") {
+    if (dice.length === 0) {
+      dice = rollPlainSet({ groups: [{ type: "d20", count: 1 }], modifier: 0 });
+    }
+    return { dice, winnerIdx };
+  }
 
   if (
     outer.kind === "max" || outer.kind === "min" ||
@@ -1052,7 +1130,7 @@ function totalModifier(p: ParsedExpr): number {
 function exprIsEmpty(p: ParsedExpr): boolean {
   if (p.outerPlain.groups.length || p.outerPlain.modifier !== 0) return false;
   for (const seg of p.segments) {
-    if (seg.plain.groups.length || seg.plain.modifier !== 0) return false;
+    if (seg.plain.groups.length || seg.plain.modifier !== 0 || seg.wrappers.length) return false;
   }
   return true;
 }
@@ -1547,7 +1625,7 @@ function renderEntrySolo(h: DiceRollPayload): string {
   const titleText = escapeHtml(h.label || h.rollerName);
   return `
     <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${h.rollerColor}" title="${tt("diceHistoryReplayTooltip")}">
-      <button class="entry-del" data-cid="${escapeHtml(cid)}" title="删除这条记录" aria-label="删除">×</button>
+      <button class="entry-del" data-cid="${escapeHtml(cid)}" title="${tt("diceHistDelTitle")}" aria-label="${tt("diceHistDelAriaLabel")}">×</button>
       <div class="body">
         <div class="line1">
           <span class="player">${darkTag}${titleText}</span>
@@ -1578,7 +1656,7 @@ function renderEntryCollective(cid: string, members: DiceRollPayload[]): string 
   const labelOrName = escapeHtml(head.label || head.rollerName);
   return `
     <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${head.rollerColor}" title="${tt("diceHistoryReplayTooltip")}">
-      <button class="entry-del" data-cid="${escapeHtml(cid)}" title="删除这条记录（含 ${members.length} 个掷骰）" aria-label="删除">×</button>
+      <button class="entry-del" data-cid="${escapeHtml(cid)}" title="${tt("diceHistDelTitleColl").replace("{n}", String(members.length))}" aria-label="${tt("diceHistDelAriaLabel")}">×</button>
       <div class="body">
         <div class="line1">
           <span class="player">${darkTag}${collTag}${labelOrName}</span>
@@ -1795,7 +1873,7 @@ function thumbHtml(skin: DiceSkin | null, type: DiceType, animate = false): stri
         return `<img src="${escapeHtml(cached)}" alt="" loading="lazy">`;
       }
       if (cached === null) {
-        return `<span class="webm-fallback" title="webm 缩略图无法预览（CORS / 解码失败）">🎞</span>`;
+        return `<span class="webm-fallback" title="${tt("diceSkinWebmFallbackTitle")}">🎞</span>`;
       }
       return `<img data-webm-src="${escapeHtml(skin.url)}" class="webm-poster-pending" alt="" loading="lazy">`;
     }
@@ -1847,28 +1925,24 @@ async function renderSkinsTab(): Promise<void> {
   // Static — local-file imports don't survive a different iframe in the
   // effect modal, so the URL HAS to point at an OBR-hosted asset.
   const hintHtml =
-    `<div class="skin-hint">` +
-      `⚠ <b>本地电脑文件不能直接用</b> — 必须先把图片 / webm <b>上传到枭熊</b>：` +
-      `把它拖进场景作为「附件」，再右键附件选 <b>「设为我的骰子皮肤」</b>，` +
-      `或在下方粘贴该附件的 URL（须为 https:// 开头的绝对地址）。` +
-    `</div>`;
+    `<div class="skin-hint">${tt("diceSkinHintLocal")}</div>`;
 
   // ===== skin sets row =====
   const setsHtml =
     `<div class="skin-sets">` +
       `<div class="skin-sets-head">` +
-        `<span class="skin-sets-title">皮肤套组</span>` +
-        `<button class="btn small skin-set-save" type="button" title="把当前 7 个骰子的活动皮肤存为一个套组">+ 保存当前为套组</button>` +
+        `<span class="skin-sets-title">${tt("diceSkinSetsTitle")}</span>` +
+        `<button class="btn small skin-set-save" type="button" title="${tt("diceSkinSetSaveBtnTitle")}">${tt("diceSkinSetSaveBtn")}</button>` +
       `</div>` +
       (lib.sets.length === 0
-        ? `<div class="skin-sets-empty">还没有套组。配好你想要的 7 个骰子皮肤后，点上面「+ 保存当前为套组」。</div>`
+        ? `<div class="skin-sets-empty">${tt("diceSkinSetsEmpty")}</div>`
         : `<div class="skin-sets-list">` +
             lib.sets.map((s) => {
               const covered = ALL_TYPES.filter((t) => !!s.skins[t]).length;
-              return `<span class="skin-set-chip" data-set-id="${escapeHtml(s.id)}" title="一键载入「${escapeHtml(s.name)}」（覆盖 ${covered}/7 个骰子）">` +
+              return `<span class="skin-set-chip" data-set-id="${escapeHtml(s.id)}" title="${tt("diceSkinSetChipTitleLoad").replace("{name}", escapeHtml(s.name)).replace("{n}", String(covered))}">` +
                 `<span class="skin-set-name">${escapeHtml(s.name)}</span>` +
                 `<span class="skin-set-count">${covered}/7</span>` +
-                `<button class="skin-set-del" type="button" data-set-id="${escapeHtml(s.id)}" title="删除该套组">×</button>` +
+                `<button class="skin-set-del" type="button" data-set-id="${escapeHtml(s.id)}" title="${tt("diceSkinSetDelTitle")}">×</button>` +
               `</span>`;
             }).join("") +
           `</div>`
@@ -1888,24 +1962,24 @@ async function renderSkinsTab(): Promise<void> {
     const defaultUrl = assetUrl(`${type}.png`);
     const isDefaultActive = !isRandom && !activeSkin;
     const defaultChipHtml =
-      `<span class="skin-lib-chip default-chip${isDefaultActive ? " on" : ""}" data-type="${type}" data-default="1" title="${isDefaultActive ? "当前正在使用默认皮肤" : "点击恢复为默认皮肤"}">` +
+      `<span class="skin-lib-chip default-chip${isDefaultActive ? " on" : ""}" data-type="${type}" data-default="1" title="${isDefaultActive ? tt("diceSkinDefaultActive") : tt("diceSkinDefaultTitle")}">` +
         `<span class="skin-lib-thumb"><img src="${escapeHtml(defaultUrl)}" alt="${type}" class="is-default" loading="lazy"></span>` +
       `</span>`;
     const customChipsHtml = library.map((s) => {
       const isActive = !isRandom && !!activeSkin && activeSkin.url === s.url;
-      return `<span class="skin-lib-chip${isActive ? " on" : ""}" data-type="${type}" data-url="${escapeHtml(s.url)}" title="${isActive ? "当前活动皮肤" : "点击设为当前皮肤"}">` +
+      return `<span class="skin-lib-chip${isActive ? " on" : ""}" data-type="${type}" data-url="${escapeHtml(s.url)}" title="${isActive ? tt("diceSkinActiveTitle") : tt("diceSkinSetTitle")}">` +
         `<span class="skin-lib-thumb">${thumbHtml(s, type)}</span>` +
-        `<button class="skin-lib-del" type="button" data-type="${type}" data-url="${escapeHtml(s.url)}" title="从皮肤库移除">×</button>` +
+        `<button class="skin-lib-del" type="button" data-type="${type}" data-url="${escapeHtml(s.url)}" title="${tt("diceSkinLibDelTitle")}">×</button>` +
       `</span>`;
     }).join("");
     const libStripHtml = defaultChipHtml + (
       library.length === 0
-        ? `<span class="skin-lib-empty">右键场景里的附件「设为我的骰子皮肤」，或下方粘贴 URL，加入这里</span>`
+        ? `<span class="skin-lib-empty">${tt("diceSkinLibEmpty")}</span>`
         : customChipsHtml
     );
     const statusLabel = isRandom
-      ? `随机 (${library.length})`
-      : (activeSkin ? "自定义" : "默认");
+      ? tt("diceSkinStatusRandom").replace("{n}", String(library.length))
+      : (activeSkin ? tt("diceSkinStatusCustom") : tt("diceSkinStatusDefault"));
     return (
       `<div class="skin-row" data-type="${type}">` +
         `<span class="skin-thumb">${thumbHtml(activeSkin, type, true)}</span>` +
@@ -2121,6 +2195,205 @@ const CC_BOUND_KEY = "com.character-cards/boundCardId";
 function hasBoundCard(it: any): boolean {
   const v = (it?.metadata as any)?.[CC_BOUND_KEY];
   return typeof v === "string" && v.length > 0;
+}
+
+const BESTIARY_SLUG_KEY = "com.bestiary/slug";
+const BESTIARY_DATA_KEY = "com.bestiary/monsters";
+const cardDataCache = new Map<string, any>();
+const itemDataCache = new Map<string, any>();
+
+async function fetchCardData(cardId: string): Promise<any | null> {
+  if (cardDataCache.has(cardId)) return cardDataCache.get(cardId);
+  try {
+    const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const url = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const d = await res.json();
+    cardDataCache.set(cardId, d);
+    return d;
+  } catch {
+    return null;
+  }
+}
+
+async function getItemData(itemId: string): Promise<any | null> {
+  if (!itemId) return null;
+  if (itemDataCache.has(itemId)) return itemDataCache.get(itemId);
+  try {
+    const items = await OBR.scene.items.getItems([itemId]);
+    const item = items[0] ?? null;
+    itemDataCache.set(itemId, item);
+    return item;
+  } catch {
+    return null;
+  }
+}
+
+async function getBestiaryTable(): Promise<Record<string, any>> {
+  try {
+    const meta = await OBR.scene.getMetadata();
+    const table = meta[BESTIARY_DATA_KEY];
+    return typeof table === "object" && table ? (table as Record<string, any>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function parseAbilityMod(score: unknown): number {
+  const n = typeof score === "number" ? score : parseInt(String(score), 10);
+  return Number.isFinite(n) ? Math.floor((n - 10) / 2) : 0;
+}
+
+function parseSaveBonus(raw: unknown, abilityScore: unknown): number {
+  const fallback = parseAbilityMod(abilityScore);
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "string") {
+    const m = /([+-]?\s*\d+)/.exec(raw);
+    if (m) return parseInt(m[1].replace(/\s+/g, ""), 10);
+  }
+  return fallback;
+}
+
+function parseSkillBonus(raw: unknown): number | null {
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "string") {
+    const m = /([+-]?\s*\d+)/.exec(raw);
+    if (m) return parseInt(m[1].replace(/\s+/g, ""), 10);
+  }
+  return null;
+}
+
+function findCardSkillBonus(card: any, skillKey: string): number | null {
+  if (!skillKey) return null;
+  const skills = card?.skills;
+  const coreStats = card?.core_stats;
+  if (Array.isArray(skills)) {
+    for (const s of skills) {
+      const name = typeof s?.name === "string" ? normalizeSkillKey(s.name) : "";
+      if (name === skillKey) {     
+        console.log(name, skillKey, coreStats.proficiency_bonus);
+        
+        // Return the PROFICIENCY/EXPERTISE bonus only, not the total.
+        // Total already includes the ability modifier, so we want just
+        // the competence bonus (proficiency, expertise, jack-of-all-trades).
+        if (typeof s.proficiency === "number") return s.proficiency;
+        if (typeof s.proficiency === "string" && s.proficiency) {
+          console.log();
+          
+          const prof = typeof coreStats?.proficiency_bonus === "number" ? coreStats.proficiency_bonus : 0;
+          switch (s.proficiency) {
+            case "proficient":
+              return prof;
+            case "expertise":
+              return prof * 2;
+            case "half":
+              return Math.round(prof * 0.5);
+            case "none":
+              return null;
+          }
+        }
+      }
+    }
+  } else if (skills && typeof skills === "object") {
+    for (const [k, v] of Object.entries(skills)) {
+      if (normalizeSkillKey(k) === skillKey) {
+        return parseSkillBonus(v);
+      }
+    }
+  }
+  return null;
+}
+
+function computeCardAbilityCheck(card: any, ablKey: string): number {
+  if (!ablKey) return 0;
+  const abilities = card?.abilities || {};
+  const core = card?.core_stats || {};
+  const abl = abilities[ablKey] || {};
+  const aMod = typeof abl?.modifier === "number" ? abl.modifier : 0;
+  return aMod;
+}
+
+function computeCardSaveBonus(card: any, ablKey: string): number {
+  if (!ablKey) return 0;
+  const abilities = card?.abilities || {};
+  const core = card?.core_stats || {};
+  const abl = abilities[ablKey] || {};
+  if (typeof abl?.save?.bonus === "number") return abl.save.bonus;
+  const aMod = typeof abl?.modifier === "number" ? abl.modifier : 0;
+  const prof = typeof core?.proficiency_bonus === "number" ? core.proficiency_bonus : 0;
+  return abl?.save?.proficient ? aMod + prof : aMod;
+}
+
+function computeCardCheckBonus(card: any, ablKey: string, skillKey?: string): number {
+  if (!ablKey) return 0;
+  const aMod = computeCardAbilityCheck(card, ablKey);
+  if (skillKey) {
+    const skillBonus = findCardSkillBonus(card, skillKey);
+    console.log("SKILL BONUS", skillKey, skillBonus);
+    
+    if (typeof skillBonus === "number") return aMod + (skillBonus??0);
+  }
+  return aMod;
+}
+
+function computeBestiarySaveBonus(monster: any, ablKey: string): number {
+  if (!ablKey) return 0;
+  const saves = monster?.save || {};
+  const score = monster?.[ablKey];
+  return parseSaveBonus(saves[ablKey], score);
+}
+
+function computeBestiaryCheckBonus(monster: any, ablKey: string, skillKey?: string): number {
+  const score = monster?.[ablKey];
+  const base = parseAbilityMod(score);
+  if (!skillKey) return base;
+  const skills = monster?.skill;
+  if (skills && typeof skills === "object") {
+    for (const [k, v] of Object.entries(skills)) {
+      if (normalizeSkillKey(k) === skillKey) {
+        const bonus = parseSkillBonus(v);
+        if (bonus !== null) return bonus;
+      }
+    }
+  }
+  return base;
+}
+
+async function resolveWrapperModifier(itemId: string | null, wrapper: Wrapper): Promise<number> {
+  if (!itemId || (wrapper.kind !== "save" && wrapper.kind !== "check")) return 0;
+  const item = await getItemData(itemId);
+  if (!item) return 0;
+  const cardId = typeof item.metadata?.[CC_BOUND_KEY] === "string" ? item.metadata[CC_BOUND_KEY] : "";
+  if (cardId) {
+    const card = await fetchCardData(cardId);
+    if (card) {
+      if (wrapper.kind === "save") return computeCardSaveBonus(card, wrapper.arg ?? "");
+      return computeCardCheckBonus(card, wrapper.arg ?? "", wrapper.arg2);
+    }
+  }
+  const slug = typeof item.metadata?.[BESTIARY_SLUG_KEY] === "string" ? item.metadata[BESTIARY_SLUG_KEY] : "";
+  if (slug) {
+    const table = await getBestiaryTable();
+    const monster = table[slug];
+    if (monster) {
+      if (wrapper.kind === "save") return computeBestiarySaveBonus(monster, wrapper.arg ?? "");
+      return computeBestiaryCheckBonus(monster, wrapper.arg ?? "", wrapper.arg2);
+    }
+  }
+  return 0;
+}
+
+async function computeParsedModifier(parsed: ParsedExpr, itemId: string | null): Promise<number> {
+  let total = totalModifier(parsed);
+  for (const seg of parsed.segments) {
+    for (const w of seg.wrappers) {
+      if (w.kind === "save" || w.kind === "check") {
+        total += await resolveWrapperModifier(itemId, w);
+      }
+    }
+  }
+  return total;
 }
 
 async function getOwnedSelectedTokenIds(): Promise<string[]> {
@@ -2477,10 +2750,11 @@ async function performRoll(opts: { hidden: boolean }): Promise<void> {
   for (const tokenId of targetTokens) {
     const built = buildOneRollDice(parsed);
     if (!built.dice.length) continue;
+    const modifier = await computeParsedModifier(parsed, tokenId || null);
     await emitOneRoll({
       dice: built.dice,
       winnerIdx: built.winnerIdx,
-      modifier: totalModifier(parsed),
+      modifier,
       label,
       itemId: tokenId || null,
       hidden: opts.hidden,
@@ -2567,10 +2841,11 @@ async function rollFromCombo(
   for (const tokenId of targetTokens) {
     const built = buildOneRollDice(parsed);
     if (!built.dice.length) continue;
+    const modifier = await computeParsedModifier(parsed, tokenId || null);
     await emitOneRoll({
       dice: built.dice,
       winnerIdx: built.winnerIdx,
-      modifier: totalModifier(parsed),
+      modifier,
       label,
       itemId: tokenId || null,
       hidden,
@@ -3123,6 +3398,8 @@ function renderRulesList() {
     `<code>repeat(3, 1d20+5)</code>${tt("diceRule7")}`,
     `<code>same(2d20)</code>${tt("diceRule8")}`,
     `<code>burst(2d6)</code>${tt("diceRule9")}`,
+    `<code>save(str)</code>${tt("diceRule11")}`,
+    `<code>check(dex, stealth)</code>${tt("diceRule12")}`,
     `${tt("diceRule10")} <code>1d7</code>、<code>1d600</code>${tt("diceRule10b")} <code>（）</code>${tt("diceRule10c")} <code>，</code>${tt("diceRule10d")}`,
   ];
   el.innerHTML = items.map((s) => `<li>${s}</li>`).join("");

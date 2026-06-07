@@ -54,6 +54,8 @@ export type LocalKind =
   | "spell"
   | "item"
   | "background"
+  | "class"
+  | "classFeature"
   | "feat"
   | "race"
   | "optionalfeature"
@@ -72,7 +74,9 @@ export type LocalKind =
   | "table"
   | "action"
   | "recipe"
-  | "deck";
+  | "deck"
+  | "subclass"
+  | "subclassFeature";
 
 /** Category number lookup matching CATEGORY in modules/search/page.ts. */
 const KIND_TO_CATEGORY: Record<LocalKind, number> = {
@@ -80,6 +84,7 @@ const KIND_TO_CATEGORY: Record<LocalKind, number> = {
   spell: 2,
   background: 3,
   item: 4,
+  class: 5,
   condition: 6,
   feat: 7,
   optionalfeature: 8,
@@ -99,6 +104,9 @@ const KIND_TO_CATEGORY: Record<LocalKind, number> = {
   action: 42,
   recipe: 48,
   deck: 52,
+  classFeature: 30,
+  subclass: 40,
+  subclassFeature: 41,
 };
 
 /** Each imported file = one row in the user's "本地内容" list. */
@@ -263,15 +271,14 @@ export function getLocalContentSignature(): string {
 }
 
 /** Public read: raw entry array of a given file. */
-export function getLocalFileEntries(id: string): any[] {
-  const content = readFile(id);
+export function getLocalFileEntries(meta: LocalFileMeta): any[] {
+  const content = readFile(meta.id);
   if (!content) return [];
-  // Extract the top-level array regardless of which key (monster /
-  // spell / item / ...) was used.
-  for (const key of Object.keys(content)) {
-    if (Array.isArray(content[key])) return content[key];
-  }
-  return [];
+  // Extract entries using the correct key (meta.kind) that was identified
+  // by detectKind() during import. This ensures we get the intended category
+  // (class, spell, monster, etc.) even if other arrays exist in the JSON.
+  const arr = Array.isArray(content[meta.kind]) ? content[meta.kind] : [];
+  return arr;
 }
 
 /** Build a slug from a name that's safe to use as the `u` field. */
@@ -316,29 +323,38 @@ export function getLocalIndexFile(): SearchIndexFile {
   let nextSourceNum = 9000;
 
   for (const meta of idx.files) {
-    const cat = KIND_TO_CATEGORY[meta.kind];
-    if (typeof cat !== "number") continue;
-    const entries = getLocalFileEntries(meta.id);
-    for (const e of entries) {
-      if (!e || typeof e !== "object") continue;
-      const engName = String(e.ENG_name ?? e.name ?? "").trim();
-      const cnName = String(e.name ?? "").trim();
-      if (!engName && !cnName) continue;
-      const source = String(e.source ?? "HOMEBREW").trim() || "HOMEBREW";
-      if (!sourceNumByCode.has(source)) {
-        sourceNumByCode.set(source, nextSourceNum++);
-        out.m.s[source] = sourceNumByCode.get(source)!;
+    const content = readFile(meta.id);
+    if (!content) continue;
+    
+    // Extract from ALL categories present in the file, not just the primary kind.
+    // This ensures that multi-category files (e.g., Rogue.json with class + optionalfeature)
+    // have all their entries indexed.
+    for (const kind of Object.keys(KIND_TO_CATEGORY) as LocalKind[]) {
+      const cat = KIND_TO_CATEGORY[kind];
+      if (typeof cat !== "number") continue;
+      
+      const entries = Array.isArray(content[kind]) ? content[kind] : [];
+      for (const e of entries) {
+        if (!e || typeof e !== "object") continue;
+        const engName = String(e.ENG_name ?? e.name ?? "").trim();
+        const cnName = String(e.name ?? "").trim();
+        if (!engName && !cnName) continue;
+        const source = String(e.source ?? "HOMEBREW").trim() || "HOMEBREW";
+        if (!sourceNumByCode.has(source)) {
+          sourceNumByCode.set(source, nextSourceNum++);
+          out.m.s[source] = sourceNumByCode.get(source)!;
+        }
+        const u = e.u ? String(e.u) : slugify(engName || cnName);
+        out.x.push({
+          id: nextId++,
+          c: cat,
+          n: engName || cnName,
+          cn: cnName !== engName ? cnName : undefined,
+          s: source,
+          u,
+          __local: true,
+        });
       }
-      const u = e.u ? String(e.u) : slugify(engName || cnName);
-      out.x.push({
-        id: nextId++,
-        c: cat,
-        n: engName || cnName,
-        cn: cnName !== engName ? cnName : undefined,
-        s: source,
-        u,
-        __local: true,
-      });
     }
   }
   return out;
@@ -365,6 +381,20 @@ export function getLocalDataByKeySource(key: string, source: string): any[] {
   return out;
 }
 
+/** Get category counts for a specific local file.
+ *  Returns an array of {kind, count} for all recognized categories in the file. */
+export function getLocalFileCategoryCounts(id: string): Array<{ kind: LocalKind; count: number }> {
+  const content = readFile(id);
+  if (!content) return [];
+  const counts: Array<{ kind: LocalKind; count: number }> = [];
+  for (const kind of Object.keys(KIND_TO_CATEGORY) as LocalKind[]) {
+    if (Array.isArray(content[kind]) && content[kind].length > 0) {
+      counts.push({ kind, count: content[kind].length });
+    }
+  }
+  return counts;
+}
+
 /** Convenience: every locally imported monster across all files. Used
  *  by modules/bestiary/data.ts to merge into the bestiary panel. */
 export function getAllLocalMonsters(): any[] {
@@ -384,6 +414,13 @@ export function getAllLocalMonsters(): any[] {
  *  null when no recognised key is found. */
 function detectKind(parsed: any): LocalKind | null {
   if (!parsed || typeof parsed !== "object") return null;
+  // Prioritize core content types over rules/metadata — ensures multi-category
+  // JSON (e.g., spell + variantrule) imports the intended content, not auxiliary rules.
+  const priorityKinds: LocalKind[] = ["class", "spell", "monster", "item"];
+  for (const k of priorityKinds) {
+    if (Array.isArray(parsed[k]) && parsed[k].length > 0) return k;
+  }
+  // Fallback: accept any recognized category
   for (const k of Object.keys(KIND_TO_CATEGORY) as LocalKind[]) {
     if (Array.isArray(parsed[k]) && parsed[k].length > 0) return k;
   }

@@ -32,6 +32,8 @@ import {
   type PanelOffset,
   type PanelBbox,
 } from "./utils/panelLayout";
+import { getLocalLang } from "./state";
+import { t } from "./i18n";
 
 interface StartPayload {
   panelId: string;
@@ -54,14 +56,14 @@ let session: {
 
 function panelLabel(panelId: string): string {
   switch (panelId) {
-    case "cluster": return "悬浮按钮";
-    case "dice-history": return "投骰记录";
-    case "perf-window": return "性能监视器";
-    case "initiative": return "先攻条";
-    case "bestiary-panel": return "怪物图鉴";
-    case "bestiary-info": return "怪物详情";
-    case "cc-info": return "角色卡";
-    default: return panelId;
+    case "cluster": return  t(getLocalLang(), "dragPreviewCluster");
+    case "dice-history": return t(getLocalLang(), "dragPreviewDiceHistory");
+    case "perf-window": return t(getLocalLang(), "dragPreviewPerfWindow");
+    case "initiative": return t(getLocalLang(), "dragPreviewInitiative");
+    case "bestiary-panel": return t(getLocalLang(), "dragPreviewBestiaryPanel");
+    case "bestiary-info": return t(getLocalLang(), "dragPreviewBestiaryInfo");
+    case "cc-info": return t(getLocalLang(), "dragPreviewCcInfo");
+    default: return t(getLocalLang(), "dragPreviewFallback");
   }
 }
 

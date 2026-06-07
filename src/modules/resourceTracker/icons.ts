@@ -72,6 +72,19 @@ export const ICON_LIBRARY: Record<IconId, string> = {
     <path d="M12 6 c1 2 1 10 0 12 c-1 -2 -1 -10 0 -12 z" fill="#000" opacity="0.85"/>
     <ellipse cx="9.5" cy="9.5" rx="1.5" ry="1" fill="rgba(255,255,255,0.6)"/>
   `),
+  // Gold Coin
+  coin: svg(`
+    <defs>
+      <radialGradient id="g-coin" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#fbbf24"/>
+        <stop offset="100%" stop-color="#d97706"/>
+      </radialGradient>
+    </defs>
+    <circle cx="12" cy="12" r="10" fill="url(#g-coin)" stroke="#78350f" stroke-width="0.8"/>
+    <circle cx="12" cy="12" r="7.5" fill="none" stroke="#78350f" stroke-width="0.4" stroke-dasharray="1,1"/>
+    <path d="M10 9 v6 h4 M10 12 h3" fill="none" stroke="#78350f" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="9" cy="9" r="1.5" fill="rgba(255,255,255,0.4)"/>
+  `),
 
   // 齿轮
   gear: svg(`
@@ -216,35 +229,107 @@ export const ICON_LIBRARY: Record<IconId, string> = {
     <circle cx="12" cy="14" r="2" fill="#fbbf24" stroke="#78350f" stroke-width="0.5"/>
     <path d="M10.5 14 l1 1 l2 -2" stroke="#78350f" stroke-width="0.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
   `),
+
+  // D4 四面体骰
+  d4: svg(`
+    <path d="M12 3 L21 19 L3 19 Z" fill="#67e8f9" stroke="#0f172a" stroke-width="0.8" stroke-linejoin="round"/>
+    <path d="M12 3 L12 19 M12 3 L3 19 M12 3 L21 19 M3 19 L21 19" stroke="#0f172a" stroke-width="0.4" fill="none"/>
+    <path d="M12 5 L17 17 L7 17 Z" fill="rgba(255,255,255,0.2)"/>
+    <text x="12" y="16.5" font-family="Arial" font-size="5" font-weight="bold" text-anchor="middle" fill="#0f172a">4</text>
+  `),
+
+  // D6 六面体骰（面带点数）
+  d6: svg(`
+    <rect x="4" y="4" width="16" height="16" rx="1.5" fill="#67e8f9" stroke="#0f172a" stroke-width="0.8"/>
+    <path d="M5 5 L19 5 L19 19 L5 19 Z" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="0.5"/>
+    <path d="M5 5 H13 V13 H5 Z" fill="rgba(255,255,255,0.2)"/>
+    <text x="12" y="14.5" font-family="Arial" font-size="7" font-weight="bold" text-anchor="middle" fill="#0f172a">6</text>
+  `),
+
+  // D8 八面体骰（菱形体）
+  d8: svg(`
+    <path d="M12 2 L20 12 L12 22 L4 12 Z" fill="#67e8f9" stroke="#0f172a" stroke-width="0.8" stroke-linejoin="round"/>
+    <path d="M12 2 L12 22 M4 12 L20 12" stroke="#0f172a" stroke-width="0.4"/>
+    <path d="M12 4 L18 12 L12 14 L6 12 Z" fill="rgba(255,255,255,0.3)"/>
+    <text x="12" y="14.5" font-family="Arial" font-size="6" font-weight="bold" text-anchor="middle" fill="#0f172a">8</text>
+  `),
+  d10: svg(`
+    <path d="M12 2 L20 12 L12 22 L4 12 Z" fill="#67e8f9" stroke="#0f172a" stroke-width="0.8" stroke-linejoin="round"/>
+    <path d="M12 2 L12 22 M4 12 L20 12 M12 2 L16 12 L12 22 L8 12 Z" stroke="#0f172a" stroke-width="0.4" fill="none"/>
+    <path d="M12 4 L15 10 L12 12 L9 10 Z" fill="rgba(255,255,255,0.3)"/>
+    <text x="12" y="14.5" font-family="Arial" font-size="5" font-weight="bold" text-anchor="middle" fill="#0f172a">10</text>
+  `),
+
+  // D12 十二面体骰（近似多边形）
+  d12: svg(`
+    <path d="M12 2 L19.5 5 L22 12 L18 20 L6 20 L2 12 L4.5 5 Z" fill="#67e8f9" stroke="#0f172a" stroke-width="0.8" stroke-linejoin="round"/>
+    <path d="M12 2 L17 8 L17 15 L12 19 L7 15 L7 8 Z" fill="none" stroke="#0f172a" stroke-width="0.4"/>
+    <path d="M12 2 L12 2 M17 8 L22 12 M17 15 L18 20 M12 19 L12 19 M7 15 L6 20 M7 8 L2 12" stroke="#0f172a" stroke-width="0.4"/>
+    <path d="M12 4 L15 7 L12 10 L9 7 Z" fill="rgba(255,255,255,0.3)"/>
+    <text x="12" y="14.5" font-family="Arial" font-size="5" font-weight="bold" text-anchor="middle" fill="#0f172a">12</text>
+  `),
+
+  // D20 二十面体骰（代表性三角面）
+  d20: svg(`
+    <path d="M12 2 L21 7.5 L21 16.5 L12 22 L3 16.5 L3 7.5 Z" fill="#67e8f9" stroke="#0f172a" stroke-width="0.8" stroke-linejoin="round"/>
+    <path d="M12 2 L12 22 M3 7.5 L21 7.5 M3 16.5 L21 16.5 M12 2 L3 16.5 M12 2 L21 16.5 M3 7.5 L12 22 M21 7.5 L12 22" stroke="#0f172a" stroke-width="0.4" fill="none"/>
+    <path d="M12 4 L19 8 L12 12 L5 8 Z" fill="rgba(255,255,255,0.3)"/>
+    <text x="12" y="15" font-family="Arial" font-size="5" font-weight="bold" text-anchor="middle" fill="#0f172a">20</text>
+  `),
+
+  // D100 百面体（百分骰，显示 %）
+  d100: svg(`
+    <g transform="translate(4, -1) rotate(-15, 12, 12)">
+      <path d="M12 2 L20 12 L12 22 L4 12 Z" fill="#22d3ee" stroke="#0f172a" stroke-width="0.8" stroke-linejoin="round"/>
+      <path d="M12 2 L12 22 M4 12 L20 12 M12 2 L16 12 L12 22 L8 12 Z" stroke="#0f172a" stroke-width="0.4" fill="none"/>
+      <path d="M12 4 L15 10 L12 12 L9 10 Z" fill="rgba(255,255,255,0.2)"/>
+      <text x="12" y="14.5" font-family="Arial" font-size="4" font-weight="bold" text-anchor="middle" fill="#0f172a" opacity="0.8">10</text>
+    </g>
+
+    <g>
+      <path d="M12 2 L20 12 L12 22 L4 12 Z" fill="#67e8f9" stroke="#0f172a" stroke-width="0.8" stroke-linejoin="round"/>
+      <path d="M12 2 L12 22 M4 12 L20 12 M12 2 L16 12 L12 22 L8 12 Z" stroke="#0f172a" stroke-width="0.4" fill="none"/>
+      <path d="M12 4 L15 10 L12 12 L9 10 Z" fill="rgba(255,255,255,0.3)"/>
+      <text x="12" y="14.5" font-family="Arial" font-size="4.5" font-weight="bold" text-anchor="middle" fill="#0f172a">00</text>
+    </g>
+  `),
 };
 
 /** Display labels for the icon picker UI. */
 export const ICON_LABELS: Record<IconId, string> = {
-  gem: "宝石",
-  heart: "心",
-  starFour: "四角星",
-  starFive: "五芒星",
-  skull: "骷髅",
-  hourglass: "沙漏",
-  catEye: "猫眼石",
-  gear: "齿轮",
-  swords: "双剑",
-  apple: "苹果",
-  drumstick: "鸡腿",
-  mask: "面具",
-  cross: "十字架",
-  axe: "斧头",
-  shield: "盾牌",
-  fist: "拳头",
-  bow: "弓箭",
-  note: "音符",
-  lute: "琴",
-  dagger: "匕首",
-  lightning: "闪电",
-  bloodDrop: "血滴",
-  leaf: "树叶",
-  waterDrop: "水滴",
-  spellbook: "魔法书",
+  gem: "Gem",
+  heart: "Heart",
+  starFour: "Four-Pointed Star",
+  starFive: "Five-Pointed Star",
+  skull: "Skull",
+  hourglass: "Hourglass",
+  coin: "Coin",
+  catEye: "Cat's Eye",
+  gear: "Gear",
+  swords: "Swords",
+  apple: "Apple",
+  drumstick: "Drumstick",
+  mask: "Mask",
+  cross: "Cross",
+  axe: "Axe",
+  shield: "Shield",
+  fist: "Fist",
+  bow: "Bow",
+  note: "Note",
+  lute: "Lute",
+  dagger: "Dagger",
+  lightning: "Lightning",
+  bloodDrop: "Blood Drop",
+  leaf: "Leaf",
+  waterDrop: "Water Drop",
+  spellbook: "Spellbook",
+  d4: "D4",
+  d6: "D6",
+  d8: "D8",
+  d10: "D10",
+  d12: "D12",
+  d20: "D20",
+  d100: "D100",
 };
 
 export const ICON_IDS: IconId[] = Object.keys(ICON_LIBRARY) as IconId[];

@@ -83,7 +83,7 @@ label.field, .field{
 
 /* ===== type toggle (个数 / 进度 / 数字) ===== */
 .type-toggle{
-  display:grid;grid-template-columns:1fr 1fr 1fr;
+  display:grid;grid-template-columns:repeat(4, 1fr);
   height:32px;
   background:var(--bg-strong);
   border:1px solid var(--border);
@@ -249,8 +249,23 @@ label.field, .field{
         <button type="button" data-type="count"  class="on" data-i18n="reTypeCount">个数</button>
         <button type="button" data-type="bar" data-i18n="reTypeBar">进度</button>
         <button type="button" data-type="number" data-i18n="reTypeNumber">数字</button>
+        <button type="button" data-type="dieRoll" data-i18n="reTypeDieRoll">骰子</button>
       </div>
     </div>
+
+    <label class="field" id="dieInfoField" style="display:none">
+      <span data-i18n="reLblDieInfo">骰子类型</span>
+      <select id="dieInfo">
+        <option value="D2">D2</option>
+        <option value="D4">D4</option>
+        <option value="D6">D6</option>
+        <option value="D8">D8</option>
+        <option value="D10">D10</option>
+        <option value="D12">D12</option>
+        <option value="D20">D20</option>
+        <option value="D100">D100</option>
+      </select>
+    </label>
 
     <div class="row-2">
       <label class="field">

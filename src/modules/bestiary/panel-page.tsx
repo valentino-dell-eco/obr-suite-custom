@@ -421,7 +421,7 @@ function App() {
             itemId: TRANSFORM_TARGET_ITEM_ID,
             tokenUrl: mon.tokenUrl || "",
             size: mon.size || "",
-            name: mon.name || mon.engName || "变身形态",
+            name: mon.name || mon.engName || t(getLocalLang(), "bestiaryTransformForm"),
           },
           { destination: "LOCAL" },
         );
@@ -541,7 +541,7 @@ function App() {
           {PICKER_IS_GROUP && (
             <span style="display:block;margin-top:2px;font-size:11px;font-weight:500;opacity:0.85">
               {lang === "zh"
-                ? `（群体绑定 · ${PICKER_TARGET_ITEM_IDS.length} 个 token）`
+                ? t(getLocalLang(), "bestiaryBulkBadge").replace("{n}", String(PICKER_TARGET_ITEM_IDS.length))
                 : `(group bind · ${PICKER_TARGET_ITEM_IDS.length} tokens)`}
             </span>
           )}
@@ -553,8 +553,8 @@ function App() {
             <div
               ref={dragHandleRef}
               class="drag-handle"
-              title="拖动 / Drag"
-              aria-label="拖动面板"
+              title={t(_lang, "bestiaryDragTitle")}
+              aria-label={t(_lang, "bestiaryDragTitle")}
             >
               <svg viewBox="0 0 12 18" aria-hidden="true">
                 <circle cx="3" cy="3" r="1.2" fill="currentColor" />
@@ -608,7 +608,7 @@ function App() {
               value={sourceFilter}
               onInput={handleSourceChange}
               title={lang === "zh"
-                ? "按来源代码筛选（如 PHB / kiwee / 你的本子英文名）"
+                ? t(_lang, "bestiaryFilterSourceHint")
                 : "Filter by source code (e.g. PHB / kiwee / your homebrew tag)"}
             />
             {sourceFilter && (
@@ -630,7 +630,7 @@ function App() {
                 await setState({ bestiaryAutoHide: !autoHide });
               }}
               title={lang === "zh"
-                ? "加入场景时自动隐藏新生成的怪物（仅 DM 可见，方便先布阵再揭面）"
+                ? t(_lang, "bestiaryAutoHideHint")
                 : "Auto-hide spawned monsters (DM-only until manually revealed)"}
               aria-pressed={autoHide}
             >
@@ -644,7 +644,7 @@ function App() {
                 await setState({ bestiaryAutoInitiative: !autoInit });
               }}
               title={lang === "zh"
-                ? "加入场景时自动加入先攻"
+                ? t(_lang, "bestiaryAutoInitHint")
                 : "Auto-add spawned tokens to initiative"}
               aria-pressed={autoInit}
             >
@@ -658,7 +658,7 @@ function App() {
                 await setState({ bestiaryAutoName: !autoName });
               }}
               title={lang === "zh"
-                ? "加入场景时自动把怪物名字写到 token 的 plainText（OBR 原生显示在 token 下方的小字标签）"
+                ? t(_lang, "bestiaryAutoNameHint")
                 : "Auto-fill the token's native plainText label with the monster name"}
               aria-pressed={autoName}
             >

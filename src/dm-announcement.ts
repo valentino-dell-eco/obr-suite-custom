@@ -40,6 +40,8 @@
 
 import OBR from "@owlbear-rodeo/sdk";
 import { assetUrl } from "./asset-base";
+import { t, applyI18nDom } from "./i18n";
+import { getLocalLang, onLangChange } from "./state";
 
 const MODAL_ID = "com.obr-suite/dm-announcement";
 
@@ -66,23 +68,40 @@ const KNOWN_KINDS: ReadonlySet<SectionKind> = new Set([
   "warn", "info", "issues", "highlights", "todo", "changelog", "footer", "raw",
 ]);
 
-// Issues section: type → chip class. Anything not in this map renders
-// as the default `t-other` chip so unknown types don't break layout.
-const ISSUE_TYPE_LABELS: Record<string, { label: string; cls: string }> = {
-  bug:     { label: "BUG",     cls: "t-bug" },
-  feature: { label: "需求",    cls: "t-feature" },
-  feat:    { label: "需求",    cls: "t-feature" },
-  wip:     { label: "进行中",  cls: "t-wip" },
-  done:    { label: "已修复",  cls: "t-done" },
-  fixed:   { label: "已修复",  cls: "t-done" },
+// Issues section: type → chip class mapping (labels now loaded dynamically via i18n)
+const ISSUE_TYPE_KEYS: Record<string, { key: keyof ReturnType<typeof getIssueTypeLabels>; cls: string }> = {
+  bug:     { key: "announcementBugTag",     cls: "t-bug" },
+  feature: { key: "announcementFeatureTag",    cls: "t-feature" },
+  feat:    { key: "announcementFeatureTag",    cls: "t-feature" },
+  wip:     { key: "announcementWipTag",  cls: "t-wip" },
+  done:    { key: "announcementDoneTag",  cls: "t-done" },
+  fixed:   { key: "announcementDoneTag",  cls: "t-done" },
 };
-const ISSUE_LEVEL_LABELS: Record<string, { label: string; cls: string }> = {
-  critical: { label: "紧急", cls: "l-critical" },
-  high:     { label: "高",   cls: "l-high" },
-  medium:   { label: "中",   cls: "l-medium" },
-  med:      { label: "中",   cls: "l-medium" },
-  low:      { label: "低",   cls: "l-low" },
+const ISSUE_LEVEL_KEYS: Record<string, { key: keyof ReturnType<typeof getIssueLevelLabels>; cls: string }> = {
+  critical: { key: "announcementCriticalTag", cls: "l-critical" },
+  high:     { key: "announcementHighTag",   cls: "l-high" },
+  medium:   { key: "announcementMediumTag",   cls: "l-medium" },
+  med:      { key: "announcementMediumTag",   cls: "l-medium" },
+  low:      { key: "announcementLowTag",   cls: "l-low" },
 };
+
+// Helper to get label strings for a given language
+function getIssueTypeLabels(lang: "zh" | "en") {
+  return {
+    announcementBugTag: t(lang, "announcementBugTag"),
+    announcementFeatureTag: t(lang, "announcementFeatureTag"),
+    announcementWipTag: t(lang, "announcementWipTag"),
+    announcementDoneTag: t(lang, "announcementDoneTag"),
+  };
+}
+function getIssueLevelLabels(lang: "zh" | "en") {
+  return {
+    announcementCriticalTag: t(lang, "announcementCriticalTag"),
+    announcementHighTag: t(lang, "announcementHighTag"),
+    announcementMediumTag: t(lang, "announcementMediumTag"),
+    announcementLowTag: t(lang, "announcementLowTag"),
+  };
+}
 
 function parseAnnouncement(md: string): Section[] {
   const sections: Section[] = [];
@@ -179,7 +198,7 @@ function renderInlineNoSpan(text: string): string {
   return out;
 }
 
-function renderSection(s: Section): string {
+function renderSection(s: Section, lang: "zh" | "en" = "zh"): string {
   if (s.kind === "warn" || s.kind === "info") {
     const cls = s.kind === "warn" ? "warn" : "info";
     return s.items
@@ -207,15 +226,19 @@ function renderSection(s: Section): string {
           desc = parts[0] || "";
           typeKey = "";
         }
-        const t = ISSUE_TYPE_LABELS[typeKey];
-        const typeChip = t
-          ? `<span class="iss-type ${t.cls}">${escapeHtml(t.label)}</span>`
+        const typeInfo = ISSUE_TYPE_KEYS[typeKey];
+        const typeLabels = getIssueTypeLabels(lang);
+        const typeLabel = typeInfo ? typeLabels[typeInfo.key as keyof typeof typeLabels] : null;
+        const typeChip = typeInfo && typeLabel
+          ? `<span class="iss-type ${typeInfo.cls}">${escapeHtml(typeLabel)}</span>`
           : (typeKey
             ? `<span class="iss-type t-other">${escapeHtml(typeKey.toUpperCase())}</span>`
             : "");
-        const lvl = ISSUE_LEVEL_LABELS[levelKey];
-        const levelChip = lvl
-          ? `<span class="iss-level ${lvl.cls}">${escapeHtml(lvl.label)}</span>`
+        const levelInfo = ISSUE_LEVEL_KEYS[levelKey];
+        const levelLabels = getIssueLevelLabels(lang);
+        const levelLabel = levelInfo ? levelLabels[levelInfo.key as keyof typeof levelLabels] : null;
+        const levelChip = levelInfo && levelLabel
+          ? `<span class="iss-level ${levelInfo.cls}">${escapeHtml(levelLabel)}</span>`
           : "";
         return `<div class="iss-row">${typeChip}${levelChip}<span class="iss-desc">${renderInline(desc)}</span></div>`;
       })
@@ -349,9 +372,9 @@ function rerenderForLang(activeLang: "zh" | "en"): void {
   let footerHtml = "";
   for (const s of visible) {
     if (s.kind === "footer") {
-      footerHtml = renderSection(s);
+      footerHtml = renderSection(s, activeLang);
     } else {
-      bodyHtml.push(renderSection(s));
+      bodyHtml.push(renderSection(s, activeLang));
     }
   }
   bodyEl.innerHTML = bodyHtml.join("");
@@ -376,7 +399,8 @@ async function loadAndRender(): Promise<void> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     md = await res.text();
   } catch (e) {
-    bodyEl.innerHTML = `<div class="alert-row warn"><span class="dot"></span><span class="text">公告加载失败：${escapeHtml(String((e as Error).message ?? e))}</span></div>`;
+    const lang: "zh" | "en" = readAnnounceLang();
+    bodyEl.innerHTML = `<div class="alert-row warn"><span class="dot"></span><span class="text">${t(lang, "announcementLoadFailed")}：${escapeHtml(String((e as Error).message ?? e))}</span></div>`;
     return;
   }
 
@@ -384,6 +408,11 @@ async function loadAndRender(): Promise<void> {
   const lang = readAnnounceLang();
   applyLangButtons(lang);
   rerenderForLang(lang);
+}
+
+// Apply i18n strings to the announcement modal UI elements
+function applyAnnouncementI18n(lang: "zh" | "en"): void {
+  applyI18nDom(lang, document);
 }
 
 // 2026-05-14 — stamp the running build version into the modal title.
@@ -410,6 +439,10 @@ async function loadVersionIntoTitle(): Promise<void> {
 }
 
 OBR.onReady(() => {
+  // Apply initial i18n translations
+  const lang = readAnnounceLang();
+  applyAnnouncementI18n(lang);
+  
   void loadAndRender();
   void loadVersionIntoTitle();
 
@@ -427,11 +460,13 @@ OBR.onReady(() => {
   // language preference (which is set in the Settings panel).
   document.getElementById("ann-lang-zh")?.addEventListener("click", () => {
     writeAnnounceLang("zh");
+    applyAnnouncementI18n("zh");
     applyLangButtons("zh");
     rerenderForLang("zh");
   });
   document.getElementById("ann-lang-en")?.addEventListener("click", () => {
     writeAnnounceLang("en");
+    applyAnnouncementI18n("en");
     applyLangButtons("en");
     rerenderForLang("en");
   });

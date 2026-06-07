@@ -21,6 +21,7 @@ import OBR, {
 } from "@owlbear-rodeo/sdk";
 import { assetUrl } from "../../asset-base";
 import { getLocalLang } from "../../state";
+import { t } from "../../i18n";
 import {
   FOLLOW_PLUGIN_ID,
   FOLLOW_KEY,
@@ -57,7 +58,7 @@ async function ctxAddFollow(itemIds: string[]): Promise<void> {
   }
   try {
     await OBR.notification.show(
-      "请左键点击要跟随的目标 token（按 Esc 取消）",
+      t(getLocalLang(), "followClickHint"),
       "INFO",
     );
   } catch {}
@@ -165,7 +166,7 @@ async function bindFollow(sourceId: string, targetId: string): Promise<void> {
   if (await wouldCreateCycle(sourceId, targetId)) {
     try {
       await OBR.notification.show(
-        "跟随会形成循环，无法绑定",
+        t(getLocalLang(), "followCycleError"),
         "ERROR",
       );
     } catch {}
@@ -173,8 +174,8 @@ async function bindFollow(sourceId: string, targetId: string): Promise<void> {
   }
   let sp: { x: number; y: number } | null = null;
   let tp: { x: number; y: number } | null = null;
-  let sourceName = "源";
-  let targetName = "目标";
+  let sourceName = t(getLocalLang(), "followSource");
+  let targetName = t(getLocalLang(), "followTarget");
   try {
     const items = await OBR.scene.items.getItems([sourceId, targetId]);
     const source = items.find((i) => i.id === sourceId);
@@ -197,7 +198,7 @@ async function bindFollow(sourceId: string, targetId: string): Promise<void> {
     });
     try {
       await OBR.notification.show(
-        `已绑定跟随：${sourceName} → ${targetName}`,
+        t(getLocalLang(), "followBound").replace("{source}", sourceName).replace("{target}", targetName),
         "SUCCESS",
       );
     } catch {}

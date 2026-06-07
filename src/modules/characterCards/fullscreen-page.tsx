@@ -1,13 +1,20 @@
 import { render, createContext } from "preact";
-import { useEffect, useState, useMemo, useCallback, useContext } from "preact/hooks";
+import {
+  useEffect,
+  useState,
+  useMemo,
+  useCallback,
+  useContext,
+  useRef,
+} from "preact/hooks";
 import OBR from "@owlbear-rodeo/sdk";
 import { fireQuickRoll } from "../dice/tags";
 import { subscribeToSfx } from "../dice/sfx-broadcast";
 import { patchBubbles } from "../../utils/statEdit";
 import { normalizeCombatGearFlags, readBooleanFlag } from "./data-normalize";
 import { reconcileUploadedCardShieldState } from "./xlsx-shield-state";
-import { t, type Language } from "../../i18n";
-import { getLocalLang, onLangChange } from "../../state";
+import { t } from "../../i18n";
+import { getLocalLang, onLangChange, type Language } from "../../state";
 
 // i18n — this is a deeply nested Preact tree, so rather than thread a
 // `lang` prop through every section we keep a module-level `_lang` that
@@ -16,7 +23,11 @@ import { getLocalLang, onLangChange } from "../../state";
 // children + module-level render helpers see the current value) and
 // re-renders the whole tree on a language flip via onLangChange.
 let _lang: Language = (() => {
-  try { return (getLocalLang() as Language) ?? "zh"; } catch { return "zh"; }
+  try {
+    return (getLocalLang() as Language) ?? "en";
+  } catch {
+    return "en";
+  }
 })();
 const T = (k: Parameters<typeof t>[1]) => t(_lang, k);
 
@@ -35,12 +46,12 @@ const ICON_COPY =
   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
   '<rect x="9" y="9" width="13" height="13" rx="2"/>' +
   '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' +
-  '</svg>';
+  "</svg>";
 const ICON_PASTE =
   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
   '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>' +
   '<rect x="8" y="2" width="8" height="4" rx="1"/>' +
-  '</svg>';
+  "</svg>";
 
 // Click a spell / feature / feat name → fire BC_SEARCH_QUERY so the
 // global-search popover opens with that name pre-filled and auto-pins
@@ -115,19 +126,41 @@ interface CharacterData {
 // ===== Const tables ==========================================
 const ABL_ORDER = ["str", "dex", "con", "int", "wis", "cha"] as const;
 const ABL_LABEL_ZH: Record<string, string> = {
-  str: "力量", dex: "敏捷", con: "体质", int: "智力", wis: "感知", cha: "魅力",
+  str: "力量",
+  dex: "敏捷",
+  con: "体质",
+  int: "智力",
+  wis: "感知",
+  cha: "魅力",
 };
 const ABL_LABEL_EN: Record<string, string> = {
-  str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma",
+  str: "Strength",
+  dex: "Dexterity",
+  con: "Constitution",
+  int: "Intelligence",
+  wis: "Wisdom",
+  cha: "Charisma",
 };
 const ABL_ABBR_ZH: Record<string, string> = {
-  str: "力", dex: "敏", con: "体", int: "智", wis: "感", cha: "魅",
+  str: "力",
+  dex: "敏",
+  con: "体",
+  int: "智",
+  wis: "感",
+  cha: "魅",
 };
 const ABL_ABBR_EN: Record<string, string> = {
-  str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA",
+  str: "STR",
+  dex: "DEX",
+  con: "CON",
+  int: "INT",
+  wis: "WIS",
+  cha: "CHA",
 };
-const ablLabel = (k: string): string => (_lang === "en" ? ABL_LABEL_EN : ABL_LABEL_ZH)[k] ?? k;
-const ablAbbr = (k: string): string => (_lang === "en" ? ABL_ABBR_EN : ABL_ABBR_ZH)[k] ?? k;
+const ablLabel = (k: string): string =>
+  (_lang === "en" ? ABL_LABEL_EN : ABL_LABEL_ZH)[k] ?? k;
+const ablAbbr = (k: string): string =>
+  (_lang === "en" ? ABL_ABBR_EN : ABL_ABBR_ZH)[k] ?? k;
 
 // 2026-05-14 (#14 follow-up) — tab structure reduced to 4 per user
 // request. 战斗 (CombatSection) and 装备 (InventorySection) now live
@@ -137,9 +170,9 @@ const ablAbbr = (k: string): string => (_lang === "en" ? ABL_ABBR_EN : ABL_ABBR_
 type TabKey = "overview" | "spells" | "features" | "background";
 
 const TABS: { key: TabKey; labelKey: Parameters<typeof t>[1] }[] = [
-  { key: "overview",   labelKey: "ccTabOverview" },
-  { key: "spells",     labelKey: "ccTabSpells" },
-  { key: "features",   labelKey: "ccTabFeatures" },
+  { key: "overview", labelKey: "ccTabOverview" },
+  { key: "spells", labelKey: "ccTabSpells" },
+  { key: "features", labelKey: "ccTabFeatures" },
   { key: "background", labelKey: "ccTabBackground" },
 ];
 
@@ -151,21 +184,8 @@ function fmtMod(n: unknown): string {
 function getQS(name: string): string | null {
   return new URLSearchParams(window.location.search).get(name);
 }
-// ============================================================
-// 2026-05-14 — Edit-mode infrastructure (#14)
-// ============================================================
-//
-// When the user toggles 编辑 in the header, every section component
-// switches to its "editable" variant: numeric fields become inputs,
-// text blocks become textareas, and list-shaped sections (features,
-// weapons, spells, inventory, defense tags) sprout + / × buttons.
-//
-// Approach: a single context exposes { editing, data, onPatch } so
-// section components don't have to thread edit state through 4 prop
-// layers. onPatch accepts a deep partial; mergePatch recurses into
-// nested objects so callers can write e.g. { core_stats: { ac: 16 } }
-// without clobbering the rest of core_stats.
 
+// ===== Edit-mode infrastructure (#14) =====
 interface EditState {
   editing: boolean;
   data: CharacterData;
@@ -175,19 +195,17 @@ const EditCtx = createContext<EditState | null>(null);
 function useEdit(): EditState {
   const ctx = useContext(EditCtx);
   if (!ctx) {
-    // Defensive default — when a section is used outside the provider
-    // (currently never, but cheap insurance) it falls through to
-    // "read-only" mode with a no-op patcher.
     return { editing: false, data: {} as CharacterData, onPatch: () => {} };
   }
   return ctx;
 }
 
-// Helper: small numeric input bound to a path on data. The caller
-// builds the patch for the path themselves — this just renders an
-// input or a static span depending on editing.
 function EditNum({
-  value, onSet, fallback = "?", className = "", suffix = "",
+  value,
+  onSet,
+  fallback = "?",
+  className = "",
+  suffix = "",
 }: {
   value: number | null | undefined;
   onSet: (n: number) => void;
@@ -211,16 +229,21 @@ function EditNum({
       />
     );
   }
-  return <span class={className}>{value ?? fallback}{suffix}</span>;
+  return (
+    <span class={className}>
+      {value ?? fallback}
+      {suffix}
+    </span>
+  );
 }
 
-// 2026-05-14 (#14 f2) — smooth-scroll a freshly-added row into view.
-// Called from "+ add" handlers: after Preact commits the new DOM
-// node (we wait two rAFs), the LAST matching row inside the add
-// button's enclosing `.sec` is scrolled to centre. Lets the user
-// keep their place when they add an entry far below the fold.
-function smoothScrollToNewRow(ev: Event | undefined, rowSelector: string): void {
-  const host = (ev?.currentTarget as HTMLElement | null)?.closest(".sec") as HTMLElement | null;
+function smoothScrollToNewRow(
+  ev: Event | undefined,
+  rowSelector: string,
+): void {
+  const host = (ev?.currentTarget as HTMLElement | null)?.closest(
+    ".sec",
+  ) as HTMLElement | null;
   if (!host) return;
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
@@ -231,17 +254,11 @@ function smoothScrollToNewRow(ev: Event | undefined, rowSelector: string): void 
   );
 }
 
-// 2026-05-14 (#14 f3) — spell-name lookup for the SpellPickModal.
-// Pulls the suite's library search index(es) and extracts every
-// category-2 (spell) entry. The kiwee index stores BOTH names:
-//   n  = English name   ("Fireball")
-//   cn = Chinese name    ("火球术")
-// We keep both: `label` (cn preferred, en fallback) is what the
-// modal shows + what gets written onto the card; `en` is kept so
-// search can match English typing too. Cached module-wide after the
-// first successful load. Falls back to the kiwee base when no
-// library is configured.
-interface SpellEntry { label: string; en: string }
+// Spell pick modal helpers...
+interface SpellEntry {
+  label: string;
+  en: string;
+}
 let _spellNamesCache: SpellEntry[] | null = null;
 async function loadSpellNames(): Promise<SpellEntry[]> {
   if (_spellNamesCache) return _spellNamesCache;
@@ -250,30 +267,31 @@ async function loadSpellNames(): Promise<SpellEntry[]> {
     const { getState } = await import("../../state");
     const libs = ((getState() as any).libraries || []) as any[];
     bases = libs
-      .filter((l) => l && l.enabled && typeof l.baseUrl === "string" && l.baseUrl.trim())
+      .filter(
+        (l) =>
+          l && l.enabled && typeof l.baseUrl === "string" && l.baseUrl.trim(),
+      )
       .map((l) => String(l.baseUrl).replace(/\/+$/, ""));
   } catch {}
   if (bases.length === 0) bases = ["https://5e.kiwee.top"];
-  // label -> en. Map de-dups across libraries by display label.
   const byLabel = new Map<string, string>();
   await Promise.all(
     bases.map(async (base) => {
       try {
-        const res = await fetch(`${base}/search/index.json`, { cache: "force-cache" });
+        const res = await fetch(`${base}/search/index.json`, {
+          cache: "force-cache",
+        });
         if (!res.ok) return;
         const idx = await res.json();
         const arr = Array.isArray(idx?.x) ? idx.x : [];
         for (const e of arr) {
-          // c === 2 is the spell category in the suite search index.
           if (!e || e.c !== 2) continue;
           const en = typeof e.n === "string" ? e.n.trim() : "";
           const cn = typeof e.cn === "string" ? e.cn.trim() : "";
           const label = cn || en;
           if (label && !byLabel.has(label)) byLabel.set(label, en);
         }
-      } catch {
-        /* one library failing is non-fatal — others may still load */
-      }
+      } catch {}
     }),
   );
   _spellNamesCache = [...byLabel.entries()]
@@ -282,9 +300,12 @@ async function loadSpellNames(): Promise<SpellEntry[]> {
   return _spellNamesCache;
 }
 
-// Helper: text input bound to a path on data. Static span when !editing.
 function EditText({
-  value, onSet, fallback = "—", placeholder = "", className = "",
+  value,
+  onSet,
+  fallback = "—",
+  placeholder = "",
+  className = "",
 }: {
   value: string | null | undefined;
   onSet: (s: string) => void;
@@ -308,17 +329,31 @@ function EditText({
 }
 
 function downloadJson(filename: string, data: any) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+  const blob = new Blob([JSON.stringify(data, null, 2)], {
+    type: "application/json;charset=utf-8",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ===== Subcomponents =========================================
 function Header({
-  data, onExport, onCopyJson, onImport, onPasteJson, onRefresh, editing, onToggleEditing, onSaveEdits, savingEdits,
+  data,
+  onExport,
+  onCopyJson,
+  onImport,
+  onPasteJson,
+  onRefresh,
+  editing,
+  onToggleEditing,
+  onSaveEdits,
+  savingEdits,
 }: {
   data: CharacterData;
   onExport: () => void;
@@ -334,15 +369,24 @@ function Header({
   const id = data.identity || {};
   const cs = data.core_stats || {};
   const name = id.display_name || id.character_name || T("ccUnnamed");
-  const englishName = id.character_name && id.display_name && id.character_name !== id.display_name
-    ? id.character_name : null;
+  const englishName =
+    id.character_name &&
+    id.display_name &&
+    id.character_name !== id.display_name
+      ? id.character_name
+      : null;
 
-  const cls = (data.classes || [])
-    .filter((c) => c?.name)
-    .map((c) => `${c.name}${c.subclass ? `（${c.subclass}）` : ""}${c.level ? ` Lv${c.level}` : ""}`)
-    .join(" / ") || "—";
+  const cls =
+    (data.classes || [])
+      .filter((c) => c?.name)
+      .map(
+        (c) =>
+          `${c.name}${c.subclass ? `（${c.subclass}）` : ""}${c.level ? ` Lv${c.level}` : ""}`,
+      )
+      .join(" / ") || "—";
 
-  const race = [id.race?.name, id.race?.subrace].filter(Boolean).join("·") || "—";
+  const race =
+    [id.race?.name, id.race?.subrace].filter(Boolean).join("·") || "—";
   const totalLv = data.total_level != null ? data.total_level : "?";
 
   return (
@@ -353,60 +397,76 @@ function Header({
           {englishName && <span class="en">{englishName}</span>}
         </div>
         <div class="cc-head-meta">
-          <span class="pip"><b>{race}</b></span>
-          <span class="pip"><b>{cls}</b></span>
-          <span class="pip">{T("ccTotalLevel")} <b>{totalLv}</b></span>
-          {id.alignment && <span class="pip">{T("ccAlignment")} <b>{id.alignment}</b></span>}
-          {cs.size && <span class="pip">{T("ccSize")} <b>{cs.size}</b></span>}
-          {id.faith && <span class="pip">{T("ccFaith")} <b>{id.faith}</b></span>}
+          <span class="pip">
+            <b>{race}</b>
+          </span>
+          <span class="pip">
+            <b>{cls}</b>
+          </span>
+          <span class="pip">
+            {T("ccTotalLevel")} <b>{totalLv}</b>
+          </span>
+          {id.alignment && (
+            <span class="pip">
+              {T("ccAlignment")} <b>{id.alignment}</b>
+            </span>
+          )}
+          {cs.size && (
+            <span class="pip">
+              {T("ccSize")} <b>{cs.size}</b>
+            </span>
+          )}
+          {id.faith && (
+            <span class="pip">
+              {T("ccFaith")} <b>{id.faith}</b>
+            </span>
+          )}
         </div>
       </div>
       <div class="cc-head-right">
-        {/* 2026-05-14 (#14) — edit-mode toggle. When ON, every section
-            below renders its editable variant: stat cells become inputs,
-            list sections sprout + / × buttons, text blocks become
-            textareas. Saved live through the same onPatch pipeline
-            that already handles inline HP/AC edits. */}
         <button
           class={`cc-btn ${editing ? "primary" : ""}`}
           onClick={onToggleEditing}
-          title={editing ? T("ccEditTitleOn") : T("ccEditTitleOff")}>
-          <span class="ic">{editing ? "✎" : "🔧"}</span>{editing ? T("ccEditingLabel") : T("ccEditLabel")}
+          title={editing ? T("ccEditTitleOn") : T("ccEditTitleOff")}
+        >
+          <span class="ic">{editing ? "✎" : "🔧"}</span>
+          {editing ? T("ccEditingLabel") : T("ccEditLabel")}
         </button>
-        {/* Save button — only visible in edit mode. Persists the
-            current local data to the server via the same PUT endpoint
-            JSON import uses, then broadcasts BC_CARD_UPDATED so bound
-            tokens + other clients refresh. */}
         {editing && (
           <button
             class="cc-btn primary"
             onClick={onSaveEdits}
             disabled={savingEdits}
-            title={T("ccSaveTitle")}>
-            <span class="ic">💾</span>{savingEdits ? T("ccSaving") : T("ccSaveBtn")}
+            title={T("ccSaveTitle")}
+          >
+            <span class="ic">💾</span>
+            {savingEdits ? T("ccSaving") : T("ccSaveBtn")}
           </button>
         )}
         <button class="cc-btn" onClick={onRefresh} title={T("ccRefreshTitle")}>
           {T("ccRefresh")}
         </button>
-        {/* 2026-05-14 (#14 f2) — 导出 JSON + 仅复制 fused into one
-            button group. 复制 is now a borderless icon-only sub-button
-            seamlessly joined to the right edge of 导出 JSON (shared
-            border, no gap). SVG icon, no emoji / text. */}
         <div class="cc-btn-group">
           <button class="cc-btn" onClick={onExport} title={T("ccExportTitle")}>
             {T("ccExportJson")}
           </button>
-          <button class="cc-btn cc-btn-sub" onClick={onCopyJson} title={T("ccCopyTitle")}>
+          <button
+            class="cc-btn cc-btn-sub"
+            onClick={onCopyJson}
+            title={T("ccCopyTitle")}
+          >
             <span class="ic" dangerouslySetInnerHTML={{ __html: ICON_COPY }} />
           </button>
         </div>
-        {/* 导入 JSON + 仅粘贴 fused the same way. */}
         <div class="cc-btn-group">
           <button class="cc-btn" onClick={onImport} title={T("ccImportTitle")}>
             {T("ccImportJson")}
           </button>
-          <button class="cc-btn cc-btn-sub" onClick={onPasteJson} title={T("ccPasteTitle")}>
+          <button
+            class="cc-btn cc-btn-sub"
+            onClick={onPasteJson}
+            title={T("ccPasteTitle")}
+          >
             <span class="ic" dangerouslySetInnerHTML={{ __html: ICON_PASTE }} />
           </button>
         </div>
@@ -453,7 +513,10 @@ function PasteJsonModal({
   // common "paste then confirm" muscle memory.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel();
+      }
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         void submit();
@@ -496,9 +559,26 @@ function PasteJsonModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: "flex", alignItems: "baseline", gap: "10px", justifyContent: "space-between" }}>
-          <h3 style={{ margin: 0, fontSize: "15px", color: "var(--gold, #d4a056)" }}>{T("ccPasteModalTitle")}</h3>
-          <span style={{ fontSize: "11px", color: "var(--ink-dim, #8a8479)" }}>{T("ccPasteKbdHint")}</span>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            gap: "10px",
+            justifyContent: "space-between",
+          }}
+        >
+          <h3
+            style={{
+              margin: 0,
+              fontSize: "15px",
+              color: "var(--gold, #d4a056)",
+            }}
+          >
+            {T("ccPasteModalTitle")}
+          </h3>
+          <span style={{ fontSize: "11px", color: "var(--ink-dim, #8a8479)" }}>
+            {T("ccPasteKbdHint")}
+          </span>
         </div>
         <textarea
           autofocus
@@ -523,23 +603,33 @@ function PasteJsonModal({
           }}
         />
         {status && (
-          <div style={{
-            fontSize: "12px",
-            padding: "8px 10px",
-            background: status.startsWith("✓") ? "rgba(80,180,80,0.12)" : "rgba(220,90,80,0.12)",
-            border: `1px solid ${status.startsWith("✓") ? "rgba(80,180,80,0.4)" : "rgba(220,90,80,0.4)"}`,
-            borderRadius: "4px",
-            whiteSpace: "pre-wrap",
-            color: "var(--ink, #e8e3d8)",
-          }}>
+          <div
+            style={{
+              fontSize: "12px",
+              padding: "8px 10px",
+              background: status.startsWith("✓")
+                ? "rgba(80,180,80,0.12)"
+                : "rgba(220,90,80,0.12)",
+              border: `1px solid ${status.startsWith("✓") ? "rgba(80,180,80,0.4)" : "rgba(220,90,80,0.4)"}`,
+              borderRadius: "4px",
+              whiteSpace: "pre-wrap",
+              color: "var(--ink, #e8e3d8)",
+            }}
+          >
             {status}
           </div>
         )}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+        <div
+          style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}
+        >
           <button class="cc-btn" onClick={onCancel} disabled={busy}>
             {T("ccCancel")}
           </button>
-          <button class="cc-btn primary" onClick={submit} disabled={busy || !text.trim()}>
+          <button
+            class="cc-btn primary"
+            onClick={submit}
+            disabled={busy || !text.trim()}
+          >
             {busy ? T("ccApplying") : T("ccApply")}
           </button>
         </div>
@@ -557,7 +647,9 @@ function PasteJsonModal({
 // name + level and leaves the lookup to the library. Picking a spell
 // returns its name; SpellsSection assigns the level.
 function SpellPickModal({
-  title, onCancel, onPick,
+  title,
+  onCancel,
+  onPick,
 }: {
   title: string;
   onCancel: () => void;
@@ -573,17 +665,28 @@ function SpellPickModal({
     void (async () => {
       try {
         const list = await loadSpellNames();
-        if (!cancelled) { setSpells(list); setLoading(false); }
+        if (!cancelled) {
+          setSpells(list);
+          setLoading(false);
+        }
       } catch {
-        if (!cancelled) { setLoadError(true); setLoading(false); }
+        if (!cancelled) {
+          setLoadError(true);
+          setLoading(false);
+        }
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel();
+      }
     };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
@@ -595,7 +698,10 @@ function SpellPickModal({
     const q = query.trim().toLowerCase();
     if (!q) return spells.slice(0, 60);
     return spells
-      .filter((s) => s.label.toLowerCase().includes(q) || s.en.toLowerCase().includes(q))
+      .filter(
+        (s) =>
+          s.label.toLowerCase().includes(q) || s.en.toLowerCase().includes(q),
+      )
       .slice(0, 60);
   }, [query, spells]);
 
@@ -609,7 +715,12 @@ function SpellPickModal({
         <input
           class="cc-edit-text"
           autofocus
-          style={{ width: "100%", marginBottom: "8px", padding: "7px 10px", fontSize: "13px" }}
+          style={{
+            width: "100%",
+            marginBottom: "8px",
+            padding: "7px 10px",
+            fontSize: "13px",
+          }}
           placeholder={T("ccSpellSearchPh")}
           value={query}
           onInput={(e: any) => setQuery(e.target.value)}
@@ -618,28 +729,30 @@ function SpellPickModal({
           {query.trim() && (
             <button
               class="cc-modal-row cc-modal-row-free"
-              onClick={() => onPick(query.trim())}>
+              onClick={() => onPick(query.trim())}
+            >
               {T("ccSpellAddFree").replace("{q}", query.trim())}
             </button>
           )}
           {loading && <div class="cc-modal-msg">{T("ccSpellLoading")}</div>}
-          {loadError && (
-            <div class="cc-modal-msg">{T("ccSpellLoadErr")}</div>
-          )}
-          {!loading && matches.map((s) => (
-            <button class="cc-modal-row" onClick={() => onPick(s.label)}>
-              <span>{s.label}</span>
-              {s.en && s.en !== s.label && (
-                <span class="cc-modal-row-en">{s.en}</span>
-              )}
-            </button>
-          ))}
+          {loadError && <div class="cc-modal-msg">{T("ccSpellLoadErr")}</div>}
+          {!loading &&
+            matches.map((s) => (
+              <button class="cc-modal-row" onClick={() => onPick(s.label)}>
+                <span>{s.label}</span>
+                {s.en && s.en !== s.label && (
+                  <span class="cc-modal-row-en">{s.en}</span>
+                )}
+              </button>
+            ))}
           {!loading && !loadError && matches.length === 0 && query.trim() && (
             <div class="cc-modal-msg">{T("ccSpellNoMatch")}</div>
           )}
         </div>
         <div class="cc-modal-foot">
-          <button class="cc-btn" onClick={onCancel}>{T("ccCancel")}</button>
+          <button class="cc-btn" onClick={onCancel}>
+            {T("ccCancel")}
+          </button>
         </div>
       </div>
     </div>
@@ -647,7 +760,8 @@ function SpellPickModal({
 }
 
 function StatsBanner({
-  data, onPatch,
+  data,
+  onPatch,
 }: {
   data: CharacterData;
   onPatch: (patch: Partial<CharacterData>) => void;
@@ -676,49 +790,62 @@ function StatsBanner({
   // 2026-05-14 (#14) — edit-mode helpers for the remaining stat cells
   // (initiative / speed / passive perception / proficiency / hit-dice
   // max + die-size). All single-field patches on core_stats.
-  const setCs = (patch: Record<string, any>) => onPatch({ core_stats: { ...cs, ...patch } });
-  const setHd = (patch: Record<string, any>) => onPatch({ core_stats: { ...cs, hit_dice: { ...hd, ...patch } } });
+  const setCs = (patch: Record<string, any>) =>
+    onPatch({ core_stats: { ...cs, ...patch } });
+  const setHd = (patch: Record<string, any>) =>
+    onPatch({ core_stats: { ...cs, hit_dice: { ...hd, ...patch } } });
 
   return (
     <div class="cc-stats">
       <div class="stat-cell hp">
         <div class="stat-cell-label">HP</div>
         <div class="stat-cell-val">
-          <input class="stat-input big"
+          <input
+            class="stat-input big"
             value={hp.current ?? 0}
-            onChange={(e: any) => setHp("current", e.target.value)} />
+            onChange={(e: any) => setHp("current", e.target.value)}
+          />
           <span class="slash">/</span>
-          <input class="stat-input small"
+          <input
+            class="stat-input small"
             value={hp.max ?? 0}
-            onChange={(e: any) => setHp("max", e.target.value)} />
+            onChange={(e: any) => setHp("max", e.target.value)}
+          />
         </div>
       </div>
       <div class="stat-cell">
         <div class="stat-cell-label">{T("ccTemp")}</div>
         <div class="stat-cell-val">
-          <input class="stat-input big"
+          <input
+            class="stat-input big"
             value={hp.temp ?? 0}
-            onChange={(e: any) => setHp("temp", e.target.value)} />
+            onChange={(e: any) => setHp("temp", e.target.value)}
+          />
         </div>
       </div>
       <div class="stat-cell ac">
         <div class="stat-cell-label">AC</div>
         <div class="stat-cell-val">
-          <input class="stat-input big"
+          <input
+            class="stat-input big"
             value={cs.ac ?? 10}
-            onChange={(e: any) => setAc(e.target.value)} />
+            onChange={(e: any) => setAc(e.target.value)}
+          />
         </div>
       </div>
       <div class="stat-cell init">
         <div class="stat-cell-label">{T("ccInit")}</div>
         <div class="stat-cell-val">
           {editing ? (
-            <input class="stat-input big" type="number"
+            <input
+              class="stat-input big"
+              type="number"
               value={cs.initiative ?? 0}
               onInput={(e: any) => {
                 const n = parseInt(e.target.value, 10);
                 if (Number.isFinite(n)) setCs({ initiative: n });
-              }} />
+              }}
+            />
           ) : (
             <span class="big">{fmtMod(cs.initiative)}</span>
           )}
@@ -728,12 +855,15 @@ function StatsBanner({
         <div class="stat-cell-label">{T("ccSpeed")}</div>
         <div class="stat-cell-val">
           {editing ? (
-            <input class="stat-input big" type="number"
+            <input
+              class="stat-input big"
+              type="number"
               value={cs.speed ?? 0}
               onInput={(e: any) => {
                 const n = parseInt(e.target.value, 10);
                 if (Number.isFinite(n)) setCs({ speed: n });
-              }} />
+              }}
+            />
           ) : (
             <span class="big">{cs.speed ?? "?"}</span>
           )}
@@ -744,12 +874,15 @@ function StatsBanner({
         <div class="stat-cell-label">{T("ccPassivePerc")}</div>
         <div class="stat-cell-val">
           {editing ? (
-            <input class="stat-input big" type="number"
+            <input
+              class="stat-input big"
+              type="number"
               value={cs.passive_perception ?? 0}
               onInput={(e: any) => {
                 const n = parseInt(e.target.value, 10);
                 if (Number.isFinite(n)) setCs({ passive_perception: n });
-              }} />
+              }}
+            />
           ) : (
             <span class="big">{cs.passive_perception ?? "?"}</span>
           )}
@@ -759,12 +892,15 @@ function StatsBanner({
         <div class="stat-cell-label">{T("ccProf")}</div>
         <div class="stat-cell-val">
           {editing ? (
-            <input class="stat-input big" type="number"
+            <input
+              class="stat-input big"
+              type="number"
               value={cs.proficiency_bonus ?? 0}
               onInput={(e: any) => {
                 const n = parseInt(e.target.value, 10);
                 if (Number.isFinite(n)) setCs({ proficiency_bonus: n });
-              }} />
+              }}
+            />
           ) : (
             <span class="big">{fmtMod(cs.proficiency_bonus)}</span>
           )}
@@ -773,25 +909,37 @@ function StatsBanner({
       <div class="stat-cell">
         <div class="stat-cell-label">{T("ccHitDice")}</div>
         <div class="stat-cell-val">
-          <input class="stat-input big" value={hd.current ?? 0}
-            onChange={(e: any) => setHdCur(e.target.value)} />
+          <input
+            class="stat-input big"
+            value={hd.current ?? 0}
+            onChange={(e: any) => setHdCur(e.target.value)}
+          />
           <span class="slash">/</span>
           {editing ? (
             <>
-              <input class="stat-input small" type="number"
+              <input
+                class="stat-input small"
+                type="number"
                 value={hd.max ?? 0}
                 onInput={(e: any) => {
                   const n = parseInt(e.target.value, 10);
                   if (Number.isFinite(n)) setHd({ max: n });
-                }} />
-              <input class="stat-input small" type="text"
+                }}
+              />
+              <input
+                class="stat-input small"
+                type="text"
                 style={{ width: "44px" }}
                 placeholder="d8"
                 value={hd.die_size ?? ""}
-                onInput={(e: any) => setHd({ die_size: e.target.value })} />
+                onInput={(e: any) => setHd({ die_size: e.target.value })}
+              />
             </>
           ) : (
-            <span class="small">{hd.max ?? "?"}{hd.die_size ?? ""}</span>
+            <span class="small">
+              {hd.max ?? "?"}
+              {hd.die_size ?? ""}
+            </span>
           )}
         </div>
       </div>
@@ -888,7 +1036,8 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
     // multiplier. mult: none=0, proficient=1, expertise=2.
     const abil = ab[sk.ability] || {};
     const abilMod = typeof abil.modifier === "number" ? abil.modifier : 0;
-    const mult = nextProf === "expertise" ? 2 : nextProf === "proficient" ? 1 : 0;
+    const mult =
+      nextProf === "expertise" ? 2 : nextProf === "proficient" ? 1 : 0;
     const misc = typeof sk.misc_bonus === "number" ? sk.misc_bonus : 0;
     const total = abilMod + profBonus * mult + misc;
     const next = [...skills];
@@ -899,7 +1048,10 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
   return (
     <div class="sec">
       <div class="sec-h">
-        <span class="sec-h-title">{T("ccSecAbilities")}{editing ? T("ccSecAbilitiesEditHint") : ""}</span>
+        <span class="sec-h-title">
+          {T("ccSecAbilities")}
+          {editing ? T("ccSecAbilitiesEditHint") : ""}
+        </span>
       </div>
       <div class="sec-body">
         <div class="abl-grid">
@@ -907,22 +1059,30 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
             const a = ab[k] || {};
             const mod = typeof a.modifier === "number" ? a.modifier : 0;
             const profBonus = cs.proficiency_bonus ?? 0;
-            const saveBonus = typeof a.save?.bonus === "number"
-              ? a.save.bonus
-              : (a.save?.proficient ? mod + profBonus : mod);
+            const saveBonus =
+              typeof a.save?.bonus === "number"
+                ? a.save.bonus
+                : a.save?.proficient
+                  ? mod + profBonus
+                  : mod;
             const aExpr = `1d20${mod >= 0 ? "+" : ""}${mod}`;
             const sExpr = `1d20${saveBonus >= 0 ? "+" : ""}${saveBonus}`;
             if (editing) {
               return (
                 <div class="abl">
                   <div class="abl-name">{ablLabel(k)}</div>
-                  <input class="abl-total cc-edit-num" type="number"
+                  <input
+                    class="abl-total cc-edit-num"
+                    type="number"
                     value={a.total ?? 10}
                     onInput={(e: any) => {
                       const n = parseInt(e.target.value, 10);
                       if (Number.isFinite(n)) setAbilityScore(k, n);
-                    }} />
-                  <div class="abl-mod" title={T("ccTipAutoMod")}>{fmtMod(a.modifier)}</div>
+                    }}
+                  />
+                  <div class="abl-mod" title={T("ccTipAutoMod")}>
+                    {fmtMod(a.modifier)}
+                  </div>
                   {/* 2026-05-14 (#14 f2) — `abl-save-edit` is a DISTINCT
                       class from `abl-save`, so the CSS ::before that
                       auto-draws a ●/○ on `.abl-save` never fires here.
@@ -931,17 +1091,26 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
                       override didn't take in OBR's iframe runtime, so
                       both the pseudo AND the span rendered (two
                       circles). A separate class is bulletproof. */}
-                  <div class={`abl-save-edit ${a.save?.proficient ? "is-prof" : ""}`}>
-                    <span class="abl-save-dot"
-                          onClick={() => toggleSaveProf(k)}
-                          title={T("ccTipToggleSaveProf")}>{a.save?.proficient ? "●" : "○"}</span>
-                    <input class="cc-edit-num" type="number"
+                  <div
+                    class={`abl-save-edit ${a.save?.proficient ? "is-prof" : ""}`}
+                  >
+                    <span
+                      class="abl-save-dot"
+                      onClick={() => toggleSaveProf(k)}
+                      title={T("ccTipToggleSaveProf")}
+                    >
+                      {a.save?.proficient ? "●" : "○"}
+                    </span>
+                    <input
+                      class="cc-edit-num"
+                      type="number"
                       style={{ width: "44px" }}
                       value={a.save?.bonus ?? saveBonus}
                       onInput={(e: any) => {
                         const n = parseInt(e.target.value, 10);
                         if (Number.isFinite(n)) setSaveBonus(k, n);
-                      }} />
+                      }}
+                    />
                   </div>
                 </div>
               );
@@ -950,15 +1119,30 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
               <div class="abl">
                 <div class="abl-name">{ablLabel(k)}</div>
                 <div class="abl-total">{a.total ?? "?"}</div>
-                <div class="abl-mod"
-                  onClick={() => rollExpr(`${ablLabel(k)}${T("ccCheckSuffix")}`, aExpr)}
-                  onContextMenu={(e: any) => { e.preventDefault(); rollExpr(`${ablLabel(k)}${T("ccCheckAdvSuffix")}`, aExpr, "adv"); }}
-                  title={`${ablLabel(k)}${T("ccCheckSuffix")} ${aExpr}\n${T("ccRollHint")}`}>
+                <div
+                  class="abl-mod"
+                  onClick={() =>
+                    rollExpr(`${ablLabel(k)}${T("ccCheckSuffix")}`, aExpr)
+                  }
+                  onContextMenu={(e: any) => {
+                    e.preventDefault();
+                    rollExpr(
+                      `${ablLabel(k)}${T("ccCheckAdvSuffix")}`,
+                      aExpr,
+                      "adv",
+                    );
+                  }}
+                  title={`${ablLabel(k)}${T("ccCheckSuffix")} ${aExpr}\n${T("ccRollHint")}`}
+                >
                   {fmtMod(a.modifier)}
                 </div>
-                <div class={`abl-save ${a.save?.proficient ? "is-prof" : ""}`}
-                  onClick={() => rollExpr(`${ablLabel(k)}${T("ccSaveSuffix")}`, sExpr)}
-                  title={`${ablLabel(k)}${T("ccSaveSuffix")} ${sExpr}`}>
+                <div
+                  class={`abl-save ${a.save?.proficient ? "is-prof" : ""}`}
+                  onClick={() =>
+                    rollExpr(`${ablLabel(k)}${T("ccSaveSuffix")}`, sExpr)
+                  }
+                  title={`${ablLabel(k)}${T("ccSaveSuffix")} ${sExpr}`}
+                >
                   {T("ccSave")} <b>{fmtMod(saveBonus)}</b>
                 </div>
               </div>
@@ -974,34 +1158,57 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
                 const idx = skills.indexOf(s);
                 const total = typeof s.total === "number" ? s.total : 0;
                 const expr = `1d20${total >= 0 ? "+" : ""}${total}`;
-                const cls = s.proficiency === "expertise" ? "exp" : s.proficiency === "proficient" ? "prof" : "";
+                const cls =
+                  s.proficiency === "expertise"
+                    ? "exp"
+                    : s.proficiency === "proficient"
+                      ? "prof"
+                      : "";
                 if (editing) {
                   return (
                     <div class={`sk ${cls}`} style={{ cursor: "default" }}>
-                      <span class="sk-prof"
-                            style={{ cursor: "pointer" }}
-                            onClick={() => cycleSkillProf(idx)}
-                            title={T("ccTipCycleSkillProf")}>
+                      <span
+                        class="sk-prof"
+                        style={{ cursor: "pointer" }}
+                        onClick={() => cycleSkillProf(idx)}
+                        title={T("ccTipCycleSkillProf")}
+                      >
                         {cls === "exp" ? "★" : cls === "prof" ? "●" : "○"}
                       </span>
                       <span class="sk-name">{s.name}</span>
                       <span class="sk-abil">{ablAbbr(s.ability) || ""}</span>
-                      <input class="cc-edit-num sk-val" type="number"
+                      <input
+                        class="cc-edit-num sk-val"
+                        type="number"
                         style={{ width: "48px" }}
                         value={s.total ?? 0}
                         onInput={(e: any) => {
                           const n = parseInt(e.target.value, 10);
                           if (Number.isFinite(n)) setSkillTotal(idx, n);
-                        }} />
+                        }}
+                      />
                     </div>
                   );
                 }
                 return (
-                  <div class={`sk ${cls}`}
-                    onClick={() => rollExpr(`${s.name}${T("ccCheckSuffix")}`, expr)}
-                    onContextMenu={(e: any) => { e.preventDefault(); rollExpr(`${s.name}${T("ccCheckAdvSuffix")}`, expr, "adv"); }}
-                    title={`${s.name}${T("ccCheckSuffix")} ${expr}\n${T("ccRollHint")}`}>
-                    <span class="sk-prof">{cls === "exp" ? "★" : cls === "prof" ? "●" : "○"}</span>
+                  <div
+                    class={`sk ${cls}`}
+                    onClick={() =>
+                      rollExpr(`${s.name}${T("ccCheckSuffix")}`, expr)
+                    }
+                    onContextMenu={(e: any) => {
+                      e.preventDefault();
+                      rollExpr(
+                        `${s.name}${T("ccCheckAdvSuffix")}`,
+                        expr,
+                        "adv",
+                      );
+                    }}
+                    title={`${s.name}${T("ccCheckSuffix")} ${expr}\n${T("ccRollHint")}`}
+                  >
+                    <span class="sk-prof">
+                      {cls === "exp" ? "★" : cls === "prof" ? "●" : "○"}
+                    </span>
                     <span class="sk-name">{s.name}</span>
                     <span class="sk-abil">{ablAbbr(s.ability) || ""}</span>
                     <span class="sk-val">{fmtMod(s.total)}</span>
@@ -1021,41 +1228,84 @@ function Defenses({ data }: { data: CharacterData }) {
   const d = data.defenses || {};
   const id = data.identity || {};
   const langs: string[] = Array.isArray(id.languages) ? id.languages : [];
-  const tools: string[] = Array.isArray(id.tool_proficiencies) ? id.tool_proficiencies : [];
+  const tools: string[] = Array.isArray(id.tool_proficiencies)
+    ? id.tool_proficiencies
+    : [];
 
-  const empty = !d.resistances?.length && !d.immunities?.length && !d.advantages?.length && !d.disadvantages?.length;
+  const empty =
+    !d.resistances?.length &&
+    !d.immunities?.length &&
+    !d.advantages?.length &&
+    !d.disadvantages?.length;
   // In edit mode we always render the section (so the user can ADD
   // first entries to empty categories); in view mode we hide it
   // entirely when there's nothing to show.
   if (!editing && empty && !langs.length && !tools.length) return null;
 
   // 2026-05-14 (#14) — small add/remove helpers per tag category.
-  const addTag = (cat: "resistances" | "immunities" | "advantages" | "disadvantages") => {
-    const v = (window.prompt(`${T("ccAddPrefix")}${labelOf(cat)}${T("ccAddTagHint")}`, "") || "").trim();
+  const addTag = (
+    cat: "resistances" | "immunities" | "advantages" | "disadvantages",
+  ) => {
+    const v = (
+      window.prompt(
+        `${T("ccAddPrefix")}${labelOf(cat)}${T("ccAddTagHint")}`,
+        "",
+      ) || ""
+    ).trim();
     if (!v) return;
-    const items = v.split(/[,，;；]/).map((s) => s.trim()).filter(Boolean);
+    const items = v
+      .split(/[,，;；]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (items.length === 0) return;
     const cur = Array.isArray((d as any)[cat]) ? (d as any)[cat] : [];
     onPatch({ defenses: { ...d, [cat]: [...cur, ...items] } });
   };
-  const removeTag = (cat: "resistances" | "immunities" | "advantages" | "disadvantages", value: string) => {
+  const removeTag = (
+    cat: "resistances" | "immunities" | "advantages" | "disadvantages",
+    value: string,
+  ) => {
     const cur = Array.isArray((d as any)[cat]) ? (d as any)[cat] : [];
-    onPatch({ defenses: { ...d, [cat]: cur.filter((x: string) => x !== value) } });
+    onPatch({
+      defenses: { ...d, [cat]: cur.filter((x: string) => x !== value) },
+    });
   };
   const addLangTool = (which: "languages" | "tool_proficiencies") => {
-    const v = (window.prompt(`${T("ccAddPrefix")}${which === "languages" ? T("ccLanguages") : T("ccTools")}`, "") || "").trim();
+    const v = (
+      window.prompt(
+        `${T("ccAddPrefix")}${which === "languages" ? T("ccLanguages") : T("ccTools")}`,
+        "",
+      ) || ""
+    ).trim();
     if (!v) return;
-    const items = v.split(/[,，;；]/).map((s) => s.trim()).filter(Boolean);
+    const items = v
+      .split(/[,，;；]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (items.length === 0) return;
     const cur = Array.isArray((id as any)[which]) ? (id as any)[which] : [];
     onPatch({ identity: { ...id, [which]: [...cur, ...items] } });
   };
-  const removeLangTool = (which: "languages" | "tool_proficiencies", value: string) => {
+  const removeLangTool = (
+    which: "languages" | "tool_proficiencies",
+    value: string,
+  ) => {
     const cur = Array.isArray((id as any)[which]) ? (id as any)[which] : [];
-    onPatch({ identity: { ...id, [which]: cur.filter((x: string) => x !== value) } });
+    onPatch({
+      identity: { ...id, [which]: cur.filter((x: string) => x !== value) },
+    });
   };
   function labelOf(cat: string): string {
-    return ({ resistances: T("ccResistances"), immunities: T("ccImmunities"), advantages: T("ccAdvantages"), disadvantages: T("ccDisadvantages") } as Record<string, string>)[cat] || cat;
+    return (
+      (
+        {
+          resistances: T("ccResistances"),
+          immunities: T("ccImmunities"),
+          advantages: T("ccAdvantages"),
+          disadvantages: T("ccDisadvantages"),
+        } as Record<string, string>
+      )[cat] || cat
+    );
   }
 
   const renderRow = (
@@ -1072,12 +1322,24 @@ function Defenses({ data }: { data: CharacterData }) {
           <span class={`def-tag ${css}`}>
             {x}
             {editing && (
-              <button class="cc-tag-x" onClick={() => removeTag(cat, x)} title={T("ccRemove")}>×</button>
+              <button
+                class="cc-tag-x"
+                onClick={() => removeTag(cat, x)}
+                title={T("ccRemove")}
+              >
+                ×
+              </button>
             )}
           </span>
         ))}
         {editing && (
-          <button class="cc-add-tag" onClick={() => addTag(cat)} title={`${T("ccAddPrefix")}${label}`}>+</button>
+          <button
+            class="cc-add-tag"
+            onClick={() => addTag(cat)}
+            title={`${T("ccAddPrefix")}${label}`}
+          >
+            +
+          </button>
         )}
       </div>
     );
@@ -1085,7 +1347,9 @@ function Defenses({ data }: { data: CharacterData }) {
 
   return (
     <div class="sec">
-      <div class="sec-h"><span class="sec-h-title">{T("ccSecDefenses")}</span></div>
+      <div class="sec-h">
+        <span class="sec-h-title">{T("ccSecDefenses")}</span>
+      </div>
       <div class="sec-body">
         {renderRow(T("ccResistances"), "resistances", "res")}
         {renderRow(T("ccImmunities"), "immunities", "imm")}
@@ -1098,12 +1362,24 @@ function Defenses({ data }: { data: CharacterData }) {
               <span class="def-tag">
                 {x}
                 {editing && (
-                  <button class="cc-tag-x" onClick={() => removeLangTool("languages", x)} title={T("ccRemove")}>×</button>
+                  <button
+                    class="cc-tag-x"
+                    onClick={() => removeLangTool("languages", x)}
+                    title={T("ccRemove")}
+                  >
+                    ×
+                  </button>
                 )}
               </span>
             ))}
             {editing && (
-              <button class="cc-add-tag" onClick={() => addLangTool("languages")} title={`${T("ccAddPrefix")}${T("ccLanguages")}`}>+</button>
+              <button
+                class="cc-add-tag"
+                onClick={() => addLangTool("languages")}
+                title={`${T("ccAddPrefix")}${T("ccLanguages")}`}
+              >
+                +
+              </button>
             )}
           </div>
         )}
@@ -1114,12 +1390,24 @@ function Defenses({ data }: { data: CharacterData }) {
               <span class="def-tag">
                 {x}
                 {editing && (
-                  <button class="cc-tag-x" onClick={() => removeLangTool("tool_proficiencies", x)} title={T("ccRemove")}>×</button>
+                  <button
+                    class="cc-tag-x"
+                    onClick={() => removeLangTool("tool_proficiencies", x)}
+                    title={T("ccRemove")}
+                  >
+                    ×
+                  </button>
                 )}
               </span>
             ))}
             {editing && (
-              <button class="cc-add-tag" onClick={() => addLangTool("tool_proficiencies")} title={`${T("ccAddPrefix")}${T("ccTools")}`}>+</button>
+              <button
+                class="cc-add-tag"
+                onClick={() => addLangTool("tool_proficiencies")}
+                title={`${T("ccAddPrefix")}${T("ccTools")}`}
+              >
+                +
+              </button>
             )}
           </div>
         )}
@@ -1148,12 +1436,28 @@ function CombatSection({ data }: { data: CharacterData }) {
     onPatch({ combat: { ...cb, weapons: next } });
   };
   const removeWeapon = (idx: number) => {
-    if (!window.confirm(T("ccConfirmDelWeapon").replace("{name}", weapons[idx]?.name || T("ccUnnamed")))) return;
+    if (
+      !window.confirm(
+        T("ccConfirmDelWeapon").replace(
+          "{name}",
+          weapons[idx]?.name || T("ccUnnamed"),
+        ),
+      )
+    )
+      return;
     const next = weapons.filter((_, i) => i !== idx);
     onPatch({ combat: { ...cb, weapons: next } });
   };
   const addWeapon = (ev?: Event) => {
-    const next = [...weapons, { name: T("ccNewWeapon"), attack_bonus: "+0", damage: "1d6", damage_type: "" }];
+    const next = [
+      ...weapons,
+      {
+        name: T("ccNewWeapon"),
+        attack_bonus: "+0",
+        damage: "1d6",
+        damage_type: "",
+      },
+    ];
     onPatch({ combat: { ...cb, weapons: next } });
     smoothScrollToNewRow(ev, ".weap");
   };
@@ -1168,7 +1472,14 @@ function CombatSection({ data }: { data: CharacterData }) {
       <div class="sec-h">
         <span class="sec-h-title">{T("ccSecCombat")}</span>
         {editing && (
-          <button class="cc-add-tag" style={{ marginLeft: "auto" }} onClick={(e: any) => addWeapon(e)} title={T("ccAddWeaponTitle")}>{T("ccAddWeaponBtn")}</button>
+          <button
+            class="cc-add-tag"
+            style={{ marginLeft: "auto" }}
+            onClick={(e: any) => addWeapon(e)}
+            title={T("ccAddWeaponTitle")}
+          >
+            {T("ccAddWeaponBtn")}
+          </button>
         )}
       </div>
       <div class="sec-body dense">
@@ -1176,31 +1487,49 @@ function CombatSection({ data }: { data: CharacterData }) {
           <div class="weap" style={{ background: "rgba(138,111,63,0.06)" }}>
             <div class="weap-name">
               🛡 {armor.name || T("ccArmor")}
-              {armorEquipped && <span class="weap-prof">{T("ccEquipped")}</span>}
+              {armorEquipped && (
+                <span class="weap-prof">{T("ccEquipped")}</span>
+              )}
               {armorAttuned && <span class="weap-prof">{T("ccAttuned")}</span>}
             </div>
             <div class="weap-atk" title={T("ccArmorAcTip")}>
               AC {armor.ac_base ?? "?"}
-              {typeof armor.dex_bonus_cap === "number" && ` (+${T("ccDexAbbr")}≤${armor.dex_bonus_cap})`}
+              {typeof armor.dex_bonus_cap === "number" &&
+                ` (+${T("ccDexAbbr")}≤${armor.dex_bonus_cap})`}
             </div>
-            <div class="weap-dmg" style={{ visibility: "hidden" }}>—</div>
+            <div class="weap-dmg" style={{ visibility: "hidden" }}>
+              —
+            </div>
             {armor.weight != null && (
-              <div class="weap-props">{T("ccWeight")} {armor.weight} {T("ccLbUnit")}</div>
+              <div class="weap-props">
+                {T("ccWeight")} {armor.weight} {T("ccLbUnit")}
+              </div>
             )}
           </div>
         )}
         {shield.ac_bonus != null && (
           <div class="weap" style={{ background: "rgba(138,111,63,0.06)" }}>
-            <div class="weap-name">⛨ {T("ccShield")}
-              <span class={`weap-prof${shieldEquipped ? "" : " is-off"}`}>{shieldEquipped ? T("ccEquipped") : T("ccUnequipped")}</span>
+            <div class="weap-name">
+              ⛨ {T("ccShield")}
+              <span class={`weap-prof${shieldEquipped ? "" : " is-off"}`}>
+                {shieldEquipped ? T("ccEquipped") : T("ccUnequipped")}
+              </span>
               {shieldAttuned && <span class="weap-prof">{T("ccAttuned")}</span>}
             </div>
             <div class="weap-atk">+{shield.ac_bonus} AC</div>
-            <div class="weap-dmg" style={{ visibility: "hidden" }}>—</div>
+            <div class="weap-dmg" style={{ visibility: "hidden" }}>
+              —
+            </div>
           </div>
         )}
         {weapons.length === 0 && !armor.name && !shield.ac_bonus && (
-          <div style={{ color: "var(--ink-mute)", fontStyle: "italic", padding: "8px" }}>
+          <div
+            style={{
+              color: "var(--ink-mute)",
+              fontStyle: "italic",
+              padding: "8px",
+            }}
+          >
             {T("ccNoWeaponsArmor")}
           </div>
         )}
@@ -1213,24 +1542,58 @@ function CombatSection({ data }: { data: CharacterData }) {
           const dmgExpr = dmgMatch ? dmgMatch[0] : dmgRaw;
           if (editing) {
             return (
-              <div class="weap" style={{ display: "grid", gridTemplateColumns: "1.4fr 0.7fr 1fr 1fr auto", gap: "6px", alignItems: "center" }}>
-                <input class="cc-edit-text" type="text"
+              <div
+                class="weap"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1.4fr 0.7fr 1fr 1fr auto",
+                  gap: "6px",
+                  alignItems: "center",
+                }}
+              >
+                <input
+                  class="cc-edit-text"
+                  type="text"
                   value={w.name ?? ""}
                   placeholder={T("ccWeaponNamePh")}
-                  onInput={(e: any) => updateWeapon(idx, { name: e.target.value })} />
-                <input class="cc-edit-text" type="text"
+                  onInput={(e: any) =>
+                    updateWeapon(idx, { name: e.target.value })
+                  }
+                />
+                <input
+                  class="cc-edit-text"
+                  type="text"
                   value={w.attack_bonus ?? ""}
                   placeholder="+5"
-                  onInput={(e: any) => updateWeapon(idx, { attack_bonus: e.target.value })} />
-                <input class="cc-edit-text" type="text"
+                  onInput={(e: any) =>
+                    updateWeapon(idx, { attack_bonus: e.target.value })
+                  }
+                />
+                <input
+                  class="cc-edit-text"
+                  type="text"
                   value={w.damage ?? ""}
                   placeholder="1d8+3"
-                  onInput={(e: any) => updateWeapon(idx, { damage: e.target.value })} />
-                <input class="cc-edit-text" type="text"
+                  onInput={(e: any) =>
+                    updateWeapon(idx, { damage: e.target.value })
+                  }
+                />
+                <input
+                  class="cc-edit-text"
+                  type="text"
                   value={w.damage_type ?? ""}
                   placeholder={T("ccDmgTypePh")}
-                  onInput={(e: any) => updateWeapon(idx, { damage_type: e.target.value })} />
-                <button class="cc-tag-x" onClick={() => removeWeapon(idx)} title={T("ccDelWeaponTitle")}>×</button>
+                  onInput={(e: any) =>
+                    updateWeapon(idx, { damage_type: e.target.value })
+                  }
+                />
+                <button
+                  class="cc-tag-x"
+                  onClick={() => removeWeapon(idx)}
+                  title={T("ccDelWeaponTitle")}
+                >
+                  ×
+                </button>
               </div>
             );
           }
@@ -1238,21 +1601,43 @@ function CombatSection({ data }: { data: CharacterData }) {
             <div class="weap">
               <div class="weap-name">
                 ⚔ {w.name || "?"}
-                {w.proficient && <span class="weap-prof">{T("ccProfShort")}</span>}
+                {w.proficient && (
+                  <span class="weap-prof">{T("ccProfShort")}</span>
+                )}
               </div>
-              <div class="weap-atk"
+              <div
+                class="weap-atk"
                 onClick={() => rollExpr(`${w.name} ${T("ccHit")}`, atkExpr)}
-                onContextMenu={(e: any) => { e.preventDefault(); rollExpr(`${w.name} ${T("ccHitAdv")}`, atkExpr, "adv"); }}
-                title={`${T("ccRollLR")} · ${atkExpr}`}>
+                onContextMenu={(e: any) => {
+                  e.preventDefault();
+                  rollExpr(`${w.name} ${T("ccHitAdv")}`, atkExpr, "adv");
+                }}
+                title={`${T("ccRollLR")} · ${atkExpr}`}
+              >
                 {w.attack_bonus || `${fmtMod(atkBn)}`}
               </div>
-              <div class="weap-dmg"
-                onClick={() => rollExpr(`${w.name} ${T("ccDamage")}${w.damage_type ? `(${w.damage_type})` : ""}`, dmgExpr)}
-                title={`${w.damage} ${w.damage_type ?? ""}`}>
-                {w.damage ?? "—"} {w.damage_type ? <span style={{ opacity: 0.7, fontSize: "10px" }}>{w.damage_type}</span> : ""}
+              <div
+                class="weap-dmg"
+                onClick={() =>
+                  rollExpr(
+                    `${w.name} ${T("ccDamage")}${w.damage_type ? `(${w.damage_type})` : ""}`,
+                    dmgExpr,
+                  )
+                }
+                title={`${w.damage} ${w.damage_type ?? ""}`}
+              >
+                {w.damage ?? "—"}{" "}
+                {w.damage_type ? (
+                  <span style={{ opacity: 0.7, fontSize: "10px" }}>
+                    {w.damage_type}
+                  </span>
+                ) : (
+                  ""
+                )}
               </div>
               {w.extra_damage && (
-                <div class="weap-dmg weap-dmg-extra"
+                <div
+                  class="weap-dmg weap-dmg-extra"
                   onClick={(e: any) => {
                     e.stopPropagation();
                     rollExpr(
@@ -1260,8 +1645,16 @@ function CombatSection({ data }: { data: CharacterData }) {
                       String(w.extra_damage).replace(/\s+/g, ""),
                     );
                   }}
-                  title={`${T("ccExtraDmgDie")} ${w.extra_damage}${w.extra_damage_type ? ` · ${w.extra_damage_type}` : ""}`}>
-                  +{w.extra_damage} {w.extra_damage_type ? <span style={{ opacity: 0.7, fontSize: "10px" }}>{w.extra_damage_type}</span> : ""}
+                  title={`${T("ccExtraDmgDie")} ${w.extra_damage}${w.extra_damage_type ? ` · ${w.extra_damage_type}` : ""}`}
+                >
+                  +{w.extra_damage}{" "}
+                  {w.extra_damage_type ? (
+                    <span style={{ opacity: 0.7, fontSize: "10px" }}>
+                      {w.extra_damage_type}
+                    </span>
+                  ) : (
+                    ""
+                  )}
                 </div>
               )}
               {(w.properties || w.weight != null || w.ammo_type) && (
@@ -1270,7 +1663,9 @@ function CombatSection({ data }: { data: CharacterData }) {
                     w.properties,
                     w.weight != null ? `${w.weight} ${T("ccLbUnit")}` : null,
                     w.ammo_type ? `${T("ccAmmo")}:${w.ammo_type}` : null,
-                  ].filter(Boolean).join(" · ")}
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </div>
               )}
             </div>
@@ -1286,16 +1681,20 @@ function SpellsSection({ data }: { data: CharacterData }) {
   const sp = data.spellcasting || {};
   const cs = data.core_stats || {};
   const slots = sp.spell_slots || {};
-  const cantrips: any[] = Array.isArray(sp.cantrips_known) ? sp.cantrips_known : [];
+  const cantrips: any[] = Array.isArray(sp.cantrips_known)
+    ? sp.cantrips_known
+    : [];
   const always: any[] = Array.isArray(sp.always_known) ? sp.always_known : [];
   const prepared: any[] = Array.isArray(sp.prepared) ? sp.prepared : [];
 
   const [openSpell, setOpenSpell] = useState<string | null>(null);
   // 2026-05-14 (#14 f2) — which list + level the SpellPickModal is
   // currently adding into. null = modal closed.
-  const [pickFor, setPickFor] = useState<
-    { slot: "cantrips_known" | "always_known" | "prepared"; level: number; ev?: Event } | null
-  >(null);
+  const [pickFor, setPickFor] = useState<{
+    slot: "cantrips_known" | "always_known" | "prepared";
+    level: number;
+    ev?: Event;
+  } | null>(null);
 
   // 2026-05-14 (#14 follow-up / f2) — edit helpers. SpellsSection has
   // three parallel lists (cantrips_known / always_known / prepared);
@@ -1318,12 +1717,32 @@ function SpellsSection({ data }: { data: CharacterData }) {
     setPickFor(null);
     smoothScrollToNewRow(ev, ".spell");
   };
-  const removeSpell = (slot: "cantrips_known" | "always_known" | "prepared", idx: number) => {
+  const removeSpell = (
+    slot: "cantrips_known" | "always_known" | "prepared",
+    idx: number,
+  ) => {
     const cur = Array.isArray((sp as any)[slot]) ? (sp as any)[slot] : [];
-    if (!window.confirm(T("ccConfirmDelItem").replace("{name}", cur[idx]?.name || T("ccUnnamed")))) return;
-    onPatch({ spellcasting: { ...sp, [slot]: cur.filter((_: any, i: number) => i !== idx) } });
+    if (
+      !window.confirm(
+        T("ccConfirmDelItem").replace(
+          "{name}",
+          cur[idx]?.name || T("ccUnnamed"),
+        ),
+      )
+    )
+      return;
+    onPatch({
+      spellcasting: {
+        ...sp,
+        [slot]: cur.filter((_: any, i: number) => i !== idx),
+      },
+    });
   };
-  const patchSpell = (slot: "cantrips_known" | "always_known" | "prepared", idx: number, patch: Record<string, any>) => {
+  const patchSpell = (
+    slot: "cantrips_known" | "always_known" | "prepared",
+    idx: number,
+    patch: Record<string, any>,
+  ) => {
     const cur = Array.isArray((sp as any)[slot]) ? (sp as any)[slot] : [];
     const next = [...cur];
     next[idx] = { ...next[idx], ...patch };
@@ -1332,11 +1751,21 @@ function SpellsSection({ data }: { data: CharacterData }) {
   const setSlot = (lv: number, which: "current" | "max", v: number) => {
     const cur = (slots as any)[String(lv)] || {};
     onPatch({
-      spellcasting: { ...sp, spell_slots: { ...(slots || {}), [String(lv)]: { ...cur, [which]: v } } },
+      spellcasting: {
+        ...sp,
+        spell_slots: { ...(slots || {}), [String(lv)]: { ...cur, [which]: v } },
+      },
     });
   };
 
-  if (!editing && !cantrips.length && !always.length && !prepared.length && !sp.attack_bonus && !sp.save_dc) {
+  if (
+    !editing &&
+    !cantrips.length &&
+    !always.length &&
+    !prepared.length &&
+    !sp.attack_bonus &&
+    !sp.save_dc
+  ) {
     return null;
   }
 
@@ -1348,7 +1777,12 @@ function SpellsSection({ data }: { data: CharacterData }) {
     (groups[g] ??= []).push(s);
   }
 
-  const renderSpell = (s: any, idx: number, prefix: string, slot?: "cantrips_known" | "always_known" | "prepared") => {
+  const renderSpell = (
+    s: any,
+    idx: number,
+    prefix: string,
+    slot?: "cantrips_known" | "always_known" | "prepared",
+  ) => {
     const key = `${prefix}-${idx}`;
     const isOpen = openSpell === key;
     // 2026-05-14 (#14 f3) — edit-mode spell row. Per user spec spells
@@ -1361,33 +1795,52 @@ function SpellsSection({ data }: { data: CharacterData }) {
     // which searches the library inline.
     if (editing && slot) {
       return (
-        <div class="spell" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-          <input class="cc-edit-num" type="number"
+        <div
+          class="spell"
+          style={{ display: "flex", gap: "6px", alignItems: "center" }}
+        >
+          <input
+            class="cc-edit-num"
+            type="number"
             style={{ width: "48px", textAlign: "center" }}
             value={s.level ?? 0}
             onInput={(e: any) => {
               const n = parseInt(e.target.value, 10);
               if (Number.isFinite(n)) patchSpell(slot, idx, { level: n });
             }}
-            title={T("ccSpellLevelTip")} />
-          <input class="cc-edit-text" type="text"
+            title={T("ccSpellLevelTip")}
+          />
+          <input
+            class="cc-edit-text"
+            type="text"
             style={{ flex: "1" }}
             value={s.name ?? ""}
             placeholder={T("ccSpellNamePh")}
-            onInput={(e: any) => patchSpell(slot, idx, { name: e.target.value })} />
-          <button class="cc-tag-x"
+            onInput={(e: any) =>
+              patchSpell(slot, idx, { name: e.target.value })
+            }
+          />
+          <button
+            class="cc-tag-x"
             onClick={() => removeSpell(slot, idx)}
-            title={T("ccDelete")}>×</button>
+            title={T("ccDelete")}
+          >
+            ×
+          </button>
         </div>
       );
     }
     return (
       <>
-        <div class="spell"
+        <div
+          class="spell"
           onClick={() => setOpenSpell(isOpen ? null : key)}
-          title={T("ccSpellExpandTip")}>
+          title={T("ccSpellExpandTip")}
+        >
           <span class={`spell-lv ${(s.level ?? 0) === 0 ? "cantrip" : ""}`}>
-            {(s.level ?? 0) === 0 ? T("ccCantripBadge") : `${s.level}${T("ccRing")}`}
+            {(s.level ?? 0) === 0
+              ? T("ccCantripBadge")
+              : `${s.level}${T("ccRing")}`}
           </span>
           {/* 2026-05-15 — the spell-name used to be its own clickable
               search trigger (`onClick → fireNameSearch + stopPropagation`).
@@ -1397,18 +1850,34 @@ function SpellsSection({ data }: { data: CharacterData }) {
               (including the name) open the detail panel. Players who
               still want to search can use the global search bar. */}
           <span class="spell-name">{s.name}</span>
-          {s.meta?.concentration && <span class="spell-tag conc">{T("ccConcentration")}</span>}
-          {s.meta?.ritual && <span class="spell-tag ritual">{T("ccRitual")}</span>}
+          {s.meta?.concentration && (
+            <span class="spell-tag conc">{T("ccConcentration")}</span>
+          )}
+          {s.meta?.ritual && (
+            <span class="spell-tag ritual">{T("ccRitual")}</span>
+          )}
         </div>
         {isOpen && s.description && (
           <div class="spell-detail">
             {s.meta && (
               <div class="meta">
                 {s.meta.school && <span>{s.meta.school}</span>}
-                {s.meta.casting_time && <span>{T("ccCastingTime")} {s.meta.casting_time}</span>}
-                {s.meta.range && <span>{T("ccRange")} {s.meta.range}</span>}
+                {s.meta.casting_time && (
+                  <span>
+                    {T("ccCastingTime")} {s.meta.casting_time}
+                  </span>
+                )}
+                {s.meta.range && (
+                  <span>
+                    {T("ccRange")} {s.meta.range}
+                  </span>
+                )}
                 {s.meta.components && <span>{s.meta.components}</span>}
-                {s.meta.duration && <span>{T("ccDuration")} {s.meta.duration}</span>}
+                {s.meta.duration && (
+                  <span>
+                    {T("ccDuration")} {s.meta.duration}
+                  </span>
+                )}
                 {s.meta.source && <span>《{s.meta.source}》</span>}
               </div>
             )}
@@ -1425,17 +1894,20 @@ function SpellsSection({ data }: { data: CharacterData }) {
         <span class="sec-h-title">{T("ccSecSpells")}</span>
         {(sp.spellcasting_ability || sp.save_dc) && (
           <span class="sec-h-meta">
-            {sp.spellcasting_ability && `${T("ccSpellAbility")}: ${sp.spellcasting_ability}`}
+            {sp.spellcasting_ability &&
+              `${T("ccSpellAbility")}: ${sp.spellcasting_ability}`}
             {sp.save_dc != null && `  ·  ${T("ccSaveDC")}: ${sp.save_dc}`}
-            {sp.attack_bonus && `  ·  ${T("ccSpellAttack")}: ${sp.attack_bonus}`}
-            {sp.max_prepared != null && `  ·  ${T("ccMaxPrepared")}: ${sp.max_prepared}`}
+            {sp.attack_bonus &&
+              `  ·  ${T("ccSpellAttack")}: ${sp.attack_bonus}`}
+            {sp.max_prepared != null &&
+              `  ·  ${T("ccMaxPrepared")}: ${sp.max_prepared}`}
           </span>
         )}
       </div>
       <div class="sec-body">
         {/* Spell slots */}
         <div class="spell-slots">
-          {[1,2,3,4,5,6,7,8,9].map((lv) => {
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((lv) => {
             const s = slots[String(lv)];
             const has = s && (s.max ?? 0) > 0;
             if (editing) {
@@ -1444,27 +1916,48 @@ function SpellsSection({ data }: { data: CharacterData }) {
               // level so the panel hides it in view mode again.
               return (
                 <div class={`slot ${has ? "has-slots" : ""}`}>
-                  <div class="slot-lv">{lv}{T("ccRing")}</div>
-                  <input class="cc-edit-num" type="number"
-                    style={{ width: "100%", textAlign: "center", fontSize: "13px" }}
+                  <div class="slot-lv">
+                    {lv}
+                    {T("ccRing")}
+                  </div>
+                  <input
+                    class="cc-edit-num"
+                    type="number"
+                    style={{
+                      width: "100%",
+                      textAlign: "center",
+                      fontSize: "13px",
+                    }}
                     value={s?.current ?? 0}
                     onInput={(e: any) => {
                       const n = parseInt(e.target.value, 10);
                       if (Number.isFinite(n)) setSlot(lv, "current", n);
-                    }} />
-                  <input class="cc-edit-num" type="number"
-                    style={{ width: "100%", textAlign: "center", fontSize: "11px", opacity: 0.8 }}
+                    }}
+                  />
+                  <input
+                    class="cc-edit-num"
+                    type="number"
+                    style={{
+                      width: "100%",
+                      textAlign: "center",
+                      fontSize: "11px",
+                      opacity: 0.8,
+                    }}
                     value={s?.max ?? 0}
                     onInput={(e: any) => {
                       const n = parseInt(e.target.value, 10);
                       if (Number.isFinite(n)) setSlot(lv, "max", n);
-                    }} />
+                    }}
+                  />
                 </div>
               );
             }
             return (
               <div class={`slot ${has ? "has-slots" : ""}`}>
-                <div class="slot-lv">{lv}{T("ccRing")}</div>
+                <div class="slot-lv">
+                  {lv}
+                  {T("ccRing")}
+                </div>
                 <div class="slot-cur">{has ? (s.current ?? 0) : "—"}</div>
                 <div class="slot-max">{has ? `/${s.max}` : ""}</div>
               </div>
@@ -1479,30 +1972,53 @@ function SpellsSection({ data }: { data: CharacterData }) {
         {/* Cantrips */}
         {(editing || !!cantrips.length) && (
           <div class="spell-group">
-            <div class="spell-group-h" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <div
+              class="spell-group-h"
+              style={{ display: "flex", alignItems: "center", gap: "6px" }}
+            >
               <span>{T("ccCantrips")}</span>
               {editing && (
-                <button class="cc-add-tag"
+                <button
+                  class="cc-add-tag"
                   onClick={(e: any) => openSpellPicker("cantrips_known", 0, e)}
-                  title={T("ccAddCantripTitle")}>+</button>
+                  title={T("ccAddCantripTitle")}
+                >
+                  +
+                </button>
               )}
             </div>
-            {cantrips.map((s, i) => renderSpell(s, i, "cantrip", editing ? "cantrips_known" : undefined))}
+            {cantrips.map((s, i) =>
+              renderSpell(
+                s,
+                i,
+                "cantrip",
+                editing ? "cantrips_known" : undefined,
+              ),
+            )}
           </div>
         )}
 
         {/* Always known */}
         {(editing || !!always.length) && (
           <div class="spell-group">
-            <div class="spell-group-h" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <div
+              class="spell-group-h"
+              style={{ display: "flex", alignItems: "center", gap: "6px" }}
+            >
               <span>{T("ccAlwaysPrepared")}</span>
               {editing && (
-                <button class="cc-add-tag"
+                <button
+                  class="cc-add-tag"
                   onClick={(e: any) => openSpellPicker("always_known", 1, e)}
-                  title={T("ccAddAlwaysTitle")}>+</button>
+                  title={T("ccAddAlwaysTitle")}
+                >
+                  +
+                </button>
               )}
             </div>
-            {always.map((s, i) => renderSpell(s, i, "always", editing ? "always_known" : undefined))}
+            {always.map((s, i) =>
+              renderSpell(s, i, "always", editing ? "always_known" : undefined),
+            )}
           </div>
         )}
 
@@ -1511,33 +2027,43 @@ function SpellsSection({ data }: { data: CharacterData }) {
             in edit mode we flatten into one list to keep the add/remove
             UX simple. The group field can still be set manually via the
             paste-JSON path. */}
-        {(editing || Object.keys(groups).length > 0) && (
-          editing ? (
+        {(editing || Object.keys(groups).length > 0) &&
+          (editing ? (
             <div class="spell-group">
-              <div class="spell-group-h" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <div
+                class="spell-group-h"
+                style={{ display: "flex", alignItems: "center", gap: "6px" }}
+              >
                 <span>{T("ccPrepared")}</span>
-                <button class="cc-add-tag"
+                <button
+                  class="cc-add-tag"
                   onClick={(e: any) => openSpellPicker("prepared", 1, e)}
-                  title={T("ccAddPreparedTitle")}>+</button>
+                  title={T("ccAddPreparedTitle")}
+                >
+                  +
+                </button>
               </div>
               {prepared.map((s, i) => renderSpell(s, i, "p", "prepared"))}
             </div>
           ) : (
             Object.entries(groups).map(([g, list]) => (
               <div class="spell-group">
-                <div class="spell-group-h">{T("ccPrepared")} · {T("ccGroup")} {g}</div>
+                <div class="spell-group-h">
+                  {T("ccPrepared")} · {T("ccGroup")} {g}
+                </div>
                 {list.map((s, i) => renderSpell(s, i, `g${g}`))}
               </div>
             ))
-          )
-        )}
+          ))}
       </div>
       {pickFor && (
         <SpellPickModal
           title={
-            pickFor.slot === "cantrips_known" ? T("ccAddCantripModal")
-              : pickFor.slot === "always_known" ? T("ccAddAlwaysModal")
-              : T("ccAddPreparedModal")
+            pickFor.slot === "cantrips_known"
+              ? T("ccAddCantripModal")
+              : pickFor.slot === "always_known"
+                ? T("ccAddAlwaysModal")
+                : T("ccAddPreparedModal")
           }
           onCancel={() => setPickFor(null)}
           onPick={commitSpellPick}
@@ -1548,7 +2074,12 @@ function SpellsSection({ data }: { data: CharacterData }) {
 }
 
 function FeatureBlock({
-  title, items, slot, onAdd, onRemove, onPatchItem,
+  title,
+  items,
+  slot,
+  onAdd,
+  onRemove,
+  onPatchItem,
 }: {
   title: string;
   items: any[];
@@ -1572,10 +2103,24 @@ function FeatureBlock({
   if (!editing && !items?.length) return null;
   return (
     <div style={{ marginBottom: "10px" }}>
-      <div class="spell-group-h" style={{ marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+      <div
+        class="spell-group-h"
+        style={{
+          marginBottom: "6px",
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+        }}
+      >
         <span>{title}</span>
         {editing && slot && (
-          <button class="cc-add-tag" onClick={(e: any) => onAdd?.(slot, e)} title={`${T("ccAddPrefix")}${title}`}>+</button>
+          <button
+            class="cc-add-tag"
+            onClick={(e: any) => onAdd?.(slot, e)}
+            title={`${T("ccAddPrefix")}${title}`}
+          >
+            +
+          </button>
         )}
       </div>
       {items.map((f, i) => {
@@ -1583,13 +2128,23 @@ function FeatureBlock({
         if (editing && slot) {
           return (
             <div class="feat is-open" style={{ marginBottom: "6px" }}>
-              <div class="feat-h" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                <input class="cc-edit-text" type="text"
+              <div
+                class="feat-h"
+                style={{ display: "flex", gap: "6px", alignItems: "center" }}
+              >
+                <input
+                  class="cc-edit-text"
+                  type="text"
                   style={{ flex: "1" }}
                   value={f.name ?? ""}
                   placeholder={T("ccNamePh")}
-                  onInput={(e: any) => onPatchItem?.(slot, i, { name: e.target.value })} />
-                <input class="cc-edit-num" type="number"
+                  onInput={(e: any) =>
+                    onPatchItem?.(slot, i, { name: e.target.value })
+                  }
+                />
+                <input
+                  class="cc-edit-num"
+                  type="number"
                   style={{ width: "54px" }}
                   value={f.level ?? ""}
                   placeholder="Lv"
@@ -1597,14 +2152,31 @@ function FeatureBlock({
                     const v = e.target.value;
                     const n = v === "" ? null : parseInt(v, 10);
                     onPatchItem?.(slot, i, { level: n });
-                  }} />
-                <button class="cc-tag-x" onClick={() => onRemove?.(slot, i)} title={T("ccDelete")}>×</button>
+                  }}
+                />
+                <button
+                  class="cc-tag-x"
+                  onClick={() => onRemove?.(slot, i)}
+                  title={T("ccDelete")}
+                >
+                  ×
+                </button>
               </div>
-              <textarea class="cc-edit-text"
-                style={{ width: "100%", minHeight: "60px", marginTop: "4px", fontFamily: "inherit", fontSize: "12px" }}
+              <textarea
+                class="cc-edit-text"
+                style={{
+                  width: "100%",
+                  minHeight: "60px",
+                  marginTop: "4px",
+                  fontFamily: "inherit",
+                  fontSize: "12px",
+                }}
                 value={f.description ?? ""}
                 placeholder={T("ccDescPh")}
-                onInput={(e: any) => onPatchItem?.(slot, i, { description: e.target.value })} />
+                onInput={(e: any) =>
+                  onPatchItem?.(slot, i, { description: e.target.value })
+                }
+              />
             </div>
           );
         }
@@ -1617,7 +2189,8 @@ function FeatureBlock({
                 // again to re-open.
                 setClosedIdx((prev) => {
                   const next = new Set(prev);
-                  if (next.has(i)) next.delete(i); else next.add(i);
+                  if (next.has(i)) next.delete(i);
+                  else next.add(i);
                   return next;
                 });
               }}
@@ -1629,11 +2202,23 @@ function FeatureBlock({
                     anywhere on the header now collapses/expands. */}
                 <span class="srch-name">{f.name}</span>
                 {f.level != null && <span class="lv">Lv{f.level}</span>}
-                {f.category && <span class="lv" style={{ borderColor: "var(--teal-soft)", color: "var(--teal)" }}>{f.category}</span>}
+                {f.category && (
+                  <span
+                    class="lv"
+                    style={{
+                      borderColor: "var(--teal-soft)",
+                      color: "var(--teal)",
+                    }}
+                  >
+                    {f.category}
+                  </span>
+                )}
               </span>
               <span class="feat-toggle">▼</span>
             </div>
-            {isOpen && f.description && <div class="feat-body">{f.description}</div>}
+            {isOpen && f.description && (
+              <div class="feat-body">{f.description}</div>
+            )}
           </div>
         );
       })}
@@ -1648,22 +2233,33 @@ function FeaturesSection({ data }: { data: CharacterData }) {
   const race: any[] = Array.isArray(f.race_features) ? f.race_features : [];
   const feats: any[] = Array.isArray(f.feats) ? f.feats : [];
   // New schema fields (v0.3+, may not exist in older data):
-  const fightingStyle: any[] = Array.isArray(f.fighting_style_feats) ? f.fighting_style_feats : [];
-  const special: any[] = Array.isArray(f.special_abilities) ? f.special_abilities : [];
+  const fightingStyle: any[] = Array.isArray(f.fighting_style_feats)
+    ? f.fighting_style_feats
+    : [];
+  const special: any[] = Array.isArray(f.special_abilities)
+    ? f.special_abilities
+    : [];
 
   // 2026-05-14 (#14) — edit hooks. Each block targets a different
   // slot in data.features. We expose a single add / remove / patch
   // triad that the FeatureBlock components call with their slot key.
   const addItem = (slot: string, ev?: Event) => {
     const cur = Array.isArray((f as any)[slot]) ? (f as any)[slot] : [];
-    onPatch({ features: { ...f, [slot]: [...cur, { name: T("ccNewEntry"), description: "" }] } });
+    onPatch({
+      features: {
+        ...f,
+        [slot]: [...cur, { name: T("ccNewEntry"), description: "" }],
+      },
+    });
     smoothScrollToNewRow(ev, ".feat");
   };
   const removeItem = (slot: string, idx: number) => {
     const cur = Array.isArray((f as any)[slot]) ? (f as any)[slot] : [];
     const name = cur[idx]?.name || T("ccUnnamed");
     if (!window.confirm(T("ccConfirmDelItem").replace("{name}", name))) return;
-    onPatch({ features: { ...f, [slot]: cur.filter((_: any, i: number) => i !== idx) } });
+    onPatch({
+      features: { ...f, [slot]: cur.filter((_: any, i: number) => i !== idx) },
+    });
   };
   const patchItem = (slot: string, idx: number, patch: Record<string, any>) => {
     const cur = Array.isArray((f as any)[slot]) ? (f as any)[slot] : [];
@@ -1672,24 +2268,63 @@ function FeaturesSection({ data }: { data: CharacterData }) {
     onPatch({ features: { ...f, [slot]: next } });
   };
 
-  if (!editing && !cls.length && !race.length && !feats.length && !fightingStyle.length && !special.length) {
+  if (
+    !editing &&
+    !cls.length &&
+    !race.length &&
+    !feats.length &&
+    !fightingStyle.length &&
+    !special.length
+  ) {
     return null;
   }
 
   return (
     <div class="sec">
-      <div class="sec-h"><span class="sec-h-title">{T("ccSecFeatures")}</span></div>
+      <div class="sec-h">
+        <span class="sec-h-title">{T("ccSecFeatures")}</span>
+      </div>
       <div class="sec-body">
-        <FeatureBlock title={T("ccClassFeatures")} items={cls}
-          slot="class_features" onAdd={addItem} onRemove={removeItem} onPatchItem={patchItem} />
-        <FeatureBlock title={T("ccRaceFeatures")} items={race}
-          slot="race_features" onAdd={addItem} onRemove={removeItem} onPatchItem={patchItem} />
-        <FeatureBlock title={T("ccFightingStyle")} items={fightingStyle}
-          slot="fighting_style_feats" onAdd={addItem} onRemove={removeItem} onPatchItem={patchItem} />
-        <FeatureBlock title={T("ccSpecialAbilities")} items={special}
-          slot="special_abilities" onAdd={addItem} onRemove={removeItem} onPatchItem={patchItem} />
-        <FeatureBlock title={T("ccFeats")} items={feats}
-          slot="feats" onAdd={addItem} onRemove={removeItem} onPatchItem={patchItem} />
+        <FeatureBlock
+          title={T("ccClassFeatures")}
+          items={cls}
+          slot="class_features"
+          onAdd={addItem}
+          onRemove={removeItem}
+          onPatchItem={patchItem}
+        />
+        <FeatureBlock
+          title={T("ccRaceFeatures")}
+          items={race}
+          slot="race_features"
+          onAdd={addItem}
+          onRemove={removeItem}
+          onPatchItem={patchItem}
+        />
+        <FeatureBlock
+          title={T("ccFightingStyle")}
+          items={fightingStyle}
+          slot="fighting_style_feats"
+          onAdd={addItem}
+          onRemove={removeItem}
+          onPatchItem={patchItem}
+        />
+        <FeatureBlock
+          title={T("ccSpecialAbilities")}
+          items={special}
+          slot="special_abilities"
+          onAdd={addItem}
+          onRemove={removeItem}
+          onPatchItem={patchItem}
+        />
+        <FeatureBlock
+          title={T("ccFeats")}
+          items={feats}
+          slot="feats"
+          onAdd={addItem}
+          onRemove={removeItem}
+          onPatchItem={patchItem}
+        />
       </div>
     </div>
   );
@@ -1714,7 +2349,8 @@ function BackgroundSection({ data }: { data: CharacterData }) {
     { labelKey: "ccBgStory", key: "story", body: bg.story },
     { labelKey: "ccBgOther", key: "description", body: bg.description },
   ];
-  const setBg = (k: string, v: any) => onPatch({ background: { ...bg, [k]: v } });
+  const setBg = (k: string, v: any) =>
+    onPatch({ background: { ...bg, [k]: v } });
   const setId = (k: string, v: any) => onPatch({ identity: { ...id, [k]: v } });
 
   const visibleBlocks = editing ? blocks : blocks.filter((b) => b.body);
@@ -1723,40 +2359,133 @@ function BackgroundSection({ data }: { data: CharacterData }) {
     <div class="sec">
       <div class="sec-h">
         <span class="sec-h-title">{T("ccSecBackground")}</span>
-        {!editing && bg.background_name && <span class="sec-h-meta">{T("ccBackgroundLabel")}{bg.background_name}</span>}
+        {!editing && bg.background_name && (
+          <span class="sec-h-meta">
+            {T("ccBackgroundLabel")}
+            {bg.background_name}
+          </span>
+        )}
       </div>
       <div class="sec-body">
         {editing && (
           <div class="def-row" style={{ marginBottom: "10px" }}>
             <span class="def-label">{T("ccBackgroundNameField")}</span>
-            <input class="cc-edit-text" type="text" style={{ flex: "1" }}
+            <input
+              class="cc-edit-text"
+              type="text"
+              style={{ flex: "1" }}
               value={bg.background_name ?? ""}
               placeholder={T("ccBackgroundNamePh")}
-              onInput={(e: any) => setBg("background_name", e.target.value)} />
+              onInput={(e: any) => setBg("background_name", e.target.value)}
+            />
           </div>
         )}
         <dl class="kv" style={{ marginBottom: "12px" }}>
-          {(editing || id.player) && (<><dt>{T("ccPlayer")}</dt><dd>{editing
-            ? <input class="cc-edit-text" type="text" value={id.player ?? ""} onInput={(e: any) => setId("player", e.target.value)} />
-            : id.player}</dd></>)}
-          {(editing || id.gender) && (<><dt>{T("ccGender")}</dt><dd>{editing
-            ? <input class="cc-edit-text" type="text" value={id.gender ?? ""} onInput={(e: any) => setId("gender", e.target.value)} />
-            : id.gender}</dd></>)}
-          {(editing || id.age != null) && (<><dt>{T("ccAge")}</dt><dd>{editing
-            ? <input class="cc-edit-num" type="number" value={id.age ?? ""} onInput={(e: any) => {
-                const v = e.target.value;
-                setId("age", v === "" ? null : parseInt(v, 10));
-              }} />
-            : id.age}</dd></>)}
-          {(editing || id.height) && (<><dt>{T("ccHeight")}</dt><dd>{editing
-            ? <input class="cc-edit-text" type="text" value={id.height ?? ""} onInput={(e: any) => setId("height", e.target.value)} />
-            : id.height}</dd></>)}
-          {(editing || id.weight) && (<><dt>{T("ccBodyWeight")}</dt><dd>{editing
-            ? <input class="cc-edit-text" type="text" value={id.weight ?? ""} onInput={(e: any) => setId("weight", e.target.value)} />
-            : id.weight}</dd></>)}
-          {(editing || id.hometown) && (<><dt>{T("ccHometown")}</dt><dd>{editing
-            ? <input class="cc-edit-text" type="text" value={id.hometown ?? ""} onInput={(e: any) => setId("hometown", e.target.value)} />
-            : id.hometown}</dd></>)}
+          {(editing || id.player) && (
+            <>
+              <dt>{T("ccPlayer")}</dt>
+              <dd>
+                {editing ? (
+                  <input
+                    class="cc-edit-text"
+                    type="text"
+                    value={id.player ?? ""}
+                    onInput={(e: any) => setId("player", e.target.value)}
+                  />
+                ) : (
+                  id.player
+                )}
+              </dd>
+            </>
+          )}
+          {(editing || id.gender) && (
+            <>
+              <dt>{T("ccGender")}</dt>
+              <dd>
+                {editing ? (
+                  <input
+                    class="cc-edit-text"
+                    type="text"
+                    value={id.gender ?? ""}
+                    onInput={(e: any) => setId("gender", e.target.value)}
+                  />
+                ) : (
+                  id.gender
+                )}
+              </dd>
+            </>
+          )}
+          {(editing || id.age != null) && (
+            <>
+              <dt>{T("ccAge")}</dt>
+              <dd>
+                {editing ? (
+                  <input
+                    class="cc-edit-num"
+                    type="number"
+                    value={id.age ?? ""}
+                    onInput={(e: any) => {
+                      const v = e.target.value;
+                      setId("age", v === "" ? null : parseInt(v, 10));
+                    }}
+                  />
+                ) : (
+                  id.age
+                )}
+              </dd>
+            </>
+          )}
+          {(editing || id.height) && (
+            <>
+              <dt>{T("ccHeight")}</dt>
+              <dd>
+                {editing ? (
+                  <input
+                    class="cc-edit-text"
+                    type="text"
+                    value={id.height ?? ""}
+                    onInput={(e: any) => setId("height", e.target.value)}
+                  />
+                ) : (
+                  id.height
+                )}
+              </dd>
+            </>
+          )}
+          {(editing || id.weight) && (
+            <>
+              <dt>{T("ccBodyWeight")}</dt>
+              <dd>
+                {editing ? (
+                  <input
+                    class="cc-edit-text"
+                    type="text"
+                    value={id.weight ?? ""}
+                    onInput={(e: any) => setId("weight", e.target.value)}
+                  />
+                ) : (
+                  id.weight
+                )}
+              </dd>
+            </>
+          )}
+          {(editing || id.hometown) && (
+            <>
+              <dt>{T("ccHometown")}</dt>
+              <dd>
+                {editing ? (
+                  <input
+                    class="cc-edit-text"
+                    type="text"
+                    value={id.hometown ?? ""}
+                    onInput={(e: any) => setId("hometown", e.target.value)}
+                  />
+                ) : (
+                  id.hometown
+                )}
+              </dd>
+            </>
+          )}
         </dl>
         {!!visibleBlocks.length && (
           <div class="bio-grid">
@@ -1765,11 +2494,18 @@ function BackgroundSection({ data }: { data: CharacterData }) {
                 <div class="bio-block-h">{T(b.labelKey)}</div>
                 <div class="bio-block-body">
                   {editing ? (
-                    <textarea class="cc-edit-text"
-                      style={{ width: "100%", minHeight: "72px", fontFamily: "inherit", fontSize: "12px" }}
+                    <textarea
+                      class="cc-edit-text"
+                      style={{
+                        width: "100%",
+                        minHeight: "72px",
+                        fontFamily: "inherit",
+                        fontSize: "12px",
+                      }}
                       value={b.body ?? ""}
                       placeholder={`${T(b.labelKey)}…`}
-                      onInput={(e: any) => setBg(b.key, e.target.value)} />
+                      onInput={(e: any) => setBg(b.key, e.target.value)}
+                    />
                   ) : (
                     b.body
                   )}
@@ -1779,7 +2515,9 @@ function BackgroundSection({ data }: { data: CharacterData }) {
           </div>
         )}
         {!editing && !visibleBlocks.length && (
-          <div style={{ color: "var(--ink-mute)", fontStyle: "italic" }}>{T("ccNoBackground")}</div>
+          <div style={{ color: "var(--ink-mute)", fontStyle: "italic" }}>
+            {T("ccNoBackground")}
+          </div>
         )}
       </div>
     </div>
@@ -1820,7 +2558,9 @@ function InventorySection({ data }: { data: CharacterData }) {
   // user can actually see what's in their pack.
   const items: any[] = editing ? rawItems : [...rawItems, ...containerItems];
   // Wondrous items (奇物) — new schema field, ships when present.
-  const wondrous: any[] = Array.isArray(inv.wondrous_items) ? inv.wondrous_items : [];
+  const wondrous: any[] = Array.isArray(inv.wondrous_items)
+    ? inv.wondrous_items
+    : [];
 
   // 2026-05-14 (#14) — inventory edit helpers.
   const setWallet = (k: "pp" | "gp" | "ep" | "sp" | "cp", v: number) => {
@@ -1834,12 +2574,23 @@ function InventorySection({ data }: { data: CharacterData }) {
     onPatch({ inventory: { ...inv, items: next } });
   };
   const removeItem = (idx: number) => {
-    if (!window.confirm(T("ccConfirmDelItem").replace("{name}", items[idx]?.name || T("ccUnnamed")))) return;
+    if (
+      !window.confirm(
+        T("ccConfirmDelItem").replace(
+          "{name}",
+          items[idx]?.name || T("ccUnnamed"),
+        ),
+      )
+    )
+      return;
     const next = items.filter((_, i) => i !== idx);
     onPatch({ inventory: { ...inv, items: next } });
   };
   const addItem = (ev?: Event) => {
-    const next = [...items, { name: T("ccNewItem"), weight: null, location: "", description: "" }];
+    const next = [
+      ...items,
+      { name: T("ccNewItem"), weight: null, location: "", description: "" },
+    ];
     onPatch({ inventory: { ...inv, items: next } });
     smoothScrollToNewRow(ev, ".weap");
   };
@@ -1851,30 +2602,49 @@ function InventorySection({ data }: { data: CharacterData }) {
     smoothScrollToNewRow(ev, ".feat");
   };
   const removeWondrous = (_slot: string, idx: number) => {
-    if (!window.confirm(T("ccConfirmDelItem").replace("{name}", wondrous[idx]?.name || T("ccUnnamed")))) return;
+    if (
+      !window.confirm(
+        T("ccConfirmDelItem").replace(
+          "{name}",
+          wondrous[idx]?.name || T("ccUnnamed"),
+        ),
+      )
+    )
+      return;
     const next = wondrous.filter((_, i) => i !== idx);
     onPatch({ inventory: { ...inv, wondrous_items: next } });
   };
-  const patchWondrous = (_slot: string, idx: number, patch: Record<string, any>) => {
+  const patchWondrous = (
+    _slot: string,
+    idx: number,
+    patch: Record<string, any>,
+  ) => {
     const next = [...wondrous];
     next[idx] = { ...next[idx], ...patch };
     onPatch({ inventory: { ...inv, wondrous_items: next } });
   };
 
-  const editNum = (label: string, key: "pp" | "gp" | "ep" | "sp" | "cp", cls: string) => (
+  const editNum = (
+    label: string,
+    key: "pp" | "gp" | "ep" | "sp" | "cp",
+    cls: string,
+  ) => (
     <div class={`coin ${cls}`}>
       <div class="coin-name">{label}</div>
       <div class="coin-val">
         {editing ? (
-          <input class="cc-edit-num" type="number"
+          <input
+            class="cc-edit-num"
+            type="number"
             style={{ width: "60px", textAlign: "center" }}
             value={(w as any)[key] ?? 0}
             onInput={(e: any) => {
               const n = parseInt(e.target.value, 10);
               if (Number.isFinite(n)) setWallet(key, n);
-            }} />
+            }}
+          />
         ) : (
-          (w as any)[key] ?? 0
+          ((w as any)[key] ?? 0)
         )}
       </div>
     </div>
@@ -1884,9 +2654,20 @@ function InventorySection({ data }: { data: CharacterData }) {
     <div class="sec">
       <div class="sec-h">
         <span class="sec-h-title">{T("ccSecInventory")}</span>
-        {!editing && inv.currency?.total_gp_raw && <span class="sec-h-meta">{T("ccTotalValue")} {inv.currency.total_gp_raw}</span>}
+        {!editing && inv.currency?.total_gp_raw && (
+          <span class="sec-h-meta">
+            {T("ccTotalValue")} {inv.currency.total_gp_raw}
+          </span>
+        )}
         {editing && (
-          <button class="cc-add-tag" style={{ marginLeft: "auto" }} onClick={(e: any) => addItem(e)} title={T("ccAddItemTitle")}>{T("ccAddItemBtn")}</button>
+          <button
+            class="cc-add-tag"
+            style={{ marginLeft: "auto" }}
+            onClick={(e: any) => addItem(e)}
+            title={T("ccAddItemTitle")}
+          >
+            {T("ccAddItemBtn")}
+          </button>
         )}
       </div>
       <div class="sec-body">
@@ -1900,12 +2681,26 @@ function InventorySection({ data }: { data: CharacterData }) {
 
         {(enc.equipment_weight != null || enc.total_weight != null) && (
           <div style={{ marginBottom: "10px" }}>
-            <div class="bio-block-h" style={{ marginBottom: "5px" }}>{T("ccEncumbrance")}</div>
+            <div class="bio-block-h" style={{ marginBottom: "5px" }}>
+              {T("ccEncumbrance")}
+            </div>
             <div class="enc-bar">
-              <div class="enc-cell">{T("ccEquipmentWt")} <div class="v">{enc.equipment_weight ?? 0}</div></div>
-              <div class="enc-cell">{T("ccBackpack")} <div class="v">{(enc.pack1_weight ?? 0) + (enc.pack2_weight ?? 0)}</div></div>
-              <div class="enc-cell">{T("ccTotal")} <div class="v">{enc.total_weight ?? 0}</div></div>
-              <div class="enc-cell">{T("ccCapacity")} <div class="v">{enc.max_capacity ?? "?"}</div></div>
+              <div class="enc-cell">
+                {T("ccEquipmentWt")}{" "}
+                <div class="v">{enc.equipment_weight ?? 0}</div>
+              </div>
+              <div class="enc-cell">
+                {T("ccBackpack")}{" "}
+                <div class="v">
+                  {(enc.pack1_weight ?? 0) + (enc.pack2_weight ?? 0)}
+                </div>
+              </div>
+              <div class="enc-cell">
+                {T("ccTotal")} <div class="v">{enc.total_weight ?? 0}</div>
+              </div>
+              <div class="enc-cell">
+                {T("ccCapacity")} <div class="v">{enc.max_capacity ?? "?"}</div>
+              </div>
             </div>
           </div>
         )}
@@ -1917,37 +2712,75 @@ function InventorySection({ data }: { data: CharacterData }) {
             slot={editing ? "wondrous_items" : undefined}
             onAdd={editing ? addWondrous : undefined}
             onRemove={editing ? removeWondrous : undefined}
-            onPatchItem={editing ? patchWondrous : undefined} />
+            onPatchItem={editing ? patchWondrous : undefined}
+          />
         )}
 
         {!editing && items.length === 0 && !wondrous.length && (
-          <div style={{ color: "var(--ink-mute)", fontStyle: "italic", padding: "6px 0" }}>
+          <div
+            style={{
+              color: "var(--ink-mute)",
+              fontStyle: "italic",
+              padding: "6px 0",
+            }}
+          >
             {T("ccNoPackDetail")}
           </div>
         )}
         {(editing || !!items.length) && (
           <div style={{ marginTop: "8px" }}>
-            <div class="bio-block-h" style={{ marginBottom: "5px" }}>{T("ccBackpack")}</div>
+            <div class="bio-block-h" style={{ marginBottom: "5px" }}>
+              {T("ccBackpack")}
+            </div>
             {items.map((it: any, idx: number) => {
               if (editing) {
                 return (
-                  <div class="weap" style={{ display: "grid", gridTemplateColumns: "1.4fr 0.6fr 0.8fr auto", gap: "6px", alignItems: "center" }}>
-                    <input class="cc-edit-text" type="text"
+                  <div
+                    class="weap"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.4fr 0.6fr 0.8fr auto",
+                      gap: "6px",
+                      alignItems: "center",
+                    }}
+                  >
+                    <input
+                      class="cc-edit-text"
+                      type="text"
                       value={it.name ?? ""}
                       placeholder={T("ccItemNamePh")}
-                      onInput={(e: any) => updateItem(idx, { name: e.target.value })} />
-                    <input class="cc-edit-text" type="text"
+                      onInput={(e: any) =>
+                        updateItem(idx, { name: e.target.value })
+                      }
+                    />
+                    <input
+                      class="cc-edit-text"
+                      type="text"
                       value={it.weight ?? ""}
                       placeholder={T("ccWeightPh")}
                       onInput={(e: any) => {
                         const v = e.target.value;
-                        updateItem(idx, { weight: v === "" ? null : parseFloat(v) });
-                      }} />
-                    <input class="cc-edit-text" type="text"
+                        updateItem(idx, {
+                          weight: v === "" ? null : parseFloat(v),
+                        });
+                      }}
+                    />
+                    <input
+                      class="cc-edit-text"
+                      type="text"
                       value={it.location ?? ""}
                       placeholder={T("ccLocationPh")}
-                      onInput={(e: any) => updateItem(idx, { location: e.target.value })} />
-                    <button class="cc-tag-x" onClick={() => removeItem(idx)} title={T("ccDelete")}>×</button>
+                      onInput={(e: any) =>
+                        updateItem(idx, { location: e.target.value })
+                      }
+                    />
+                    <button
+                      class="cc-tag-x"
+                      onClick={() => removeItem(idx)}
+                      title={T("ccDelete")}
+                    >
+                      ×
+                    </button>
                   </div>
                 );
               }
@@ -1956,19 +2789,35 @@ function InventorySection({ data }: { data: CharacterData }) {
               // 容器 schema's qty cell; we render it inline with the
               // name as "× N" so each row's count is immediately
               // visible.
-              const qty = it.quantity != null && it.quantity !== 1 ? ` × ${it.quantity}` : "";
-              const weightStr = it.weight != null && it.weight !== ""
-                ? `${it.weight} ${T("ccLbUnit")}` : "";
+              const qty =
+                it.quantity != null && it.quantity !== 1
+                  ? ` × ${it.quantity}`
+                  : "";
+              const weightStr =
+                it.weight != null && it.weight !== ""
+                  ? `${it.weight} ${T("ccLbUnit")}`
+                  : "";
               const loc = it.location ? `· ${it.location}` : "";
               const meta = [weightStr, loc].filter(Boolean).join(" ");
               return (
                 <div class="weap">
                   <div class="weap-name">{(it.name || "?") + qty}</div>
-                  <div class="weap-atk" style={{ visibility: "hidden" }}>—</div>
-                  <div class="weap-dmg" style={{ background: "transparent", border: "0", color: "var(--ink-dim)" }}>
+                  <div class="weap-atk" style={{ visibility: "hidden" }}>
+                    —
+                  </div>
+                  <div
+                    class="weap-dmg"
+                    style={{
+                      background: "transparent",
+                      border: "0",
+                      color: "var(--ink-dim)",
+                    }}
+                  >
                     {meta}
                   </div>
-                  {it.description && <div class="weap-props">{it.description}</div>}
+                  {it.description && (
+                    <div class="weap-props">{it.description}</div>
+                  )}
                 </div>
               );
             })}
@@ -1977,6 +2826,20 @@ function InventorySection({ data }: { data: CharacterData }) {
       </div>
     </div>
   );
+}
+
+// ===== SAFE NORMALIZE FIX (key improvement) =====
+function safeNormalize(data: any): CharacterData {
+  if (!data || typeof data !== "object") {
+    console.warn("[cc-fullscreen] Invalid data received");
+    return {} as CharacterData;
+  }
+  try {
+    return normalizeCombatGearFlags(data);
+  } catch (e) {
+    console.error("[cc-fullscreen] normalizeCombatGearFlags crashed:", e);
+    return data as CharacterData; // fallback to raw
+  }
 }
 
 // ===== Main app ==============================================
@@ -1991,31 +2854,161 @@ function App() {
   // of each render (parent renders before children, so T() reads the
   // live value everywhere) and re-render on a language flip.
   const [lang, setLang] = useState<Language>(_lang);
+  const [, forceRender] = useState(0);
+  const loadGenRef = useRef(0);
+  const fetchAbortRef = useRef<AbortController | null>(null);
   _lang = lang;
   useEffect(() => onLangChange((l) => setLang((l as Language) ?? "zh")), []);
   const roomId = getQS("room") || "";
   const cardId = getQS("card") || "";
 
+  const commitLoadedData = useCallback(
+    (normalized: CharacterData, gen: number) => {
+      if (gen !== loadGenRef.current) {
+        console.log(
+          `[cc-fullscreen] Ignored old commit gen ${gen} (current is ${loadGenRef.current})`,
+        );
+        return;
+      }
+
+      console.log(
+        `[cc-fullscreen] ✅ Committing data to state for card ${cardId} | data exists: ${!!normalized && Object.keys(normalized).length > 0}`,
+      );
+
+      setError(null);
+      setData(normalized); // Forza aggiornamento stato
+
+      // Forza repaint multiplo (a volte Preact è pigro negli iframe)
+      forceRender((x) => x + 1);
+      setTimeout(() => forceRender((x) => x + 1), 10);
+      setTimeout(() => forceRender((x) => x + 1), 50);
+    },
+    [cardId],
+  );
+
+  const readLocalCardJson = useCallback((): any | null => {
+    if (cardId.startsWith("imported_")) {
+      const storedData = localStorage.getItem(
+        `character-cards/imported/${cardId}`,
+      );
+      if (!storedData) throw new Error(T("ccErrImportedMissing"));
+      return JSON.parse(storedData);
+    }
+    const dirtyData = localStorage.getItem(`cc-dirty/${cardId}`);
+    if (!dirtyData) return null;
+    try {
+      return JSON.parse(dirtyData);
+    } catch {
+      return null;
+    }
+  }, [cardId]);
+
   const loadData = useCallback(async () => {
+    const gen = ++loadGenRef.current;
+    fetchAbortRef.current?.abort();
+    const fetchAc = new AbortController();
+    fetchAbortRef.current = fetchAc;
+
     if (!roomId || !cardId) {
       setError(T("ccErrNoParams"));
       return;
     }
-    setError(null);
+
+    let json: any = null;
+    let source = "unknown";
+
     try {
-      const res = await fetch(
-        `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`,
-        { cache: "no-cache" },
+      json = readLocalCardJson();
+      if (json) source = cardId.startsWith("imported_") ? "imported" : "dirty";
+
+      if (!json && !cardId.startsWith("imported_")) {
+        console.log(
+          `[cc-fullscreen] No local data → fetching from server for ${cardId}`,
+        );
+        const url = `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+        const res = await fetch(url, {
+          cache: "no-store",
+          signal: fetchAc.signal,
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        json = await res.json();
+        source = "server";
+      }
+
+      if (gen !== loadGenRef.current) return;
+
+      if (!json) throw new Error("No data found");
+
+      console.log(
+        `[cc-fullscreen] Successfully loaded from ${source} for card ${cardId}`,
       );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      setData(normalizeCombatGearFlags(json));
+
+      const normalized = safeNormalize(json);
+      commitLoadedData(normalized || json, gen);
     } catch (e: any) {
+      if (e?.name === "AbortError") return;
+      if (gen !== loadGenRef.current) return;
+
+      console.error("[cc-fullscreen] loadData failed", e);
+
+      // Emergency fallback
+      try {
+        const fallback = readLocalCardJson();
+        if (fallback) {
+          console.warn(`[cc-fullscreen] EMERGENCY FALLBACK used for ${cardId}`);
+          commitLoadedData(safeNormalize(fallback), gen);
+          return;
+        }
+      } catch {}
+
       setError(`${T("ccLoadFailedPrefix")}${e?.message || String(e)}`);
     }
-  }, [roomId, cardId]);
+  }, [roomId, cardId, readLocalCardJson, commitLoadedData]);
 
-  useEffect(() => { void loadData(); }, [loadData]);
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  // L'iframe delle schede vive nascosto finché non viene selezionata:
+  // visibilitychange / messaggio dal pannello + focus riallineano UI e dati.
+  useEffect(() => {
+    const repaint = () => forceRender((x) => x + 1);
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        forceRender((x) => x + 1);
+      }
+    };
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === "cc-fullscreen-show") {
+        // Se i dati sono già caricati basta un repaint.
+        // Se data è null (es. fetch fallito mentre era nascosto) ricarica.
+        forceRender((x) => x + 1);
+        void loadData();
+      }
+    };
+    const onDirty = OBR.broadcast.onMessage(
+      "com.obr-suite/cc-dirty-changed",
+      (event) => {
+        const payload = event.data as { cardId?: string } | undefined;
+        if (payload?.cardId && payload.cardId !== cardId) return;
+        // Non ricaricare — applyJsonObject ha già chiamato setData()
+        // con i dati aggiornati. Un reload qui resetterebbe data=null
+        // causando lo spinner infinito.
+        // Forziamo solo un repaint per aggiornare eventuale UI stale.
+        forceRender((x) => x + 1);
+      },
+    );
+
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", repaint);
+    window.addEventListener("message", onMsg);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", repaint);
+      window.removeEventListener("message", onMsg);
+      onDirty();
+    };
+  }, [cardId, loadData]);
 
   // Multi-client sync — when another client imports / refreshes this
   // same card, BC_CARD_UPDATED arrives on REMOTE; we re-fetch
@@ -2023,9 +3016,16 @@ function App() {
   // (no manual refresh button click).
   useEffect(() => {
     if (!cardId) return;
+    // Carte importate: non fare mai reload da broadcast — i dati vivono
+    // in localStorage e vengono già aggiornati da applyJsonObject in place.
+    // Un reload via BC_CARD_UPDATED su imported_ causerebbe un re-mount
+    // inutile che resetta data=null e manda lo spinner per sempre.
+    if (cardId.startsWith("imported_")) return;
     const unsub = OBR.broadcast.onMessage(BC_CARD_UPDATED, (event) => {
       const payload = event.data as { cardId?: string } | undefined;
       if (payload?.cardId !== cardId) return;
+      // cc-dirty locale ha priorità sul server — come info-page.
+      if (localStorage.getItem(`cc-dirty/${cardId}`)) return;
       void loadData();
     });
     return unsub;
@@ -2043,40 +3043,50 @@ function App() {
   // this card's id and calls `patchBubbles` for each, which writes
   // through the upstream-compat key (`health` / `max health` / etc.)
   // that the bubbles renderer already listens to.
-  const onPatch = useCallback((patch: Partial<CharacterData>) => {
-    setData((prev) => prev ? normalizeCombatGearFlags({ ...prev, ...patch }) : prev);
-    // Translate `core_stats.hp.* / .ac` deltas into the bubbles patch
-    // shape and push to OBR. Nothing to do if the patch doesn't touch
-    // core_stats — saves a scene-items query on every keystroke that
-    // edits unrelated fields.
-    const cs = (patch as any)?.core_stats;
-    if (!cs || typeof cs !== "object") return;
-    const bubblesPatch: Record<string, unknown> = {};
-    if (cs.hp && typeof cs.hp === "object") {
-      if (typeof cs.hp.current === "number") bubblesPatch["health"] = cs.hp.current;
-      if (typeof cs.hp.max === "number")     bubblesPatch["max health"] = cs.hp.max;
-      if (typeof cs.hp.temp === "number")    bubblesPatch["temporary health"] = cs.hp.temp;
-    }
-    if (typeof cs.ac === "number") bubblesPatch["armor class"] = cs.ac;
-    if (Object.keys(bubblesPatch).length === 0) return;
-    void (async () => {
-      try {
-        const items = await OBR.scene.items.getItems(
-          (it: any) =>
-            (it.metadata as Record<string, unknown> | undefined)?.[BIND_META_KEY] === cardId,
-        );
-        await Promise.all(items.map((it) => patchBubbles(it.id, bubblesPatch)));
-      } catch (e) {
-        console.warn("[cc-fullscreen] bubbles propagate failed", e);
+  const onPatch = useCallback(
+    (patch: Partial<CharacterData>) => {
+      setData((prev) => (prev ? safeNormalize({ ...prev, ...patch }) : prev));
+      // Translate `core_stats.hp.* / .ac` deltas into the bubbles patch
+      // shape and push to OBR. Nothing to do if the patch doesn't touch
+      // core_stats — saves a scene-items query on every keystroke that
+      // edits unrelated fields.
+      const cs = (patch as any)?.core_stats;
+      if (!cs || typeof cs !== "object") return;
+      const bubblesPatch: Record<string, unknown> = {};
+      if (cs.hp && typeof cs.hp === "object") {
+        if (typeof cs.hp.current === "number")
+          bubblesPatch["health"] = cs.hp.current;
+        if (typeof cs.hp.max === "number")
+          bubblesPatch["max health"] = cs.hp.max;
+        if (typeof cs.hp.temp === "number")
+          bubblesPatch["temporary health"] = cs.hp.temp;
       }
-    })();
-  }, [cardId]);
+      if (typeof cs.ac === "number") bubblesPatch["armor class"] = cs.ac;
+      if (Object.keys(bubblesPatch).length === 0) return;
+      void (async () => {
+        try {
+          const items = await OBR.scene.items.getItems(
+            (it: any) =>
+              (it.metadata as Record<string, unknown> | undefined)?.[
+                BIND_META_KEY
+              ] === cardId,
+          );
+          await Promise.all(
+            items.map((it) => patchBubbles(it.id, bubblesPatch)),
+          );
+        } catch (e) {
+          console.warn("[cc-fullscreen] bubbles propagate failed", e);
+        }
+      })();
+    },
+    [cardId],
+  );
 
   const onExport = useCallback(() => {
     if (!data) return;
     const id = data.identity || {};
     const name = id.display_name || id.character_name || "character";
-    downloadJson(`${name}-${cardId.slice(0,6)}.json`, data);
+    downloadJson(`${name}-${cardId.slice(0, 6)}.json`, data);
   }, [data, cardId]);
 
   // 2026-05-15 — refresh handler. ALSO broadcasts BC_CARD_UPDATED so
@@ -2086,20 +3096,23 @@ function App() {
   // — the small panel doesn't know fresh data.json is available.
   const onRefresh = useCallback(async () => {
     await loadData();
+    // Carte importate non hanno server URL — niente broadcast.
+    if (cardId.startsWith("imported_")) return;
     try {
-      if (cardId) {
-        const updatedPayload = {
-          cardId,
-          url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`,
-        };
-        OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, { destination: "LOCAL" });
-        OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, { destination: "REMOTE" });
-      }
+      const updatedPayload = {
+        cardId,
+        url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`,
+      };
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
+        destination: "LOCAL",
+      });
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
+        destination: "REMOTE",
+      });
     } catch (e) {
       console.warn("[cc-fullscreen] refresh broadcast failed", e);
     }
   }, [loadData, roomId, cardId]);
-
 
   // 2026-05-14 — copy-to-clipboard variant of export. Same JSON shape
   // as the file download, just lands in the clipboard so the user can
@@ -2125,8 +3138,11 @@ function App() {
       ta.style.position = "fixed";
       ta.style.opacity = "0";
       document.body.appendChild(ta);
-      ta.focus(); ta.select();
-      try { ok = document.execCommand("copy"); } catch {}
+      ta.focus();
+      ta.select();
+      try {
+        ok = document.execCommand("copy");
+      } catch {}
       document.body.removeChild(ta);
     }
     // Lightweight toast — reuses the existing alert pattern from
@@ -2139,7 +3155,9 @@ function App() {
   }, [data]);
 
   const onImport = useCallback(() => {
-    const inp = document.getElementById("ccFileInput") as HTMLInputElement | null;
+    const inp = document.getElementById(
+      "ccFileInput",
+    ) as HTMLInputElement | null;
     if (!inp) return;
     inp.value = "";
     inp.onchange = async () => {
@@ -2157,42 +3175,128 @@ function App() {
   // file-import uses (so bound tokens get the new stats propagated
   // automatically via BC_CARD_UPDATED).
   const [pasteOpen, setPasteOpen] = useState(false);
-  const onPasteJson = useCallback(() => { setPasteOpen(true); }, []);
+  const onPasteJson = useCallback(() => {
+    setPasteOpen(true);
+  }, []);
 
   // Shared apply path — called by both the file import and the
   // paste-text modal. `source` is for the result alert message.
-  const applyJsonObject = useCallback(async (parsed: any, source: string): Promise<string> => {
-    if (!parsed || typeof parsed !== "object" || !("abilities" in parsed || "identity" in parsed)) {
-      return `✕ ${source} ${T("ccNotCardJson")}`;
-    }
-    setData(normalizeCombatGearFlags(parsed));
-    try {
-      const url = `${SERVER_ORIGIN}/api/character/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data`;
-      const res = await fetch(url, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed),
-      });
-      if (!res.ok) {
-        const body = await res.text();
-        return `⚠ ${source} ${T("ccSaveFailHttp").replace("{status}", String(res.status)).replace("{body}", body.slice(0, 120))}`;
+  // Se il PUT al server fallisce, salva in localStorage con chiave
+  // "cc-dirty/<cardId>" e manda un broadcast CC_DIRTY_CHANGED così
+  // panel-page può mostrare la nuvola gialla nella sidebar.
+  const applyJsonObject = useCallback(
+    async (parsed: any, source: string): Promise<string> => {
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        !("abilities" in parsed || "identity" in parsed)
+      ) {
+        return `✕ ${source} ${T("ccNotCardJson")}`;
       }
-      const result = await res.json();
+      setData(safeNormalize(parsed));
+
+      // Carte importate: persisti solo in localStorage, niente server.
+      if (cardId.startsWith("imported_")) {
+        try {
+          localStorage.setItem(
+            `character-cards/imported/${cardId}`,
+            JSON.stringify(parsed),
+          );
+          try {
+            OBR.broadcast.sendMessage(
+              BC_CARD_UPDATED,
+              { cardId },
+              { destination: "LOCAL" },
+            );
+          } catch {}
+          const name =
+            parsed?.identity?.display_name ||
+            parsed?.identity?.character_name ||
+            cardId;
+          return `✓ ${source} → ${name}`;
+        } catch (e: any) {
+          return `⚠ ${source} ${T("ccSaveFail").replace("{err}", e?.message || String(e))}`;
+        }
+      }
+
+      // Carte server: tenta PUT. Se fallisce, salva localmente come
+      // "dirty" e notifica panel-page tramite broadcast.
+      const dirtyKey = `cc-dirty/${cardId}`;
       try {
-        const updatedPayload = {
-          cardId,
-          url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`,
-        };
-        OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, { destination: "LOCAL" });
-        OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, { destination: "REMOTE" });
-      } catch {}
-      let msg = `✓ ${source} → ${result.name || "current card"}`;
-      if (result.render_warning) msg += T("ccRenderWarn").replace("{warn}", result.render_warning);
-      return msg;
-    } catch (e: any) {
-      return `⚠ ${source} ${T("ccSaveFail").replace("{err}", e?.message || String(e))}`;
-    }
-  }, [roomId, cardId]);
+        const url = `${SERVER_ORIGIN}/api/character/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(url, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parsed),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (!res.ok) {
+          const body = await res.text();
+          // Salva localmente come fallback con timestamp
+          localStorage.setItem(dirtyKey, JSON.stringify(parsed));
+          localStorage.setItem(
+            `cc-dirty-ts/${cardId}`,
+            new Date().toISOString(),
+          );
+          try {
+            OBR.broadcast.sendMessage(
+              "com.obr-suite/cc-dirty-changed",
+              { cardId, render: true },
+              { destination: "LOCAL" },
+            );
+          } catch {}
+          return `⚠ ${source} ${T("ccSaveFailHttp").replace("{status}", String(res.status)).replace("{body}", body.slice(0, 120))}\n💾 ${T("ccDirtySave")}`;
+        }
+        const result = await res.json();
+        // Successo: rimuovi eventuale dirty locale
+        try {
+          localStorage.removeItem(dirtyKey);
+        } catch {}
+        try {
+          localStorage.removeItem(`cc-dirty-ts/${cardId}`);
+        } catch {}
+        try {
+          OBR.broadcast.sendMessage(
+            "com.obr-suite/cc-dirty-changed",
+            { cardId },
+            { destination: "LOCAL" },
+          );
+        } catch {}
+        try {
+          const updatedPayload = {
+            cardId,
+            url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`,
+          };
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
+            destination: "LOCAL",
+          });
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
+            destination: "REMOTE",
+          });
+        } catch {}
+        let msg = `✓ ${source} → ${result.name || "current card"}`;
+        if (result.render_warning)
+          msg += T("ccRenderWarn").replace("{warn}", result.render_warning);
+        return msg;
+      } catch (e: any) {
+        // Errore di rete (Failed to fetch, timeout, ecc.)
+        localStorage.setItem(dirtyKey, JSON.stringify(parsed));
+        localStorage.setItem(`cc-dirty-ts/${cardId}`, new Date().toISOString());
+        try {
+          OBR.broadcast.sendMessage(
+            "com.obr-suite/cc-dirty-changed",
+            { cardId, render: true },
+            { destination: "LOCAL" },
+          );
+        } catch {}
+        return `⚠ ${source} ${T("ccSaveFail").replace("{err}", e?.message || String(e))}\n💾 ${T("ccDirtySave")}`;
+      }
+    },
+    [roomId, cardId],
+  );
 
   // 2026-05-10: multi-file import. Each file is dispatched by
   // extension:
@@ -2204,115 +3308,161 @@ function App() {
   //   .xlsx   → POST to /upload (creates a new card with the room).
   //             Multiple xlsx → multiple new cards, sequentially.
   // The summary alert at the end reports per-file outcomes.
-  const processImportFiles = useCallback(async (files: File[]) => {
-    const summary: string[] = [];
-    let currentJsonImported = false;
+  const processImportFiles = useCallback(
+    async (files: File[]) => {
+      const summary: string[] = [];
+      let currentJsonImported = false;
 
-    for (const f of files) {
-      const lower = f.name.toLowerCase();
-      if (lower.endsWith(".json")) {
-        if (currentJsonImported) {
-          summary.push(`⏭ ${f.name} ${T("ccSkipImported")}`);
-          continue;
-        }
-        try {
-          const text = await f.text();
-          const parsed = JSON.parse(text);
-          if (!parsed || typeof parsed !== "object" || !("abilities" in parsed || "identity" in parsed)) {
-            summary.push(`✕ ${f.name} ${T("ccNotCardJson")}`);
+      for (const f of files) {
+        const lower = f.name.toLowerCase();
+        if (lower.endsWith(".json")) {
+          if (currentJsonImported) {
+            summary.push(`⏭ ${f.name} ${T("ccSkipImported")}`);
             continue;
           }
-          setData(normalizeCombatGearFlags(parsed));
           try {
-            const url = `${SERVER_ORIGIN}/api/character/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data`;
-            const res = await fetch(url, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(parsed),
-            });
-            if (!res.ok) {
-              const body = await res.text();
-              summary.push(`⚠ ${f.name} ${T("ccSaveFailHttp").replace("{status}", String(res.status)).replace("{body}", body.slice(0, 120))}`);
-            } else {
-              const result = await res.json();
-              try {
-                // 2026-05-14 — also broadcast LOCAL so the SAME client's
-                // background module catches this and propagates to bound
-                // tokens (max HP / AC / dex-mod). Without LOCAL, only
-                // remote clients see the stat propagation; the importing
-                // user would still need to re-bind to apply.
-                const updatedPayload = {
-                  cardId,
-                  url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`,
-                };
-                OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, { destination: "LOCAL" });
-                OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, { destination: "REMOTE" });
-              } catch {}
-              summary.push(`✓ ${f.name} → ${result.name || "current card"}`);
-              if (result.render_warning) {
-                summary.push(T("ccRenderWarn").replace("{warn}", result.render_warning));
-              }
+            const text = await f.text();
+            const parsed = JSON.parse(text);
+            if (cardId.startsWith("imported_")) {
+              localStorage.setItem(
+                `character-cards/imported/${cardId}`,
+                JSON.stringify(parsed),
+              );
+              summary.push(
+                `✓ ${f.name} → ${parsed?.identity?.display_name || "imported card"}`,
+              );
+              currentJsonImported = true;
+              continue;
             }
-          } catch (e: any) {
-            summary.push(`⚠ ${f.name} ${T("ccSaveFail").replace("{err}", e?.message || String(e))}`);
-          }
-          currentJsonImported = true;
-        } catch (e: any) {
-          summary.push(`✕ ${f.name} ${T("ccJsonParseFail").replace("{err}", e?.message || String(e))}`);
-        }
-      } else if (lower.endsWith(".xlsx")) {
-        // POST /upload — same endpoint as cc-panel's xlsx upload
-        // path. Creates a new card. We don't have the player name
-        // here (it lives in cc-panel state), so use "fullscreen-import"
-        // as the uploader label.
-        try {
-          const fd = new FormData();
-          fd.append("file", f);
-          const u = encodeURIComponent("fullscreen-import");
-          const r = await fetch(
-            `${SERVER_ORIGIN}/api/character/upload?room=${encodeURIComponent(roomId)}&uploader=${u}`,
-            { method: "POST", body: fd },
-          );
-          if (!r.ok) {
-            const body = await r.text();
-            summary.push(`✕ ${f.name} ${T("ccXlsxFailHttp").replace("{status}", String(r.status)).replace("{body}", body.slice(0, 120))}`);
-          } else {
-            const entry = await r.json();
+            if (
+              !parsed ||
+              typeof parsed !== "object" ||
+              !("abilities" in parsed || "identity" in parsed)
+            ) {
+              summary.push(`✕ ${f.name} ${T("ccNotCardJson")}`);
+              continue;
+            }
+            setData(safeNormalize(parsed));
             try {
-              const corrected = await reconcileUploadedCardShieldState({
-                apiBase: `${SERVER_ORIGIN}/api/character`,
-                roomId,
-                cardId: entry.id,
-                xlsx: f,
+              const url = `${SERVER_ORIGIN}/api/character/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data`;
+              const res = await fetch(url, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(parsed),
               });
-              if (corrected) {
+              if (!res.ok) {
+                const body = await res.text();
+                summary.push(
+                  `⚠ ${f.name} ${T("ccSaveFailHttp").replace("{status}", String(res.status)).replace("{body}", body.slice(0, 120))}`,
+                );
+              } else {
+                const result = await res.json();
                 try {
-                  const reconcilePayload = {
-                    cardId: entry.id,
-                    url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(entry.id)}/`,
+                  // 2026-05-14 — also broadcast LOCAL so the SAME client's
+                  // background module catches this and propagates to bound
+                  // tokens (max HP / AC / dex-mod). Without LOCAL, only
+                  // remote clients see the stat propagation; the importing
+                  // user would still need to re-bind to apply.
+                  const updatedPayload = {
+                    cardId,
+                    url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`,
                   };
-                  OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, { destination: "LOCAL" });
-                  OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, { destination: "REMOTE" });
+                  OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
+                    destination: "LOCAL",
+                  });
+                  OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
+                    destination: "REMOTE",
+                  });
                 } catch {}
+                summary.push(`✓ ${f.name} → ${result.name || "current card"}`);
+                if (result.render_warning) {
+                  summary.push(
+                    T("ccRenderWarn").replace("{warn}", result.render_warning),
+                  );
+                }
               }
             } catch (e: any) {
-              summary.push(`⚠ ${f.name} ${T("ccShieldReconcileFail").replace("{err}", e?.message || String(e))}`);
+              summary.push(
+                `⚠ ${f.name} ${T("ccSaveFail").replace("{err}", e?.message || String(e))}`,
+              );
             }
-            summary.push(`✓ ${f.name} → ${T("ccNewCardArrow").replace("{name}", entry.name)}`);
+            currentJsonImported = true;
+          } catch (e: any) {
+            summary.push(
+              `✕ ${f.name} ${T("ccJsonParseFail").replace("{err}", e?.message || String(e))}`,
+            );
           }
-        } catch (e: any) {
-          summary.push(`✕ ${f.name} ${T("ccXlsxFail").replace("{err}", e?.message || String(e))}`);
+        } else if (lower.endsWith(".xlsx")) {
+          // POST /upload — same endpoint as cc-panel's xlsx upload
+          // path. Creates a new card. We don't have the player name
+          // here (it lives in cc-panel state), so use "fullscreen-import"
+          // as the uploader label.
+          try {
+            const fd = new FormData();
+            fd.append("file", f);
+            const u = encodeURIComponent("fullscreen-import");
+            const r = await fetch(
+              `${SERVER_ORIGIN}/api/character/upload?room=${encodeURIComponent(roomId)}&uploader=${u}`,
+              { method: "POST", body: fd },
+            );
+            if (!r.ok) {
+              const body = await r.text();
+              summary.push(
+                `✕ ${f.name} ${T("ccXlsxFailHttp").replace("{status}", String(r.status)).replace("{body}", body.slice(0, 120))}`,
+              );
+            } else {
+              const entry = await r.json();
+              try {
+                const corrected = await reconcileUploadedCardShieldState({
+                  apiBase: `${SERVER_ORIGIN}/api/character`,
+                  roomId,
+                  cardId: entry.id,
+                  xlsx: f,
+                });
+                if (corrected) {
+                  try {
+                    const reconcilePayload = {
+                      cardId: entry.id,
+                      url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(entry.id)}/`,
+                    };
+                    OBR.broadcast.sendMessage(
+                      BC_CARD_UPDATED,
+                      reconcilePayload,
+                      { destination: "LOCAL" },
+                    );
+                    OBR.broadcast.sendMessage(
+                      BC_CARD_UPDATED,
+                      reconcilePayload,
+                      { destination: "REMOTE" },
+                    );
+                  } catch {}
+                }
+              } catch (e: any) {
+                summary.push(
+                  `⚠ ${f.name} ${T("ccShieldReconcileFail").replace("{err}", e?.message || String(e))}`,
+                );
+              }
+              summary.push(
+                `✓ ${f.name} → ${T("ccNewCardArrow").replace("{name}", entry.name)}`,
+              );
+            }
+          } catch (e: any) {
+            summary.push(
+              `✕ ${f.name} ${T("ccXlsxFail").replace("{err}", e?.message || String(e))}`,
+            );
+          }
+        } else {
+          summary.push(`✕ ${f.name} ${T("ccUnsupportedExt")}`);
         }
-      } else {
-        summary.push(`✕ ${f.name} ${T("ccUnsupportedExt")}`);
       }
-    }
 
-    window.alert(
-      `${T("ccImportResultHead").replace("{n}", String(files.length))}\n\n${summary.join("\n")}` +
-      `\n\n${T("ccImportResultNote")}`,
-    );
-  }, [roomId, cardId]);
+      window.alert(
+        `${T("ccImportResultHead").replace("{n}", String(files.length))}\n\n${summary.join("\n")}` +
+          `\n\n${T("ccImportResultNote")}`,
+      );
+    },
+    [roomId, cardId],
+  );
 
   // 2026-05-10: drag-drop multi-file import. Drop anywhere on the
   // fullscreen view to trigger processImportFiles. dragOver suppresses
@@ -2324,7 +3474,9 @@ function App() {
       }
     };
     const onDrop = async (e: DragEvent) => {
-      const files = e.dataTransfer?.files ? Array.from(e.dataTransfer.files) : [];
+      const files = e.dataTransfer?.files
+        ? Array.from(e.dataTransfer.files)
+        : [];
       if (files.length === 0) return;
       e.preventDefault();
       await processImportFiles(files);
@@ -2385,7 +3537,10 @@ function App() {
             try {
               parsed = JSON.parse(text);
             } catch (e: any) {
-              return T("ccJsonParseFailColon").replace("{err}", e?.message || String(e));
+              return T("ccJsonParseFailColon").replace(
+                "{err}",
+                e?.message || String(e),
+              );
             }
             const result = await applyJsonObject(parsed, T("ccPasteSource"));
             // Close on success, keep open on warning/error so user sees msg.
@@ -2408,7 +3563,8 @@ function App() {
           <button
             class={`cc-tab ${tab === tb.key ? "is-on" : ""}`}
             onClick={() => setTab(tb.key)}
-            title={T(tb.labelKey)}>
+            title={T(tb.labelKey)}
+          >
             {T(tb.labelKey)}
           </button>
         ))}
@@ -2421,15 +3577,14 @@ function App() {
           cc-body falls back to its legacy single-column overflow-y
           behavior so phones / small windows stay usable. */}
       <div class="cc-body">
-        <div class="cc-main">
-          {renderTabSection(tab, data)}
-        </div>
+        <div class="cc-main">{renderTabSection(tab, data)}</div>
         <nav class="cc-tabs-side" aria-label={T("ccTabsAria")}>
           {TABS.map((tb) => (
             <button
               class={`cc-tab cc-tab-side ${tab === tb.key ? "is-on" : ""}`}
               onClick={() => setTab(tb.key)}
-              title={T(tb.labelKey)}>
+              title={T(tb.labelKey)}
+            >
               {T(tb.labelKey)}
             </button>
           ))}
@@ -2461,9 +3616,12 @@ function renderTabSection(key: TabKey, data: CharacterData) {
           <InventorySection data={data} />
         </>
       );
-    case "spells":     return <SpellsSection data={data} />;
-    case "features":   return <FeaturesSection data={data} />;
-    case "background": return <BackgroundSection data={data} />;
+    case "spells":
+      return <SpellsSection data={data} />;
+    case "features":
+      return <FeaturesSection data={data} />;
+    case "background":
+      return <BackgroundSection data={data} />;
   }
 }
 
@@ -2471,6 +3629,8 @@ const appEl = document.getElementById("app");
 if (appEl) {
   // Subscribe to dice SFX broadcasts so click-to-roll plays sound
   // even though this iframe normally doesn't have audio context warmed.
-  try { subscribeToSfx(); } catch {}
+  try {
+    subscribeToSfx();
+  } catch {}
   render(<App />, appEl);
 }

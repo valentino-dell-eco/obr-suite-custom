@@ -1,16 +1,11 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { DieResult, sidesOf } from "./types";
+import { applyI18nDom } from "../../i18n";
+import { getLocalLang } from "../../state";
 
-// 2026-05-15 — i18n hint patch (was inline <script> in dice-replay.html,
-// blocked by OBR's plugin CSP `script-src-elem 'self'`). Module
-// scripts ARE allowed, so we run it here before the main module logic.
+// Apply i18n to the DOM (hint text, etc.) as early as possible.
 try {
-  const v = localStorage.getItem("obr-suite/lang");
-  if (v === "en") {
-    document.documentElement.lang = "en";
-    const h = document.getElementById("hint");
-    if (h) h.textContent = "Click bubble or click row again to close";
-  }
+  applyI18nDom(getLocalLang());
 } catch { /* ignore */ }
 
 // Replay overlay modal — opens when a player clicks a row in the

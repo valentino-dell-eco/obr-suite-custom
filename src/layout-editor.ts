@@ -22,6 +22,8 @@
 // firing BC_PANEL_DRAG_END so the underlying panel re-anchors live.
 
 import OBR from "@owlbear-rodeo/sdk";
+import { getLocalLang, onLangChange } from "./state";
+import { t, applyI18nDom } from "./i18n";
 import {
   PANEL_IDS,
   setPanelOffset,
@@ -36,9 +38,19 @@ import {
   type LayoutEditorBboxesPayload,
 } from "./utils/panelLayout";
 
+const blocker = document.getElementById("blocker") as HTMLDivElement;
+const hintEl = document.getElementById("hint") as HTMLElement;
+const btnReset = document.getElementById("btn-reset") as HTMLButtonElement;
+const btnDone = document.getElementById("btn-done") as HTMLButtonElement;
+let lang = getLocalLang();
+const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
+
+type I18nKey = Parameters<typeof t>[1];
+
 interface ProxyRect {
   panelId: string;
   label: string;
+  labelKey: I18nKey | null;
   /** Currently-rendered bbox in modal-viewport coords. Live during
    *  drag / resize; persisted to localStorage on release. */
   left: number;
@@ -58,26 +70,38 @@ interface ProxyRect {
   el: HTMLDivElement;
 }
 
-const blocker = document.getElementById("blocker") as HTMLDivElement;
-const hintEl = document.getElementById("hint") as HTMLElement;
-const btnReset = document.getElementById("btn-reset") as HTMLButtonElement;
-const btnDone = document.getElementById("btn-done") as HTMLButtonElement;
-
-const PANEL_LABELS: Record<string, string> = {
-  [PANEL_IDS.cluster]: "快捷键按钮",
-  [PANEL_IDS.clusterRow]: "快捷键栏",
-  [PANEL_IDS.diceHistory]: "投骰记录面板",
-  [PANEL_IDS.perfWindow]: "性能监视器",
-  [PANEL_IDS.initiative]: "先攻条",
-  [PANEL_IDS.bestiaryPanel]: "怪物图鉴",
-  [PANEL_IDS.bestiaryInfo]: "怪物详情",
-  [PANEL_IDS.ccInfo]: "角色卡信息",
-  [PANEL_IDS.search]: "搜索栏",
-  [PANEL_IDS.portalEdit]: "传送门编辑",
-  [PANEL_IDS.statusPalette]: "状态调色板",
-  [PANEL_IDS.hpBar]: "血条组件",
-  [PANEL_IDS.musicBoard]: "音乐板",
+const PANEL_LABEL_KEYS: Record<string, I18nKey> = {
+  [PANEL_IDS.cluster]: "layoutCluster",
+  [PANEL_IDS.clusterRow]: "layoutClusterRow",
+  [PANEL_IDS.diceHistory]: "layoutDiceHistory",
+  [PANEL_IDS.perfWindow]: "layoutPerfWindow",
+  [PANEL_IDS.initiative]: "layoutInitiative",
+  [PANEL_IDS.bestiaryPanel]: "layoutBestiaryPanel",
+  [PANEL_IDS.bestiaryInfo]: "layoutBestiaryInfo",
+  [PANEL_IDS.ccInfo]: "layoutCcInfo",
+  [PANEL_IDS.search]: "layoutSearch",
+  [PANEL_IDS.portalEdit]: "layoutPortalEdit",
+  [PANEL_IDS.statusPalette]: "layoutStatusPalette",
+  [PANEL_IDS.hpBar]: "layoutHpBar",
+  [PANEL_IDS.musicBoard]: "layoutMusicBoard",
 };
+
+function setHintKey(key: I18nKey): void {
+  hintEl.dataset.i18n = key;
+  hintEl.textContent = t(lang, key);
+}
+
+function renderProxyLabel(proxy: ProxyRect): void {
+  if (!proxy.labelKey) return;
+  const nameEl = proxy.el.querySelector(".pname");
+  if (nameEl) nameEl.textContent = t(lang, proxy.labelKey);
+}
+
+function applyLayoutEditorI18n(nextLang: typeof lang): void {
+  lang = nextLang;
+  applyI18nDom(lang);
+  for (const proxy of proxies) renderProxyLabel(proxy);
+}
 
 // Cluster + initiative auto-fit their inner content; runtime size
 // overrides would just be fought back by their own measure-and-resize
@@ -237,7 +261,8 @@ function buildProxy(
   panelId: string,
   bbox: { left: number; top: number; width: number; height: number },
 ): void {
-  const label = PANEL_LABELS[panelId] ?? panelId;
+  const labelKey = PANEL_LABEL_KEYS[panelId] ?? null;
+  const label = labelKey ? t(lang, labelKey) : panelId;
   const resizable = !NON_RESIZABLE.has(panelId);
   const open = isPanelOpen(panelId);
   const el = document.createElement("div");
@@ -253,6 +278,7 @@ function buildProxy(
   const proxy: ProxyRect = {
     panelId,
     label,
+    labelKey,
     left: bbox.left,
     top: bbox.top,
     width: bbox.width,
@@ -416,6 +442,8 @@ function buildProxy(
 }
 
 OBR.onReady(() => {
+  applyLayoutEditorI18n(lang);
+  onLangChange((nextLang) => applyLayoutEditorI18n(nextLang));
   let bboxMap: Record<string, { left: number; top: number; width: number; height: number }> = {};
   try {
     const raw = location.hash.replace(/^#/, "");
@@ -449,9 +477,9 @@ OBR.onReady(() => {
     }
   }
   if (proxies.length === 0) {
-    hintEl.textContent = "未读取到任何面板的位置信息";
+    setHintKey("layoutNoPositions");
   } else {
-    hintEl.textContent = "拖动整体移动，拖右下角调整大小（虚线 = 当前未打开）";
+    setHintKey("layoutDragHint");
   }
 
   // 2026-05-16 — listen for background's reply to the post-reset
@@ -480,13 +508,14 @@ OBR.onReady(() => {
   });
 
   btnReset.addEventListener("click", () => {
-    const ok = window.confirm("重置所有面板位置和大小到默认?");
+    const ok = window.confirm(t(getLocalLang(), "layoutResetConfirm"));
     if (!ok) return;
     resetAllPanelOffsets();
     try {
       OBR.broadcast.sendMessage(BC_PANEL_RESET, {}, { destination: "LOCAL" });
     } catch {}
     // 2026-05-16 — ask background for fresh bboxes. Earlier this
+    setHintKey("layoutResetDone");
     // path snapped proxies back to their open-time startLeft/Top —
     // but the bbox provider for cc-info / others factors `userOff`
     // into the bbox, so startLeft/Top were the OFFSET-APPLIED
@@ -502,7 +531,6 @@ OBR.onReady(() => {
         { destination: "LOCAL" },
       );
     } catch {}
-    hintEl.textContent = "已重置 · 拖动整体移动，拖右下角调整大小";
   });
 
   btnDone.addEventListener("click", () => closeEditor());

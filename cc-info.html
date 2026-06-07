@@ -76,6 +76,42 @@ html,body{
 .reset-btn:active{transform:rotate(180deg)}
 .reset-btn.flash{opacity:1;color:#f5a623;transform:rotate(180deg)}
 .reset-btn svg{width:13px;height:13px;display:block;pointer-events:none}
+/* Sync status (cloud) + refresh — mirrors cc-panel sidebar. */
+.sync-wrap{
+  flex-shrink:0;
+  display:flex;align-items:center;gap:1px;
+}
+.cc-cloud,.cc-refresh{
+  flex-shrink:0;
+  width:18px;height:18px;
+  display:flex;align-items:center;justify-content:center;
+  background:transparent;border:none;padding:0;margin:0;
+  cursor:default;
+  opacity:0.75;
+  border-radius:3px;
+  transition:opacity .12s, background .12s, color .12s;
+}
+.cc-cloud svg,.cc-refresh svg{width:13px;height:13px;display:block;pointer-events:none}
+.cc-cloud.is-synced{color:#2ecc71}
+.cc-cloud.is-dirty{
+  color:#f39c12;cursor:pointer;opacity:1;
+}
+.cc-cloud.is-dirty:hover{background:rgba(243,156,18,.15);color:#f5b942}
+.cc-cloud.is-local{color:#e74c3c;opacity:1}
+.cc-cloud.is-spinning{color:#7ab8e8;opacity:1;pointer-events:none}
+.cc-refresh{
+  color:#7be0a0;cursor:pointer;
+}
+.cc-refresh:hover{background:rgba(46,204,113,.18);opacity:1}
+.cc-refresh:disabled{opacity:0.45;cursor:wait}
+.cc-refresh.spinning{opacity:1;pointer-events:none}
+.cc-cloud.is-spinning svg,
+.cc-refresh.spinning svg{
+  animation:cc-info-spin .8s linear infinite !important;
+}
+@keyframes cc-info-spin{
+  to{transform:rotate(360deg)}
+}
 /* 2026-05-12 — scrollbar hidden (still scrollable via wheel/touch).
    The 3px scrollbar was causing width jumps on tab switch that
    stretched sibling components. */

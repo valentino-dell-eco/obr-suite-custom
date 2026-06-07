@@ -20,6 +20,8 @@ import {
   clampStat,
   type BubblesData,
 } from "./utils/statEdit";
+import { t } from "./i18n";
+import { getLocalLang } from "./state";
 
 const params = new URLSearchParams(location.search);
 const itemId = params.get("itemId") ?? "";
@@ -83,8 +85,8 @@ function paintPinBtn(): void {
   pinBtn.classList.toggle("pinned", v);
   pinBtn.setAttribute("aria-pressed", String(v));
   pinBtn.title = v
-    ? "已置顶（取消则恢复随选择关闭）"
-    : "置顶面板（取消选中也保持显示）";
+    ? t(getLocalLang(), "hpBarPinned")
+    : t(getLocalLang(), "hpBarPinTooltip");
 }
 
 function toggleHpBarPinned(): void {
@@ -135,8 +137,8 @@ function paint(): void {
     const locked = live.locked === undefined ? true : !!live.locked;
     lockBtn.dataset.locked = locked ? "true" : "false";
     lockBtn.title = locked
-      ? "已锁定：战斗外玩家看不到血条详情。点击解锁让所有人可见。"
-      : "已解锁：所有人可见血条与 AC。点击锁定恢复战斗外隐藏。";
+      ? t(getLocalLang(), "hpBarLocked")
+      : t(getLocalLang(), "hpBarUnlocked");
   }
 }
 

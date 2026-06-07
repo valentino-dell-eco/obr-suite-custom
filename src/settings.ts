@@ -12,7 +12,7 @@ import {
   setLocalLang,
   onLangChange,
 } from "./state";
-import { applyLangAttr } from "./i18n";
+import { applyLangAttr, t } from "./i18n";
 import {
   exportScene,
   downloadBlob,
@@ -33,6 +33,7 @@ import {
   removeLocalFile,
   initLocalContent,
   getLocalFiles,
+  getLocalFileCategoryCounts,
   BC_LOCAL_CONTENT_CHANGED,
   type LocalFileMeta,
 } from "./utils/localContent";
@@ -1196,28 +1197,31 @@ function renderLocalContentBlock(lang: Language): string {
 
 function localFileRowHtml(f: LocalFileMeta, lang: Language): string {
   const kindLabel: Record<string, string> = lang === "zh" ? {
-    monster: "怪物", spell: "法术", item: "物品", feat: "专长", race: "种族",
+    monster: "怪物", spell: "法术", item: "物品", class: "职业", classFeature: "职业特性", feat: "专长", race: "种族",
     background: "背景", optionalfeature: "能力", condition: "状态", vehicle: "载具",
     deity: "神祇", language: "语言", psionic: "灵能", reward: "奖励",
     variantrule: "副规则", trap: "陷阱", hazard: "灾害", cult: "教派",
     boon: "恩惠", disease: "疾病", table: "表格", action: "动作",
-    recipe: "食谱", deck: "牌组",
+    recipe: "食谱", deck: "牌组", subclass: "子职业", subclassFeature: "子职业特性",
   } : {
-    monster: "Monster", spell: "Spell", item: "Item", feat: "Feat", race: "Race",
+    monster: "Monster", spell: "Spell", item: "Item", class: "Class", classFeature: "Class Feature", feat: "Feat", race: "Race",
     background: "Background", optionalfeature: "Feature", condition: "Condition",
     vehicle: "Vehicle", deity: "Deity", language: "Language", psionic: "Psionic",
     reward: "Reward", variantrule: "Rule", trap: "Trap", hazard: "Hazard",
     cult: "Cult", boon: "Boon", disease: "Disease", table: "Table",
-    action: "Action", recipe: "Recipe", deck: "Deck",
+    action: "Action", recipe: "Recipe", deck: "Deck", subclass: "Subclass", subclassFeature: "Subclass Feature",
   };
   const kindStr = kindLabel[f.kind] || f.kind;
   const disable = isGM ? "" : "disabled";
+  const infoTitle = lang === "zh" ? "查看详情" : "View details";
+  const deleteTitle = lang === "zh" ? "删除" : "Delete";
   return `
     <div class="lib-local-row" data-local-id="${escapeAttr(f.id)}">
       <span class="lib-local-name" title="${escapeAttr(f.filename)}">${escapeAttr(f.filename)}</span>
-      <span class="lib-local-meta">${escapeAttr(kindStr)} · ${f.count}</span>
-      ${isGM ? `<button class="lib-local-del" type="button" ${disable} title="${lang === "zh" ? "删除" : "Delete"}">✕</button>` : ""}
+      <button class="lib-local-info" type="button" title="${infoTitle}">ℹ️</button>
+      ${isGM ? `<button class="lib-local-del" type="button" title="${deleteTitle}">✕</button>` : ""}
     </div>
+    <div class="lib-local-details" style="display: none;"></div>
   `;
 }
 
@@ -1433,7 +1437,7 @@ function wireLibrariesBody(root: HTMLElement): void {
     });
     delBtn?.addEventListener("click", async () => {
       if (!isGM) return;
-      if (!confirm("删除此库？这不会影响数据本身，只会从设置里移除。")) return;
+      if (!confirm(t(getLocalLang(), "settingsDeleteLibraryConfirm"))) return;
       const next = (getState().libraries ?? []).filter((l) => l.id !== id);
       await setState({ libraries: next });
     });
@@ -1696,6 +1700,46 @@ function wireLibrariesBody(root: HTMLElement): void {
         OBR.broadcast.sendMessage(BC_LOCAL_CONTENT_CHANGED, {}, { destination: "LOCAL" });
       } catch {}
       renderContent();
+    });
+  });
+
+  // Local content info button
+  root.querySelectorAll<HTMLButtonElement>(".lib-local-info").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = btn.closest<HTMLDivElement>(".lib-local-row");
+      if (!row) return;
+      const id = row.dataset.localId;
+      if (!id) return;
+      const details = row.nextElementSibling as HTMLDivElement | null;
+      if (!details || !details.classList.contains("lib-local-details")) return;
+      
+      if (details.style.display === "none") {
+        // Expand: populate with category counts
+        const counts = getLocalFileCategoryCounts(id);
+        const lang = getLocalLang();
+        const kindLabel: Record<string, string> = lang === "zh" ? {
+          monster: "怪物", spell: "法术", item: "物品", class: "职业", feat: "专长", race: "种族",
+          background: "背景", optionalfeature: "能力", condition: "状态", vehicle: "载具",
+          deity: "神祇", language: "语言", psionic: "灵能", reward: "奖励",
+          variantrule: "副规则", trap: "陷阱", hazard: "灾害", cult: "教派",
+          boon: "恩惠", disease: "疾病", table: "表格", action: "动作",
+          recipe: "食谱", deck: "牌组", classFeature: "职业特性", subclass: "子职业", subclassFeature: "子职业特性",
+        } : {
+          monster: "Monster", spell: "Spell", item: "Item", class: "Class", feat: "Feat", race: "Race",
+          background: "Background", optionalfeature: "Feature", condition: "Condition",
+          vehicle: "Vehicle", deity: "Deity", language: "Language", psionic: "Psionic",
+          reward: "Reward", variantrule: "Rule", trap: "Trap", hazard: "Hazard",
+          cult: "Cult", boon: "Boon", disease: "Disease", table: "Table",
+          action: "Action", recipe: "Recipe", deck: "Deck", classFeature: "Class Feature", subclass: "Subclass", subclassFeature: "Subclass Feature",
+        };
+        const rows = counts.map((c) => `<div class="lib-detail-row">${kindLabel[c.kind] || c.kind} <span class="lib-detail-count">${c.count}</span></div>`).join("");
+        const heading = lang === "zh" ? "文件包含的内容分类：" : "File categories:";
+        details.innerHTML = `<div class="lib-detail-box"><div class="lib-detail-heading">${heading}</div>${rows}</div>`;
+        details.style.display = "block";
+      } else {
+        // Collapse
+        details.style.display = "none";
+      }
     });
   });
 }
@@ -3063,26 +3107,28 @@ function findTab(id: string): TabDef {
 }
 
 function moduleLabelKey(id: ModuleId): string {
+  let label = "";
   switch (id) {
-    case "timeStop": return lang === "zh" ? "时停模式" : "Time Stop";
-    case "focus": return lang === "zh" ? "同步视口" : "Sync Viewport";
-    case "bestiary": return lang === "zh" ? "怪物图鉴" : "Bestiary";
-    case "characterCards": return lang === "zh" ? "角色卡" : "Character Cards";
-    case "initiative": return lang === "zh" ? "先攻追踪" : "Initiative Tracker";
-    case "search": return lang === "zh" ? "全局搜索" : "Global Search";
-    case "dice": return lang === "zh" ? "定位骰子" : "Tactical Dice";
-    case "portals": return lang === "zh" ? "传送门" : "Portals";
-    case "bubbles": return lang === "zh" ? "血量气泡" : "HP Bubbles";
-    case "statusTracker": return lang === "zh" ? "状态追踪" : "Status Tracker";
-    case "resourceTracker": return lang === "zh" ? "资源追踪" : "Resource Tracker";
-    case "hpBar": return lang === "zh" ? "小血条组件" : "HP Bar";
-    case "metadataInspector": return lang === "zh" ? "元数据检查" : "Metadata Inspector";
-    case "fullFog": return lang === "zh" ? "迷雾编辑" : "Fog Editor";
-    case "trickster": return lang === "zh" ? "捣蛋鬼在哪？" : "Trickster Marker";
-    case "circleImage": return lang === "zh" ? "圆形图片" : "Circle Image";
-    case "follow": return lang === "zh" ? "跟随" : "Follow";
-    case "musicBoard": return lang === "zh" ? "音乐板" : "Music Board";
+    case "timeStop": label = lang === "zh" ? "时停模式" : "Time Stop"; break;
+    case "focus": label = lang === "zh" ? "同步视口" : "Sync Viewport"; break;
+    case "bestiary": label = lang === "zh" ? "怪物图鉴" : "Bestiary"; break;
+    case "characterCards": label = lang === "zh" ? "角色卡" : "Character Cards"; break;
+    case "initiative": label = lang === "zh" ? "先攻追踪" : "Initiative Tracker"; break;
+    case "search": label = lang === "zh" ? "全局搜索" : "Global Search"; break;
+    case "dice": label = lang === "zh" ? "定位骰子" : "Tactical Dice"; break;
+    case "portals": label = lang === "zh" ? "传送门" : "Portals"; break;
+    case "bubbles": label = lang === "zh" ? "血量气泡" : "HP Bubbles"; break;
+    case "statusTracker": label = lang === "zh" ? "状态追踪" : "Status Tracker"; break;
+    case "resourceTracker": label = lang === "zh" ? "资源追踪" : "Resource Tracker"; break;
+    case "hpBar": label = lang === "zh" ? "小血条组件" : "HP Bar"; break;
+    case "metadataInspector": label = lang === "zh" ? "元数据检查" : "Metadata Inspector"; break;
+    case "fullFog": label = lang === "zh" ? "迷雾编辑" : "Fog Editor"; break;
+    case "trickster": label = lang === "zh" ? "捣蛋鬼在哪？" : "Trickster Marker"; break;
+    case "circleImage": label = lang === "zh" ? "圆形图片" : "Circle Image"; break;
+    case "follow": label = lang === "zh" ? "跟随" : "Follow"; break;
+    case "musicBoard": label = lang === "zh" ? "音乐板" : "Music Board"; break;
   }
+  return label;
 }
 
 // 2026-05-12 — supporter overlay coordination. When the user is on

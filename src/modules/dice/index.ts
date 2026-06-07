@@ -1,5 +1,6 @@
 import OBR, { isImage } from "@owlbear-rodeo/sdk";
 import { getLocalLang } from "../../state";
+import { t } from "../../i18n";
 import { DiceType, DIE_SIDES, DieResult, rollDie, sidesOf } from "./types";
 import { readSkinsForPlayer } from "./dice-skins";
 import { assetUrl } from "../../asset-base";
@@ -1236,7 +1237,7 @@ export async function broadcastDiceRoll(opts: {
       if (n) rollerName = n;
     }
   } catch {}
-  if (!rollerName) rollerName = "投骰人";
+  if (!rollerName) rollerName = t(getLocalLang(), "diceRollerFallback");
 
   const modifier = opts.modifier ?? 0;
   const dice = opts.dice.map((d) => {

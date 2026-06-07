@@ -4,7 +4,7 @@
 //   - 1em width/height so they scale with surrounding text font-size
 //   - vertical-align tuned so the icon sits centered next to text
 //
-// Use in HTML templates:   `${ICONS.swords} 武器 / 攻击`
+// Use in HTML templates:   `${ICONS.swords}  ${tt("ccSecWeapons")}`
 // Use in Preact JSX:       <span dangerouslySetInnerHTML={{ __html: ICONS.swords }} />
 
 function svg(content: string, opts: { fill?: string; sw?: number } = {}): string {

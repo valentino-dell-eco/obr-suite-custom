@@ -13,6 +13,7 @@
  */
 import OBR from "@owlbear-rodeo/sdk";
 import { getLocalLang } from "./state";
+import { t } from "./i18n";
 
 // Dev-only transform form; per-client language read once at load.
 const en = getLocalLang() === "en";
@@ -73,7 +74,7 @@ function refreshPreview() {
   const url = imgUrlEl.value.trim();
   natW = 0; natH = 0;
   applyBtn.disabled = true;
-  if (!url) { previewEl.textContent = en ? "Preview" : "预览"; previewEl.style.backgroundImage = ""; return; }
+  if (!url) { previewEl.textContent = t(getLocalLang(), "transformPreview"); previewEl.style.backgroundImage = ""; return; }
   const my = ++loadToken;
   const probe = new Image();
   probe.crossOrigin = "anonymous";
@@ -86,13 +87,13 @@ function refreshPreview() {
       previewEl.textContent = "";
       applyBtn.disabled = false;
     } else {
-      previewEl.textContent = en ? "Can't read dimensions" : "无法读取尺寸";
+      previewEl.textContent = t(getLocalLang(), "transformCantReadDimensions");
     }
   };
   probe.onerror = () => {
     if (my !== loadToken) return;
     previewEl.style.backgroundImage = "";
-    previewEl.textContent = en ? "Load failed" : "加载失败";
+    previewEl.textContent = t(getLocalLang(), "transformLoadFailed");
     applyBtn.disabled = true;
   };
   probe.src = url;
@@ -134,7 +135,7 @@ applyBtn.addEventListener("click", () => {
     return;
   }
   applyBtn.disabled = true;
-  applyBtn.textContent = en ? "Transforming…" : "变身中…";
+  applyBtn.textContent = t(getLocalLang(), "transforming");
 });
 
 closeBtn.addEventListener("click", () => {

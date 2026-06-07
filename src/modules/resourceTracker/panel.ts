@@ -38,6 +38,8 @@ import OBR, { Item } from "@owlbear-rodeo/sdk";
 import { Resource, IconId, PLUGIN_ID } from "./types";
 import { ICON_LIBRARY } from "./icons";
 import { readResources, updateResource, writeResources } from "./storage";
+import { broadcastDiceRoll } from "../dice";
+import { type DieResult } from "../dice/types";
 import { t } from "../../i18n";
 import { getLocalLang } from "../../state";
 
@@ -84,6 +86,26 @@ function parseValueExpression(
     if (typeof v === "number" && Number.isFinite(v)) return v;
   } catch {}
   return null;
+}
+
+function dieInfoToDiceType(die: string): string {
+  switch (die) {
+    case "D2": return "d2";
+    case "D4": return "d4";
+    case "D6": return "d6";
+    case "D8": return "d8";
+    case "D10": return "d10";
+    case "D12": return "d12";
+    case "D20": return "d20";
+    case "D100": return "d100";
+    default: return "d20";
+  }
+}
+
+function rollDieInfo(die: string): number {
+  const diceType = dieInfoToDiceType(die);
+  const sides = Number(diceType.slice(1));
+  return Math.floor(Math.random() * sides) + 1;
 }
 
 const BC_OPEN_EDIT = `${PLUGIN_ID}/edit-open`;
@@ -353,7 +375,8 @@ export function mountResourcePanel(opts: MountOptions): {
   function renderResourceRow(r: Resource): string {
     let pillsHtml = "";
     switch (r.type) {
-      case "count":  pillsHtml = renderCountPills(r); break;
+      case "count":
+      case "dieRoll": pillsHtml = renderCountPills(r); break;
       case "bar":    pillsHtml = renderBarPill(r); break;
       case "number": pillsHtml = renderNumberPill(r); break;
     }
@@ -495,7 +518,7 @@ export function mountResourcePanel(opts: MountOptions): {
     if (!row) return;
     const meta = row.querySelector<HTMLElement>("[data-meta]");
     if (meta) meta.textContent = `${r.current} / ${r.max}`;
-    if (r.type === "count") {
+    if (r.type === "count" || r.type === "dieRoll") {
       const max = Math.max(0, Math.floor(r.max));
       const cur = Math.max(0, Math.min(max, Math.floor(r.current)));
       row.querySelectorAll<HTMLElement>('[data-action="count-toggle"]').forEach((p) => {
@@ -950,6 +973,20 @@ export function mountResourcePanel(opts: MountOptions): {
     // 3. Notifier hook + room-wide toast broadcast.
     onChange?.({ resourceName: r.name || T("rtUnnamed"), delta, current: next, max: r.max });
     void broadcastChanged(itemId, nextRow, delta, r.current);
+    if (r.type === "dieRoll" && delta < 0 && r.dieInfo) {
+      const uses = Math.min(Math.abs(delta), 10);
+      const dice: DieResult[] = [];
+      for (let i = 0; i < uses; i++) {
+        dice.push({ type: dieInfoToDiceType(r.dieInfo), value: rollDieInfo(r.dieInfo) });
+      }
+      void broadcastDiceRoll({
+        itemId,
+        dice,
+        winnerIdx: -1,
+        label: `${r.name || T("rtUnnamed")} ${T("rpDieRollLabel")}`,
+        rollerId: itemId,
+      });
+    }
     // 4. Persist. items.onChange echoes back; refresh() runs but
     //    skips render() because we're in the suppress window.
     await updateResource(itemId, r.id, () => nextRow);

@@ -21,6 +21,11 @@ import {
 import { itemToInitiativeItem, getCombatState, genTiebreak } from "../utils/metadata";
 import { getLocalLang } from "../../../state";
 import { broadcastDiceRoll, isGlobalDarkRollEnabled } from "../../dice";
+import { t } from "../utils/i18n";
+
+
+let lang = getLocalLang();
+const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
 
 export type RollType = "disadvantage" | "normal" | "advantage";
 export type EffectType = "prepare" | "ambush" | "combat";
@@ -645,6 +650,7 @@ export function useInitiative() {
         // individual rolls in its broadcast payload, so we render a
         // single die with the kept value as both the roll and winner.
         const visual = Math.max(1, Math.min(20, Math.round(totalValue)));
+        const label = lang === 'zh'? "先攻" : "Initiative";
         try {
           const [rollerId, rollerName] = await Promise.all([
             OBR.player.getId(),
@@ -655,7 +661,7 @@ export function useInitiative() {
             dice: [{ type: "d20" as const, value: visual }],
             winnerIdx: 0,
             modifier: 0,
-            label: "先攻 / Initiative",
+            label: label,
             rollerId,
             rollerName,
           });
@@ -900,6 +906,7 @@ export function useInitiative() {
     }, 6000);
 
     try {
+        const label = lang === 'zh'? "先攻" : "Initiative";
       const [rollerId, rollerName] = await Promise.all([
         OBR.player.getId(),
         OBR.player.getName(),
@@ -916,7 +923,7 @@ export function useInitiative() {
         }),
         winnerIdx,
         modifier: dexMod,
-        label: "先攻 / Initiative",
+        label: label,
         rollerId,
         rollerName,
         rollId,

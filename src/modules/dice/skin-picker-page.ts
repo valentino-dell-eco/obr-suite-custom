@@ -8,6 +8,8 @@ import OBR from "@owlbear-rodeo/sdk";
 import { ALL_TYPES, type DiceType } from "./types";
 import { writeSkin, readActiveSkins, isVideoSkin, type DiceSkins } from "./dice-skins";
 import { assetUrl } from "../../asset-base";
+import { applyI18nDom, t } from "../../i18n";
+import { getLocalLang } from "../../state";
 
 // Literal (not imported from index.ts) so this iframe stays a leaf
 // module — the dev-namespace vite plugin rewrites the prefix in both
@@ -46,6 +48,7 @@ async function closeModal(): Promise<void> {
 }
 
 OBR.onReady(async () => {
+  applyI18nDom(getLocalLang());
   const payload = readPayload();
   const previewEl = document.getElementById("preview") as HTMLDivElement;
   const gridEl = document.getElementById("dieGrid") as HTMLDivElement;
@@ -53,7 +56,7 @@ OBR.onReady(async () => {
   const btnCancel = document.getElementById("btnCancel") as HTMLButtonElement;
 
   if (!payload) {
-    previewEl.textContent = "未能读取图片信息，请重试。";
+    previewEl.textContent = t(getLocalLang(), "diceSkinPickerErrPreview");
   } else {
     const isVid = isVideoSkin({ url: payload.url, mime: payload.mime });
     const thumb = isVid
@@ -62,8 +65,8 @@ OBR.onReady(async () => {
     previewEl.innerHTML =
       `<span class="thumb">${thumb}</span>` +
       `<span class="meta">` +
-      `<span class="nm">${esc(payload.name || "（未命名附件）")}</span>` +
-      `<span class="tp">${isVid ? "动图 webm" : "静态图片"}</span>` +
+      `<span class="nm">${esc(payload.name || t(getLocalLang(), "diceSkinPickerUnnamed"))}</span>` +
+      `<span class="tp">${isVid ? t(getLocalLang(), "diceSkinPickerVideo") : t(getLocalLang(), "diceSkinPickerStatic")}</span>` +
       `</span>`;
   }
 

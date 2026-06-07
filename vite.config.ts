@@ -1,6 +1,5 @@
 import { defineConfig } from "vite";
 import preact from "@preact/preset-vite";
-import basicSsl from "@vitejs/plugin-basic-ssl";
 import { resolve } from "path";
 
 // Dual deploy targets:
@@ -47,7 +46,7 @@ function devNamespaceIsolation() {
 export default defineConfig(({ command }) => ({
   plugins:
     command === "serve"
-      ? [devNamespaceIsolation(), preact(), basicSsl()]
+      ? [devNamespaceIsolation(), preact()]
       : [devNamespaceIsolation(), preact()],
   base: SUITE_BASE,
   server: {

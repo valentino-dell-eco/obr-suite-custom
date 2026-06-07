@@ -24,10 +24,13 @@ function normaliseResource(raw: unknown): Resource | null {
   const r = raw as any;
   if (typeof r.id !== "string" || !r.id) return null;
   if (typeof r.name !== "string") return null;
-  if (r.type !== "count" && r.type !== "bar" && r.type !== "number") return null;
+  if (r.type !== "count" && r.type !== "bar" && r.type !== "number" && r.type !== "dieRoll") return null;
   const cur = Number(r.current);
   const max = Number(r.max);
   if (!Number.isFinite(cur) || !Number.isFinite(max)) return null;
+  const dieInfo = typeof r.dieInfo === "string" && /^(D2|D4|D6|D8|D10|D12|D20|D100)$/.test(r.dieInfo)
+    ? (r.dieInfo as any)
+    : undefined;
   return {
     id: r.id,
     name: r.name,
@@ -35,6 +38,7 @@ function normaliseResource(raw: unknown): Resource | null {
     current: cur,
     max: max,
     icon: typeof r.icon === "string" ? r.icon : "gem",
+    dieInfo,
     order: typeof r.order === "number" ? r.order : undefined,
   };
 }

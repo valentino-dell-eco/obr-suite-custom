@@ -46,6 +46,8 @@ import {
   BC_PANEL_DRAG_END,
   BC_PANEL_RESET,
 } from "../../utils/panelLayout";
+import { getLocalLang } from "../../state";
+import { t } from "../../i18n";
 
 const POPOVER_PALETTE = `${PLUGIN_ID}/palette`;
 const POPOVER_MANAGE = `${PLUGIN_ID}/manage`;
@@ -306,7 +308,7 @@ async function registerCreateStatusMenu(): Promise<void> {
       icons: [
         {
           icon: ICON_URL,
-          label: "以此创建状态",
+          label: getLocalLang() === "en" ? "Create Status From This" : "以此创建状态",
           // Non-MAP image items only — turning a map/backdrop into a
           // buff icon makes no sense. No role filter: players can
           // build their own catalog (it's per-client localStorage).
@@ -343,7 +345,7 @@ async function registerCreateStatusMenu(): Promise<void> {
           ? item.rotation : 0;
         const buff: BuffDef = {
           id: `custom-${Date.now()}-${Math.floor(Math.random() * 1e4)}`,
-          name: (item.name as string) || "新状态",
+          name: (item.name as string) || (getLocalLang() === "en" ? "New Status" : "新状态"),
           color: "#ffffff",
           iconAsset: item.image.url as string,
           ...(srcScale !== 1.0 ? { webmScale: srcScale } : {}),
@@ -735,7 +737,7 @@ export async function setupStatusTracker(): Promise<void> {
       icons: [
         {
           icon: ICON_URL,
-          label: "状态追踪",
+          label: getLocalLang() === "en" ? "Status Tracker" : "状态追踪",
           // No `roles` filter — both GM and players see the icon.
           // Per-token permission for buff writes is enforced by the
           // OBR scene-items API itself: players can only modify
@@ -758,7 +760,7 @@ export async function setupStatusTracker(): Promise<void> {
       icons: [
         {
           icon: ICON_URL,
-          label: "状态追踪",
+          label: getLocalLang() === "en" ? "Status Tracker" : "状态追踪",
           filter: { activeTools: [TOOL_ID] },
         },
       ],
@@ -812,7 +814,7 @@ export async function setupStatusTracker(): Promise<void> {
       shortcut: "BracketRight",
       icons: [{
         icon: ICON_URL,
-        label: "状态追踪",
+        label: getLocalLang() === "en" ? "Status Tracker" : "状态追踪",
         // Available on Select + on the status tracker tool itself
         // (so pressing `]` again from inside the tool exits it).
         // No roles filter — players can press `]` too.

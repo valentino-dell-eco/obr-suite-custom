@@ -2,7 +2,10 @@ import OBR from "@owlbear-rodeo/sdk";
 import { installDebugOverlay } from "../../utils/debugOverlay";
 import { ICONS } from "../../icons";
 import { resolveClickRollTarget } from "../dice/tags";
-import { bindRollableContextMenu, bindRollableClickPopup } from "../dice/context-menu";
+import {
+  bindRollableContextMenu,
+  bindRollableClickPopup,
+} from "../dice/context-menu";
 import { subscribeToSfx } from "../dice/sfx-broadcast";
 import { bindPanelDrag } from "../../utils/panelDrag";
 import { PANEL_IDS } from "../../utils/panelLayout";
@@ -10,6 +13,9 @@ import { readBubbles, type BubblesData } from "../../utils/statEdit";
 import { mountResourcePanel } from "../resourceTracker/panel";
 import { mountStatBanner } from "../../utils/statBanner";
 import { installPanelZoom } from "../../utils/panelZoom";
+import { getLocalLang } from "../../state";
+import { t } from "../../i18n";
+import { normalizeCombatGearFlags } from "./data-normalize";
 
 // 2026-05-13 — Was previously dev-only (gated through STABLE_HIDES /
 // STABLE_HIDES_CC) until cc-fullscreen + hp-bar integration matured.
@@ -21,13 +27,22 @@ import { installPanelZoom } from "../../utils/panelZoom";
 const LS_CC_INFO_PINNED = "obr-suite/cc-info-pinned";
 const BC_CC_INFO_PIN_CHANGED = "com.obr-suite/cc-info-pin-changed";
 
+let lang = getLocalLang();
+const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
+
 function readPanelPinned(): boolean {
-  try { return localStorage.getItem(LS_CC_INFO_PINNED) === "1"; } catch { return false; }
+  try {
+    return localStorage.getItem(LS_CC_INFO_PINNED) === "1";
+  } catch {
+    return false;
+  }
 }
 
 function togglePanelPinned(): void {
   const next = !readPanelPinned();
-  try { localStorage.setItem(LS_CC_INFO_PINNED, next ? "1" : "0"); } catch {}
+  try {
+    localStorage.setItem(LS_CC_INFO_PINNED, next ? "1" : "0");
+  } catch {}
   // Broadcast both LOCAL (so the bg module on this client picks it
   // up) and let the iframe re-render its button on next render call.
   try {
@@ -43,7 +58,7 @@ function togglePanelPinned(): void {
   if (btn) {
     btn.classList.toggle("pinned", next);
     btn.setAttribute("aria-pressed", String(next));
-    btn.title = next ? "已置顶（取消则恢复随选择关闭）" : "置顶面板（取消选中也保持显示）";
+    btn.title = next ? tt("ccPanelPinned") : tt("ccPanelPinTooltip");
   }
 }
 
@@ -61,8 +76,8 @@ function renderRtTabStrip(): string {
   return `
     <div class="rt-tabstrip">
       <div class="rt-tab-indicator" data-rt-indicator></div>
-      <button class="rt-tab ${activeRtTab === "attr" ? "on" : ""}" data-rt-tab="attr" type="button">属性</button>
-      <button class="rt-tab ${activeRtTab === "res" ? "on" : ""}" data-rt-tab="res" type="button">资源</button>
+      <button class="rt-tab ${activeRtTab === "attr" ? "on" : ""}" data-rt-tab="attr" type="button">${tt("ccTabAbilities")}</button>
+      <button class="rt-tab ${activeRtTab === "res" ? "on" : ""}" data-rt-tab="res" type="button">${tt("ccTabResources")}</button>
     </div>
   `;
 }
@@ -110,12 +125,16 @@ function setupRtTabSwitching(): void {
   });
 }
 
-let rtMountHandle: { refresh: () => Promise<void>; unmount: () => void } | null = null;
+let rtMountHandle: {
+  refresh: () => Promise<void>;
+  unmount: () => void;
+} | null = null;
 // Shared stat-banner component handle (HP / temp HP / AC / lock). Same
 // lifecycle as rtMountHandle — render() unmounts the previous instance
 // and re-mounts so the component's scene.items.onChange subscription
 // doesn't leak one listener per card switch.
-let ccStatHandle: { refresh: () => Promise<void>; unmount: () => void } | null = null;
+let ccStatHandle: { refresh: () => Promise<void>; unmount: () => void } | null =
+  null;
 async function ensureRtResourceMount(): Promise<void> {
   const container = root.querySelector<HTMLElement>("#rt-mount");
   if (!container) return;
@@ -199,7 +218,7 @@ function measureContentHeight(): number {
   // content area extent is (contentBottom - contentTop), and adding
   // both vertical paddings reconstructs the full box height the popover
   // would need.
-  return (contentBottom - contentTop) + padTop + padBottom;
+  return contentBottom - contentTop + padTop + padBottom;
 }
 
 async function adjustHeight(): Promise<void> {
@@ -208,10 +227,15 @@ async function adjustHeight(): Promise<void> {
   // +6 for a tiny breathing margin so the bottom border doesn't kiss
   // the popover edge. Clamp to [MIN, MAX] — never exceed the popover's
   // opened height (so user-resized larger popovers stay larger).
-  const target = Math.max(INFO_MIN_HEIGHT, Math.min(contentH + 6, INFO_MAX_HEIGHT));
+  const target = Math.max(
+    INFO_MIN_HEIGHT,
+    Math.min(contentH + 6, INFO_MAX_HEIGHT),
+  );
   try {
     await OBR.popover.setHeight(INFO_POPOVER_ID, target);
-  } catch { /* popover may have closed mid-flight */ }
+  } catch {
+    /* popover may have closed mid-flight */
+  }
 }
 
 // The token id this card is currently bound to. Updated whenever the
@@ -220,19 +244,33 @@ async function adjustHeight(): Promise<void> {
 let boundItemId: string | null = null;
 
 const ABBR: Record<string, string> = {
-  str: "力", dex: "敏", con: "体", int: "智", wis: "感", cha: "魅",
+  str: tt("ccAbbrStr"),
+  dex: tt("ccAbbrDex"),
+  con: tt("ccAbbrCon"),
+  int: tt("ccAbbrInt"),
+  wis: tt("ccAbbrWis"),
+  cha: tt("ccAbbrCha"),
 };
 // Full Chinese names for the dice-roll label (e.g. "敏捷检定" rather
 // than "敏检定"). Used for the panel-page formula label / history
 // display — the chip itself still shows the single-char ABBR.
 const FULL: Record<string, string> = {
-  str: "力量", dex: "敏捷", con: "体质", int: "智力", wis: "感知", cha: "魅力",
+  str: tt("ccFullStr"),
+  dex: tt("ccFullDex"),
+  con: tt("ccFullCon"),
+  int: tt("ccFullInt"),
+  wis: tt("ccFullWis"),
+  cha: tt("ccFullCha"),
 };
 const ORDER = ["str", "dex", "con", "int", "wis", "cha"];
 
 function escapeHtml(s: unknown) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!)
+  return String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ]!,
   );
 }
 
@@ -240,11 +278,15 @@ function renderNameButton(name: string, clickable: boolean): string {
   if (!clickable) {
     return `<div class="name">${escapeHtml(name)}</div>`;
   }
-  const title = `点击 → 同步 / 清除 token 名字：${name}`;
+  const title = t(getLocalLang(), "ccInfoNameSyncTitle").replace("{name}", name);
   return `<button class="name name-btn" type="button" data-name-text="${escapeHtml(name)}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(name)}</button>`;
 }
 
-async function toggleTokenNameText(itemId: string, name: string, btn: HTMLButtonElement): Promise<void> {
+async function toggleTokenNameText(
+  itemId: string,
+  name: string,
+  btn: HTMLButtonElement,
+): Promise<void> {
   const cleanName = name.trim();
   if (!cleanName) return;
   btn.disabled = true;
@@ -309,7 +351,10 @@ function renderWeaponPropertyChips(raw: string): string {
   for (const ch of restPart) {
     if (ch === "(" || ch === "（") depth++;
     else if (ch === ")" || ch === "）") depth = Math.max(0, depth - 1);
-    if (depth === 0 && (ch === "," || ch === "，" || ch === "、" || ch === "/")) {
+    if (
+      depth === 0 &&
+      (ch === "," || ch === "，" || ch === "、" || ch === "/")
+    ) {
       const t = buf.trim();
       if (t) tags.push(t);
       buf = "";
@@ -325,12 +370,12 @@ function renderWeaponPropertyChips(raw: string): string {
     // visible label keeps the full text.
     const searchKey = t.replace(/[(（][^)）]*[)）]\s*/g, "").trim() || t;
     out.push(
-      `<span class="prop prop-chip" data-search="${escapeHtml(searchKey)}" title="搜索：${escapeHtml(searchKey)}">${escapeHtml(t)}</span>`,
+      `<span class="prop prop-chip" data-search="${escapeHtml(searchKey)}" title="${tt("ccSearchTitle")}：${escapeHtml(searchKey)}">${escapeHtml(t)}</span>`,
     );
   }
   if (masteryPart) {
     out.push(
-      `<span class="prop prop-chip prop-mastery" data-search="${escapeHtml(masteryPart)}" title="搜索精通词条：${escapeHtml(masteryPart)}"><em>精通</em>${escapeHtml(masteryPart)}</span>`,
+      `<span class="prop prop-chip prop-mastery" data-search="${escapeHtml(masteryPart)}" title="${tt("ccMasterySearchTitle")}：${escapeHtml(masteryPart)}"><em>${tt("ccMasteryLabel")}</em>${escapeHtml(masteryPart)}</span>`,
     );
   }
   return out.length ? `<span class="prop-row">${out.join("")}</span>` : "";
@@ -350,28 +395,271 @@ function classesStr(d: any): string {
 
 let currentCardId: string | null = null;
 let currentRoomId: string | null = null;
-const cardCache = new Map<string, any>();
+type CardDataSource = "imported" | "dirty" | "server";
+type CardCacheEntry = { data: any; source: CardDataSource };
+const cardCache = new Map<string, CardCacheEntry>();
 
-// Broadcast id mirrored from panel-page.ts. Receiving this with a
-// matching cardId means another client uploaded / refreshed / imported
-// the same card, so we should drop our cache and re-fetch.
+const SERVER_ORIGIN = "https://obr.dnd.center";
+const API_BASE = `${SERVER_ORIGIN}/api/character`;
+const LS_PREFIX = "character-cards/";
+
+// Broadcast ids mirrored from panel-page.ts / fullscreen-page.tsx.
 const BC_CARD_UPDATED = "com.obr-suite/cc-card-updated";
+const BC_DIRTY_CHANGED = "com.obr-suite/cc-dirty-changed";
+
+// Cloud status icons — same glyphs as cc-panel sidebar.
+const CLOUD_SYNCED_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>`;
+const CLOUD_DIRTY_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="12" y1="16" x2="12" y2="18"/></svg>`;
+const CLOUD_LOCAL_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><line x1="4" y1="4" x2="20" y2="20"/></svg>`;
+const CLOUD_SPINNER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke-dasharray="28 56" stroke-linecap="round"/></svg>`;
+const REFRESH_SVG = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8 a5 5 0 1 0 1.5 -3.5"/><path d="M3.2 3 V5.5 H5.5"/></svg>`;
+
+let syncLoading = false;
+
+function resolveCardDataSource(cardId: string): CardDataSource {
+  if (cardId.startsWith("imported_")) return "imported";
+  if (localStorage.getItem(`cc-dirty/${cardId}`)) return "dirty";
+  return "server";
+}
+
+function getSyncStatus(cardId: string): "synced" | "dirty" | "local" {
+  if (cardId.startsWith("imported_")) return "local";
+  if (localStorage.getItem(`cc-dirty/${cardId}`)) return "dirty";
+  return "synced";
+}
+
+function cacheEntryValid(cardId: string, entry: CardCacheEntry): boolean {
+  return entry.source === resolveCardDataSource(cardId);
+}
+
+// Same load order as fullscreen-page.tsx: imported → cc-dirty → server.
+async function fetchCardData(
+  cardId: string,
+  roomId: string,
+  signal?: AbortSignal,
+): Promise<{ data: any; source: CardDataSource }> {
+  let json: any;
+  let source: CardDataSource;
+
+  if (cardId.startsWith("imported_")) {
+    const localKey = `${LS_PREFIX}imported/${cardId}`;
+    const storedData = localStorage.getItem(localKey);
+    if (!storedData) throw new Error(tt("ccErrImportedMissing"));
+    json = JSON.parse(storedData);
+    source = "imported";
+  } else {
+    const dirtyKey = `cc-dirty/${cardId}`;
+    const dirtyData = localStorage.getItem(dirtyKey);
+    if (dirtyData) {
+      try {
+        json = JSON.parse(dirtyData);
+        source = "dirty";
+      } catch {
+        json = null;
+      }
+    }
+    if (!json) {
+      const url = `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+      const res = await fetch(url, { cache: "no-store", signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      json = await res.json();
+      source = "server";
+    }
+  }
+
+  return {
+    data: normalizeCombatGearFlags(json),
+    source,
+  };
+}
+
+async function uploadDirtyCardToServer(cardId: string): Promise<void> {
+  if (!currentRoomId || cardId.startsWith("imported_")) return;
+  const dirtyKey = `cc-dirty/${cardId}`;
+  const stored = localStorage.getItem(dirtyKey);
+  if (!stored) return;
+
+  updateSyncButtons("loading");
+  try {
+    const parsed = JSON.parse(stored);
+    const url = `${API_BASE}/${encodeURIComponent(currentRoomId)}/${encodeURIComponent(cardId)}/data`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(parsed),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`HTTP ${res.status} — ${errText.slice(0, 120)}`);
+    }
+
+    localStorage.removeItem(dirtyKey);
+    try {
+      localStorage.removeItem(`cc-dirty-ts/${cardId}`);
+    } catch {}
+    cardCache.delete(cardId);
+    try {
+      const payload = {
+        cardId,
+        url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(currentRoomId)}/${encodeURIComponent(cardId)}/`,
+      };
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+        destination: "LOCAL",
+      });
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+        destination: "REMOTE",
+      });
+      OBR.broadcast.sendMessage(
+        BC_DIRTY_CHANGED,
+        { cardId },
+        { destination: "LOCAL" },
+      );
+    } catch {}
+    if (currentCardId === cardId && currentRoomId) {
+      await showCard(cardId, currentRoomId, { force: true });
+    } else {
+      updateSyncButtons(getSyncStatus(cardId));
+    }
+  } catch (e) {
+    console.warn("[cc-info] dirty upload failed", e);
+    updateSyncButtons("dirty");
+  }
+}
+
+function renderSyncCloudMarkup(
+  cardId: string,
+  loading = false,
+): { className: string; title: string; html: string } {
+  if (loading) {
+    return {
+      className: "cc-cloud is-spinning",
+      title: tt("ccLoadingCard"),
+      html: CLOUD_SPINNER_SVG,
+    };
+  }
+  const status = getSyncStatus(cardId);
+  if (status === "local") {
+    return {
+      className: "cc-cloud is-local",
+      title: tt("ccPanelLocalOnlyTitle"),
+      html: CLOUD_LOCAL_SVG,
+    };
+  }
+  if (status === "dirty") {
+    return {
+      className: "cc-cloud is-dirty",
+      title: tt("ccPanelDirtyTitle"),
+      html: CLOUD_DIRTY_SVG,
+    };
+  }
+  return {
+    className: "cc-cloud is-synced",
+    title: tt("ccPanelSyncedTitle"),
+    html: CLOUD_SYNCED_SVG,
+  };
+}
+
+function updateSyncButtons(
+  state: "synced" | "dirty" | "local" | "loading",
+): void {
+  if (!currentCardId) return;
+  const cloud = root.querySelector<HTMLButtonElement>("#cc-cloud-btn");
+  const refresh = root.querySelector<HTMLButtonElement>("#cc-refresh-btn");
+  if (!cloud || !refresh) return;
+
+  const loading = state === "loading";
+  syncLoading = loading;
+  const cloudUi = renderSyncCloudMarkup(
+    currentCardId,
+    loading,
+  );
+  cloud.className = cloudUi.className;
+  cloud.title = cloudUi.title;
+  cloud.innerHTML = cloudUi.html;
+  cloud.style.pointerEvents =
+    loading || state === "synced" || state === "local" ? "none" : "";
+  refresh.classList.toggle("spinning", loading);
+  refresh.disabled = loading;
+}
+
+function setupSyncControls(cardId: string): void {
+  const cloud = root.querySelector<HTMLButtonElement>("#cc-cloud-btn");
+  const refresh = root.querySelector<HTMLButtonElement>("#cc-refresh-btn");
+  if (!cloud || !refresh) return;
+
+  updateSyncButtons(getSyncStatus(cardId));
+
+  refresh.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    void refreshCurrentCard();
+  };
+
+  cloud.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (getSyncStatus(cardId) === "dirty") {
+      void uploadDirtyCardToServer(cardId);
+    }
+  };
+}
+
+async function refreshCurrentCard(): Promise<void> {
+  const cardId = currentCardId;
+  const roomId = currentRoomId;
+  if (!cardId || !roomId) return;
+
+  updateSyncButtons("loading");
+  cardCache.delete(cardId);
+  try {
+    await showCard(cardId, roomId, { force: true });
+    if (!cardId.startsWith("imported_")) {
+      try {
+        const payload = {
+          cardId,
+          url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`,
+        };
+        OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+          destination: "LOCAL",
+        });
+        OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+          destination: "REMOTE",
+        });
+      } catch {}
+    }
+  } finally {
+    if (currentCardId === cardId) {
+      updateSyncButtons(getSyncStatus(cardId));
+    }
+  }
+}
 
 // Cached role lookup. The DM-only lock button at the right end of the
 // stat banner reads this. OBR.onReady below populates it before any
 // showCard runs, so the very first render already has the right value.
 let cachedIsGM = false;
 
-async function showCard(cardId: string, roomId: string) {
+async function showCard(
+  cardId: string,
+  roomId: string,
+  opts?: { force?: boolean },
+) {
   currentCardId = cardId;
   currentRoomId = roomId;
 
-  // Cache hit: render instantly, 0 network wait, 0 intermediate frame.
-  const cached = cardCache.get(cardId);
-  if (cached) {
-    const live = await readLiveBubbles();
-    render(cached, cardId, roomId, live);
-    return;
+  // Cache hit — only when the cached source still matches local state
+  // (server vs cc-dirty vs imported). Mirrors fullscreen load order.
+  if (!opts?.force) {
+    const cached = cardCache.get(cardId);
+    if (cached && cacheEntryValid(cardId, cached)) {
+      const live = await readLiveBubbles();
+      render(cached.data, cardId, roomId, live);
+      return;
+    }
   }
 
   // Cold load: only show "loading" if nothing's rendered yet (first open).
@@ -379,30 +667,24 @@ async function showCard(cardId: string, roomId: string) {
   // on screen until the new data arrives — single atomic A→B swap, no flash.
   const isEmpty = root.childElementCount === 0;
   if (isEmpty) {
-    root.innerHTML = '<div class="loading">加载中…</div>';
+    root.innerHTML = `<div class="loading">${escapeHtml(tt("ccLoadingCard"))}</div>`;
+  } else {
+    updateSyncButtons("loading");
   }
 
   try {
-    const [res, live] = await Promise.all([
-      // 2026-05-15 — `cache: 'no-store'` so BC_CARD_UPDATED refetches
-      // never get served stale data from the HTTP cache. fullscreen-
-      // page.ts uses the same flag; without it the user saw "保存了但
-      // 小面板没刷新" because the browser handed back the old data.json.
-      fetch(
-        `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`,
-        { cache: "no-store" },
-      ),
+    const [{ data: d, source }, live] = await Promise.all([
+      fetchCardData(cardId, roomId),
       readLiveBubbles(),
     ]);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const d = await res.json();
     // If user switched cards between fetch start and end, ignore.
     if (currentCardId !== cardId) return;
-    cardCache.set(cardId, d);
+    cardCache.set(cardId, { data: d, source });
     render(d, cardId, roomId, live);
   } catch (e: any) {
     if (currentCardId !== cardId) return;
-    root.innerHTML = `<div class="err">加载失败：${escapeHtml(e?.message ?? e)}</div>`;
+    syncLoading = false;
+    root.innerHTML = `<div class="err">${escapeHtml(tt("ccLoadFailedPrefix"))}${escapeHtml(e?.message ?? e)}</div>`;
   }
 }
 
@@ -415,14 +697,19 @@ async function readLiveBubbles(): Promise<BubblesData> {
   return readBubbles(boundItemId);
 }
 
-function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) {
+function render(
+  d: any,
+  cardId: string,
+  roomId: string,
+  live: BubblesData = {},
+) {
   const id = d.identity || {};
   const cs = d.core_stats || {};
   const ab = d.abilities || {};
   const cb = d.combat || {};
   const sp = d.spellcasting || {};
 
-  const name = id.display_name || id.character_name || "未命名";
+  const name = id.display_name || id.character_name || t(getLocalLang(), "ccInfoUnnamed");
   const race = [id.race?.name, id.race?.subrace].filter(Boolean).join("·");
   const cls = classesStr(d);
   const lvl = d.total_level != null ? `Lv${d.total_level}` : "";
@@ -446,19 +733,20 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
     "armor class": typeof cs.ac === "number" ? cs.ac : 10,
   };
 
-  const speedStr = cs.speed != null ? `${cs.speed}尺` : "?";
+  const speedStr = cs.speed != null ? `${cs.speed}${tt("ccFtUnit")}` : "?";
   const castAbility = sp.spellcasting_ability || "—";
 
   const statBanner = `<div class="cc-stat-mount" id="cc-stat-mount"></div>`;
 
+  const initExpr = `1d20${cs.initiative >= 0 ? `+${cs.initiative}` : cs.initiative}`;
   // The remaining read-only chips (HP/AC moved to stat-rows above).
   const chips = `
-    <div class="chip init"><span class="k">先攻</span><span class="v">${fmtMod(cs.initiative)}</span></div>
-    <div class="chip"><span class="k">速度</span><span class="v">${escapeHtml(speedStr)}</span></div>
-    <div class="chip"><span class="k">被动察觉</span><span class="v">${escapeHtml(cs.passive_perception)}</span></div>
-    <div class="chip"><span class="k">熟练</span><span class="v">${fmtMod(cs.proficiency_bonus)}</span></div>
-    <div class="chip"><span class="k">豁免DC</span><span class="v">${escapeHtml(cs.dc)}</span></div>
-    <div class="chip"><span class="k">施法关键属性</span><span class="v">${escapeHtml(castAbility)}</span></div>
+    <div class="chip init" ><span class="k">${tt("ccInit")}</span><span class="v rollable" data-expr="${initExpr}" data-label="${tt("ccFullInit")}">${fmtMod(cs.initiative)}</span></div>
+    <div class="chip"><span class="k">${tt("ccSpeed")}</span><span class="v">${escapeHtml(speedStr)}</span></div>
+    <div class="chip"><span class="k">${tt("ccPassivePerception")}</span><span class="v">${escapeHtml(cs.passive_perception)}</span></div>
+    <div class="chip"><span class="k">${tt("ccProfBonus")}</span><span class="v">${fmtMod(cs.proficiency_bonus)}</span></div>
+    <div class="chip"><span class="k">${tt("ccSaveDC")}</span><span class="v">${escapeHtml(cs.dc)}</span></div>
+    <div class="chip"><span class="k">${tt("ccSpellcastingAbility")}</span><span class="v">${escapeHtml(castAbility)}</span></div>
   `;
 
   // Group skills by their ability key — each ability card embeds its own
@@ -472,11 +760,12 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
   }
 
   const renderSkillRow = (s: any) => {
-    const cls = s.proficiency === "expertise"
-      ? "sk sk-exp"
-      : s.proficiency === "proficient"
-        ? "sk sk-prof"
-        : "sk";
+    const cls =
+      s.proficiency === "expertise"
+        ? "sk sk-exp"
+        : s.proficiency === "proficient"
+          ? "sk sk-prof"
+          : "sk";
     const total = typeof s.total === "number" ? s.total : 0;
     const expr = `1d20${total >= 0 ? `+${total}` : total}`;
     const lbl = `${s.name ?? "?"}`;
@@ -486,33 +775,34 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
     </div>`;
   };
 
-  const abl = ORDER
-    .map((k) => {
-      const a = ab[k] || {};
-      const prof = !!a.save?.proficient;
-      const skList = skillsByAbil[k] ?? [];
-      const skHtml = skList.map(renderSkillRow).join("");
-      // Ability check: 1d20+modifier. Saving-throw uses the same
-      // modifier unless the save has its own bonus stored separately.
-      const aMod = typeof a.modifier === "number" ? a.modifier : 0;
-      const aExpr = `1d20${aMod >= 0 ? `+${aMod}` : aMod}`;
-      const aLbl = `${FULL[k] ?? ABBR[k] ?? k}检定`;
-      // Saving throw — different label, may have its own bonus.
-      const saveBonus = typeof a.save?.bonus === "number"
+  const abl = ORDER.map((k) => {
+    const a = ab[k] || {};
+    const prof = !!a.save?.proficient;
+    const skList = skillsByAbil[k] ?? [];
+    const skHtml = skList.map(renderSkillRow).join("");
+    // Ability check: 1d20+modifier. Saving-throw uses the same
+    // modifier unless the save has its own bonus stored separately.
+    const aMod = typeof a.modifier === "number" ? a.modifier : 0;
+    const aExpr = `1d20${aMod >= 0 ? `+${aMod}` : aMod}`;
+    const aLbl = `${FULL[k] ?? ABBR[k] ?? k}${t(getLocalLang(), "ccInfoSkillSuffix")}`;
+    // Saving throw — different label, may have its own bonus.
+    const saveBonus =
+      typeof a.save?.bonus === "number"
         ? a.save.bonus
-        : (a.save?.proficient ? aMod + (cs.proficiency_bonus ?? 0) : aMod);
-      const saveExpr = `1d20${saveBonus >= 0 ? `+${saveBonus}` : saveBonus}`;
-      const saveLbl = `${FULL[k] ?? ABBR[k] ?? k}豁免`;
-      return `<div class="abl${prof ? " prof" : ""}">
+        : a.save?.proficient
+          ? aMod + (cs.proficiency_bonus ?? 0)
+          : aMod;
+    const saveExpr = `1d20${saveBonus >= 0 ? `+${saveBonus}` : saveBonus}`;
+    const saveLbl = `${FULL[k] ?? ABBR[k] ?? k}${t(getLocalLang(), "ccInfoSaveSuffix")}`;
+    return `<div class="abl${prof ? " prof" : ""}">
         <div class="abl-head">
           <span class="a rollable" data-expr="${saveExpr}" data-label="${escapeHtml(saveLbl)}" title="${escapeHtml(saveLbl)} ${saveExpr}">${ABBR[k]}</span>
-          <span class="t">${escapeHtml(a.total)}</span>
+          <span class="t" style="padding-left: 5px !important;">${escapeHtml(a.total)}</span>
           <span class="m rollable" data-expr="${aExpr}" data-label="${escapeHtml(aLbl)}" title="${escapeHtml(aLbl)} ${aExpr}">${fmtMod(a.modifier)}</span>
         </div>
         ${skHtml ? `<div class="abl-skills">${skHtml}</div>` : ""}
       </div>`;
-    })
-    .join("");
+  }).join("");
 
   const weaponRows: string[] = [];
 
@@ -521,9 +811,9 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
     const bonus = extractBonus(sp.attack_bonus);
     const bn = parseInt(bonus.replace(/[^\d-]/g, ""), 10) || 0;
     const atkExpr = `1d20${bn >= 0 ? `+${bn}` : bn}`;
-    const atkLbl = `法术攻击`;
+    const atkLbl = tt("ccSpellAttack");
     weaponRows.push(`<div class="wp spell">
-      <span class="n">近战/远程法术攻击</span>
+      <span class="n">${tt("ccMeleeRangedSpellAttack")}</span>
       <span class="atk rollable" data-expr="${atkExpr}" data-label="${escapeHtml(atkLbl)}" title="${escapeHtml(atkLbl)} ${atkExpr}">${escapeHtml(bonus)}</span>
       <span class="dmg">DC ${escapeHtml(sp.save_dc ?? cs.dc ?? "?")}</span>
     </div>`);
@@ -544,13 +834,19 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
       // global search resolves the rule line on click.
       const propsRaw = String(w.properties ?? "");
       const masteryName = String((w as any).mastery ?? "").trim();
-      const masteryPrefix = masteryName ? `精通：${masteryName}` : "";
+      const lang = getLocalLang();
+      const masteryPrefix = masteryName ? `${t(lang, "ccInfoMasteryPrefix")}${masteryName}` : "";
       // Merge into one string. If the raw props already contains a
       // mastery tag (legacy cards), don't double-add the dedicated one.
-      const propsCombined = masteryPrefix && !/精通[：:]/.test(propsRaw)
-        ? (propsRaw ? `${propsRaw}, ${masteryPrefix}` : masteryPrefix)
-        : propsRaw;
-      const prop = propsCombined ? renderWeaponPropertyChips(propsCombined) : "";
+      const propsCombined =
+        masteryPrefix && !/精通[：:]/.test(propsRaw)
+          ? propsRaw
+            ? `${propsRaw}, ${masteryPrefix}`
+            : masteryPrefix
+          : propsRaw;
+      const prop = propsCombined
+        ? renderWeaponPropertyChips(propsCombined)
+        : "";
       const dmgRaw = [w.damage, w.damage_type].filter(Boolean).join(" ");
       const wpName = w.name ?? "?";
       // Attack roll: parse the leading sign+number from attack_bonus.
@@ -558,13 +854,13 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
       const atkM = /([+-]?\s*\d+)/.exec(atkBonusStr);
       const atkBn = atkM ? parseInt(atkM[1].replace(/\s+/g, ""), 10) : 0;
       const atkExpr = `1d20${atkBn >= 0 ? `+${atkBn}` : atkBn}`;
-      const atkLbl = `${wpName} 命中`;
+      const atkLbl = `${wpName}${t(getLocalLang(), "ccInfoHitSuffix")}`;
       // Damage: extract the raw dice expression from `w.damage`. Most
       // entries are like "1d8+3" or "2d6+4" — pass through directly.
       const dmgExprRaw = String(w.damage ?? "").replace(/\s+/g, "");
       const dmgExprMatch = /\d*d\d+([+-]\d+)?/.exec(dmgExprRaw);
       const dmgExpr = dmgExprMatch ? dmgExprMatch[0] : dmgExprRaw;
-      const dmgLbl = `${wpName} 伤害${w.damage_type ? `(${w.damage_type})` : ""}`;
+      const dmgLbl = `${wpName}${t(getLocalLang(), "ccInfoDmgSuffix")}${w.damage_type ? `(${w.damage_type})` : ""}`;
       // 附加伤害骰 — bonus dice (sneak attack, divine smite, etc.).
       // Server attaches `extra_damage` (e.g. "1d8") and
       // `extra_damage_type` (e.g. "辐光").
@@ -582,11 +878,12 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
       const extraExprRaw = w.extra_damage
         ? String(w.extra_damage).replace(/\s+/g, "")
         : "";
-      const combinedExpr = dmgExpr && extraExprRaw
-        ? `${dmgExpr}+${extraExprRaw}`
-        : dmgExpr || extraExprRaw;
+      const combinedExpr =
+        dmgExpr && extraExprRaw
+          ? `${dmgExpr}+${extraExprRaw}`
+          : dmgExpr || extraExprRaw;
       const combinedLbl = extraExprRaw
-        ? `${wpName} 伤害${w.damage_type ? `(${w.damage_type})` : ""}${w.extra_damage_type ? ` + ${w.extra_damage_type}` : " + 附加"}`
+        ? `${wpName} 伤害${w.damage_type ? `(${w.damage_type})` : ""}${w.extra_damage_type ? ` + ${w.extra_damage_type}` : t(getLocalLang(), "ccInfoExtraDmg")}`
         : dmgLbl;
       const extraDisplay = extraExprRaw
         ? [w.extra_damage, w.extra_damage_type].filter(Boolean).join(" ")
@@ -606,7 +903,9 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
     }
   }
 
-  const weps = weaponRows.length ? weaponRows.join("") : '<div class="empty">无</div>';
+  const weps = weaponRows.length
+    ? weaponRows.join("")
+    : `<div class="empty">${t(getLocalLang(), "ccInfoEmpty")}</div>`;
 
   // ── Searchable chips: features / feats / spells ────────────────
   // Each chip is a tiny compact name-only box. Clicking fills the
@@ -621,7 +920,7 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
   const attrInner = `
     <div class="row">${chips}</div>
     <div class="abil">${abl}</div>
-    <div class="sect">${ICONS.swords} 武器 / 攻击</div>
+    <div class="sect">${ICONS.swords} ${tt("ccSecWeapons")}</div>
     ${weps}
     ${featuresHtml}
   `;
@@ -642,16 +941,17 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
   // localStorage; bg module reads the same key + listens for the
   // broadcast.
   const pinned = readPanelPinned();
+  const syncCloud = renderSyncCloudMarkup(cardId, syncLoading);
   root.innerHTML = `
     <div class="hdr">
       <button class="reset-btn" id="bubbles-reset-btn" type="button"
-        title="重置画面血条 — 清缓存重画，修复偶发的位置漂移">
+        title="${t(getLocalLang(), "hpBarResetTitle")}">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 8 a5 5 0 1 0 1.5 -3.5"/>
           <path d="M3.2 3 V5.5 H5.5"/>
         </svg>
       </button>
-      <div class="drag-handle" id="drag-handle" title="拖动 / Drag" aria-label="拖动面板">
+      <div class="drag-handle" id="drag-handle" title="${t(getLocalLang(), "hpBarDragTitle")}" aria-label="${t(getLocalLang(), "hpBarDragTitle")}">
         <svg viewBox="0 0 12 18" aria-hidden="true">
           <circle cx="3" cy="3" r="1.2" fill="currentColor"/>
           <circle cx="9" cy="3" r="1.2" fill="currentColor"/>
@@ -663,7 +963,7 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
       </div>
       <button class="panel-pin-btn ${pinned ? "pinned" : ""}" id="panel-pin-btn" type="button"
         aria-pressed="${pinned}"
-        title="${pinned ? "已置顶（取消则恢复随选择关闭）" : "置顶面板（取消选中也保持显示）"}">
+        title="${t(getLocalLang(), pinned ? "ccInfoPinnedTitle" : "ccInfoPinTitle")}">
         <svg viewBox="0 0 16 16" aria-hidden="true">
           <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1 0 .707c-.48.48-1.072.588-1.503.588-.177 0-.339-.016-.484-.041L7.176 13.04a.5.5 0 0 1-.708 0L3.633 10.207 1.4 12.439a.5.5 0 0 1-.707-.707L2.926 9.5.74 7.314a.5.5 0 0 1 0-.708l1.51-1.51c.41-.41.945-.625 1.482-.711.534-.085 1.139-.097 1.683-.024.546.073 1.169.114 1.643-.04.305-.099.62-.281.94-.602.193-.193.282-.467.348-.749.066-.281.117-.572.196-.793a1.51 1.51 0 0 1 .31-.508c.094-.092.215-.174.357-.232a.5.5 0 0 1 .19-.04Z" fill="currentColor"/>
         </svg>
@@ -672,7 +972,13 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
         ${renderNameButton(name, !!boundItemId)}
       </div>
       <div class="sub">${escapeHtml(sub)}</div>
-      <a class="raw-link" href="${rawUrl}" target="_blank" rel="noopener">原始数据</a>
+      <div class="sync-wrap" id="cc-sync-wrap">
+        <button class="${syncCloud.className}" id="cc-cloud-btn" type="button"
+          title="${escapeHtml(syncCloud.title)}">${syncCloud.html}</button>
+        <button class="cc-refresh${syncLoading ? " spinning" : ""}" id="cc-refresh-btn" type="button"
+          title="${escapeHtml(tt("ccRefreshTitle"))}"${syncLoading ? " disabled" : ""}>${REFRESH_SVG}</button>
+      </div>
+      <a class="raw-link" href="${rawUrl}" target="_blank" rel="noopener">${tt("ccRawData")}</a>
     </div>
     ${stickyTop}
     ${contentBlock}
@@ -728,15 +1034,24 @@ function render(d: any, cardId: string, roomId: string, live: BubblesData = {}) 
           { tokenId: boundItemId },
           { destination: "LOCAL" },
         );
-      } catch (err) { console.warn("[cc-info] reset broadcast failed", err); }
+      } catch (err) {
+        console.warn("[cc-info] reset broadcast failed", err);
+      }
       resetBtn.classList.add("flash");
       setTimeout(() => resetBtn.classList.remove("flash"), 400);
     });
   }
-  const nameBtn = root.querySelector<HTMLButtonElement>(".name-btn[data-name-text]");
+  setupSyncControls(cardId);
+  const nameBtn = root.querySelector<HTMLButtonElement>(
+    ".name-btn[data-name-text]",
+  );
   if (nameBtn && boundItemId) {
     nameBtn.addEventListener("click", () => {
-      void toggleTokenNameText(boundItemId!, nameBtn.dataset.nameText || name, nameBtn);
+      void toggleTokenNameText(
+        boundItemId!,
+        nameBtn.dataset.nameText || name,
+        nameBtn,
+      );
     });
   }
   // 2026-05-15 — fit the popover to the freshly-rendered content. Runs
@@ -759,21 +1074,24 @@ function renderSearchChips(d: any): string {
   const sections: string[] = [];
   const features = d.features ?? {};
 
-  const renderChips = (items: any[]) => items
-    .filter((x) => x && x.name)
-    .map((x) => {
-      const nm = String(x.name);
-      return `<span class="srch-chip" data-q="${escapeHtml(nm)}">${escapeHtml(nm)}</span>`;
-    })
-    .join("");
+  const renderChips = (items: any[]) =>
+    items
+      .filter((x) => x && x.name)
+      .map((x) => {
+        const nm = String(x.name);
+        return `<span class="srch-chip" data-q="${escapeHtml(nm)}">${escapeHtml(nm)}</span>`;
+      })
+      .join("");
 
   // 特性 = race_features + class_features (merged into one tight grid).
   const featList: any[] = [];
-  if (Array.isArray(features.race_features)) featList.push(...features.race_features);
-  if (Array.isArray(features.class_features)) featList.push(...features.class_features);
+  if (Array.isArray(features.race_features))
+    featList.push(...features.race_features);
+  if (Array.isArray(features.class_features))
+    featList.push(...features.class_features);
   if (featList.length) {
     sections.push(`<div class="srch-sect">
-      <div class="srch-sect-h">特性</div>
+      <div class="srch-sect-h">${tt("ccTabFeatures")}</div>
       <div class="srch-grid">${renderChips(featList)}</div>
     </div>`);
   }
@@ -781,7 +1099,7 @@ function renderSearchChips(d: any): string {
   // 专长 — class feats list.
   if (Array.isArray(features.feats) && features.feats.length) {
     sections.push(`<div class="srch-sect">
-      <div class="srch-sect-h">专长</div>
+      <div class="srch-sect-h">${tt("ccFeats")}</div>
       <div class="srch-grid">${renderChips(features.feats)}</div>
     </div>`);
   }
@@ -792,7 +1110,8 @@ function renderSearchChips(d: any): string {
   const allSpells: any[] = [];
   for (const key of ["cantrips_known", "always_known", "prepared"]) {
     const arr = sp[key];
-    if (Array.isArray(arr)) for (const s of arr) if (s && s.name) allSpells.push(s);
+    if (Array.isArray(arr))
+      for (const s of arr) if (s && s.name) allSpells.push(s);
   }
   if (allSpells.length) {
     const seen = new Set<string>();
@@ -802,7 +1121,7 @@ function renderSearchChips(d: any): string {
       return true;
     });
     sections.push(`<div class="srch-sect">
-      <div class="srch-sect-h">法术</div>
+      <div class="srch-sect-h">${tt("ccTabSpells")}</div>
       <div class="srch-grid">${renderChips(uniq)}</div>
     </div>`);
   }
@@ -822,7 +1141,9 @@ async function resolveBoundToken(): Promise<string | null> {
 root.addEventListener("click", async (e) => {
   // Search-chip click → fill the cluster's search input so the
   // 5etools popover opens with matching results.
-  const chip = (e.target as HTMLElement | null)?.closest<HTMLElement>(".srch-chip");
+  const chip = (e.target as HTMLElement | null)?.closest<HTMLElement>(
+    ".srch-chip",
+  );
   if (chip) {
     e.preventDefault();
     e.stopPropagation();
@@ -845,7 +1166,9 @@ root.addEventListener("click", async (e) => {
   // Weapon-property chip click → same flow as the search chips.
   // Sends the property name (轻型 / 灵巧 / 缓速 / etc.) into the
   // global-search popover so the user can read the rule definition.
-  const propChip = (e.target as HTMLElement | null)?.closest<HTMLElement>(".prop-chip");
+  const propChip = (e.target as HTMLElement | null)?.closest<HTMLElement>(
+    ".prop-chip",
+  );
   if (propChip) {
     e.preventDefault();
     e.stopPropagation();
@@ -907,11 +1230,7 @@ bindRollableContextMenu(
   ccIframeOriginGetter,
 );
 // LEFT-click → quick-pick popup (劣势 / 普通 / 优势 + 重击).
-bindRollableClickPopup(
-  root,
-  () => resolveBoundToken(),
-  ccIframeOriginGetter,
-);
+bindRollableClickPopup(root, () => resolveBoundToken(), ccIframeOriginGetter);
 
 OBR.onReady(async () => {
   installDebugOverlay();
@@ -968,15 +1287,27 @@ OBR.onReady(async () => {
   });
 
   // Multi-client sync — when another client refreshes / imports the
-  // currently-shown card, drop our cache entry and re-fetch so the
-  // small popover preview reflects the new data.json without the user
-  // needing to re-open the panel.
+  // currently-shown card, re-fetch unless a newer local dirty copy
+  // should win (same rule as fullscreen + cc-panel sidebar).
   OBR.broadcast.onMessage(BC_CARD_UPDATED, (ev: any) => {
+    const payload = ev?.data as { cardId?: string } | undefined;
+    if (!payload?.cardId) return;
+    if (payload.cardId.startsWith("imported_")) return;
+    if (localStorage.getItem(`cc-dirty/${payload.cardId}`)) return;
+    cardCache.delete(payload.cardId);
+    if (currentCardId === payload.cardId && currentRoomId) {
+      void showCard(payload.cardId, currentRoomId, { force: true });
+    }
+  });
+
+  OBR.broadcast.onMessage(BC_DIRTY_CHANGED, (ev: any) => {
     const payload = ev?.data as { cardId?: string } | undefined;
     if (!payload?.cardId) return;
     cardCache.delete(payload.cardId);
     if (currentCardId === payload.cardId && currentRoomId) {
-      void showCard(payload.cardId, currentRoomId);
+      void showCard(payload.cardId, currentRoomId, { force: true });
+    } else if (currentCardId === payload.cardId) {
+      updateSyncButtons(getSyncStatus(payload.cardId));
     }
   });
 

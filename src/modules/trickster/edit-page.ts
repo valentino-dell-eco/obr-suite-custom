@@ -15,6 +15,8 @@ import {
   TricksterMeta,
   TricksterTargetMode,
 } from "./types";
+import { applyI18nDom, t } from "../../i18n";
+import { getLocalLang } from "../../state";
 
 const params = new URLSearchParams(location.search);
 const tricksterId = params.get("id") ?? "";
@@ -52,6 +54,7 @@ function syncSwitch(el: HTMLElement, on: boolean): void {
 }
 
 async function init(): Promise<void> {
+  applyI18nDom(getLocalLang());
   if (!tricksterId) {
     btnSave.setAttribute("disabled", "true");
     return;
@@ -119,7 +122,7 @@ btnClose.addEventListener("click", () => { void close(); });
 btnCancel.addEventListener("click", () => { void close(); });
 
 btnDelete.addEventListener("click", async () => {
-  if (!confirm("确定删除此捣蛋鬼？此操作不可撤销。")) return;
+  if (!confirm(t(getLocalLang(), "tricksterDeleteConfirm"))) return;
   try {
     await OBR.broadcast.sendMessage(BC_DELETE, { id: tricksterId }, { destination: "LOCAL" });
   } catch {}

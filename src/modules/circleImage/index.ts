@@ -62,7 +62,7 @@ export async function setupCircleImage(): Promise<void> {
         icons: [
           {
             icon: ICON_URL,
-            label: "圆形图片 / 去底",
+            label: en ? "Circle Image / BG Remove" : "圆形图片 / 去底",
             filter: { roles: ["GM"] },
           },
         ],
