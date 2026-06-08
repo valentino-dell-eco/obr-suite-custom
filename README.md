@@ -24,7 +24,7 @@ https://obr-suite-custom.pages.dev/suite/manifest-dev.json
 ## Added from original
 1 - A more deep import from 5e tools jsons
  <p align="center">
-  <img src="docs/screenshots/deep_import.png" alt="Full adaptation" width="900" />
+  <img src="docs/screenshots/deep_import.png" alt="Deep Import" width="900" />
 </p>
 2 - a fully translated english adaptation
  <p align="center">
