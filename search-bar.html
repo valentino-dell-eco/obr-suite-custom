@@ -359,6 +359,27 @@ mark{
 .search-drag-grip:hover{color:#fff;filter:brightness(1.18)}
 .search-drag-grip.is-dragging{cursor:grabbing;color:#5dade2}
 .search-drag-grip svg{width:8px;height:18px;display:block;pointer-events:none}
+
+/* Contenitore con scroll orizzontale nativo per la progressione */
+.class-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Ottimizzazione dei testi per preservare l'allineamento delle colonne speciali */
+.class-progression-table th, 
+.class-progression-table td {
+  white-space: nowrap;
+  padding: 6px 10px;
+}
+
+/* Forza la cella delle Feature ad andare a capo se i nomi dei privilegi sono troppo lunghi */
+.class-progression-table td:nth-child(2) {
+  white-space: normal;
+  min-width: 140px;
+  max-width: 280px;
+}
 </style>
 </head>
 <body>

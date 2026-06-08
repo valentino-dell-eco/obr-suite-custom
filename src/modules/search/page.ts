@@ -32,10 +32,11 @@ let lang = getLocalLang();
 const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
 // Data source — kiwee.top works for both languages, but additional
 // libraries can be wired in via the suite's library list (set in
-// Settings → 库设置). When >1 library is enabled, loadIndex fetches
+// Settings → tt("searchLibSettings")). When >1 library is enabled, loadIndex fetches
 // from every one and merges entries — that way a self-hosted
 // Cloudflare lib's homebrew monsters show up in search alongside
 // the kiwee defaults.
+
 const DEFAULT_BASE = "https://5e.kiwee.top";
 let _lang: Language = (() => {
   try {
@@ -179,7 +180,7 @@ interface CategoryInfo {
     // Used by c=5 / 30 / 40 / 41.
     | { allClassFiles: true; key: string }
     // Same idea for itemProperty / itemMastery: weapon properties
-    // (轻型 / 灵巧 / 投掷 / 重型 …) live in `items-base.json` which
+    // (tt("searchWeaponPropertyChips")) live in `items-base.json` which
     // isn't covered by the search index. We extract the names so
     // clicking a property chip on a weapon row at least gets a hit.
     | { itemsBaseKey: string; key: string };
@@ -187,134 +188,206 @@ interface CategoryInfo {
 
 const CATEGORY: Record<number, CategoryInfo> = {
   1: {
-    label: "怪物",
+    label: tt("searchCategoryMonster" as any),
     data: {
       fileBySource: (s) => `bestiary/bestiary-${s}.json`,
       key: "monster",
     },
   },
   2: {
-    label: "法术",
+    label: tt("searchCategorySpell" as any),
     data: { fileBySource: (s) => `spells/spells-${s}.json`, key: "spell" },
   },
-  3: { label: "背景", data: { file: "backgrounds.json", key: "background" } },
-  4: { label: "物品", data: { file: "items.json", key: "item" } },
-  // 5etools classes are split into one file per class —
-  // `class/class-{className-slug}.json`. The search index doesn't
-  // surface the parent-class slug for features, so we fetch
-  // `class/index.json` and pool every file's key array together.
-  5: { label: "职业", data: { allClassFiles: true, key: "class" } },
+  3: {
+    label: tt("searchCategoryBackground" as any),
+    data: { file: "backgrounds.json", key: "background" },
+  },
+  4: {
+    label: tt("searchCategoryItem" as any),
+    data: { file: "items.json", key: "item" },
+  },
+  5: {
+    label: tt("searchCategoryClass" as any),
+    data: { allClassFiles: true, key: "class" },
+  },
   6: {
-    label: "状态",
+    label: tt("searchCategoryCondition" as any),
     data: { file: "conditionsdiseases.json", key: "condition" },
   },
-  7: { label: "专长", data: { file: "feats.json", key: "feat" } },
+  7: {
+    label: tt("searchCategoryFeat" as any),
+    data: { file: "feats.json", key: "feat" },
+  },
   8: {
-    label: "能力",
+    label: tt("searchCategoryOptionalfeature" as any),
     data: { file: "optionalfeatures.json", key: "optionalfeature" },
   },
-  9: { label: "灵能", data: { file: "psionics.json", key: "psionic" } },
-  10: { label: "种族", data: { file: "races.json", key: "race" } },
-  11: { label: "奖励", data: { file: "rewards.json", key: "reward" } },
+  9: {
+    label: tt("searchCategoryPsionic" as any),
+    data: { file: "psionics.json", key: "psionic" },
+  },
+  10: {
+    label: tt("searchCategoryRace" as any),
+    data: { file: "races.json", key: "race" },
+  },
+  11: {
+    label: tt("searchCategoryReward" as any),
+    data: { file: "rewards.json", key: "reward" },
+  },
   12: {
-    label: "副规则",
+    label: tt("searchCategoryVariantRule" as any),
     data: { file: "variantrules.json", key: "variantrule" },
   },
-  13: { label: "冒险", data: { file: "adventures.json", key: "adventure" } },
-  14: { label: "神祇", data: { file: "deities.json", key: "deity" } },
-  15: { label: "载具", data: { file: "vehicles.json", key: "vehicle" } },
-  16: { label: "陷阱", data: { file: "trapshazards.json", key: "trap" } },
-  17: { label: "灾害", data: { file: "trapshazards.json", key: "hazard" } },
-  18: { label: "整本书", data: { file: "books.json", key: "book" } },
-  19: { label: "教派", data: { file: "cultsboons.json", key: "cult" } },
-  20: { label: "恩惠", data: { file: "cultsboons.json", key: "boon" } },
+  13: {
+    label: tt("searchCategoryAdventure" as any),
+    data: { file: "adventures.json", key: "adventure" },
+  },
+  14: {
+    label: tt("searchCategoryDeity" as any),
+    data: { file: "deities.json", key: "deity" },
+  },
+  15: {
+    label: tt("searchCategoryVehicle" as any),
+    data: { file: "vehicles.json", key: "vehicle" },
+  },
+  16: {
+    label: tt("searchCategoryTrap" as any),
+    data: { file: "trapshazards.json", key: "trap" },
+  },
+  17: {
+    label: tt("searchCategoryHazard" as any),
+    data: { file: "trapshazards.json", key: "hazard" },
+  },
+  18: {
+    label: tt("searchCategoryBook" as any),
+    data: { file: "books.json", key: "book" },
+  },
+  19: {
+    label: tt("searchCategoryCult" as any),
+    data: { file: "cultsboons.json", key: "cult" },
+  },
+  20: {
+    label: tt("searchCategoryBoon" as any),
+    data: { file: "cultsboons.json", key: "boon" },
+  },
   21: {
-    label: "疾病",
+    label: tt("searchCategoryDisease" as any),
     data: { file: "conditionsdiseases.json", key: "disease" },
   },
   22: {
-    label: "超魔",
+    label: tt("searchCategoryMetamagic" as any),
     data: { file: "optionalfeatures.json", key: "optionalfeature" },
   },
   23: {
-    label: "招式",
+    label: tt("searchCategoryManeuver" as any),
     data: { file: "optionalfeatures.json", key: "optionalfeature" },
   },
-  24: { label: "表格", data: { file: "tables.json", key: "table" } },
-  25: { label: "牌组" },
+  24: {
+    label: tt("searchCategoryTable" as any),
+    data: { file: "generated/gendata-tables.json", key: "table" },
+  },
+  25: { label: tt("searchCategoryDeck" as any) },
   27: {
-    label: "奥术箭",
+    label: tt("searchCategoryArcaneShot" as any),
     data: { file: "optionalfeatures.json", key: "optionalfeature" },
   },
   29: {
-    label: "战斗风格",
+    label: tt("searchCategoryFightingStyle" as any),
     data: { file: "optionalfeatures.json", key: "optionalfeature" },
   },
-  30: { label: "职业能力", data: { allClassFiles: true, key: "classFeature" } },
-  31: { label: "物品", data: { file: "items.json", key: "item" } },
+  30: {
+    label: tt("searchCategoryClassFeature" as any),
+    data: { allClassFiles: true, key: "classFeature" },
+  },
+  31: {
+    label: tt("searchCategoryItem" as any),
+    data: { file: "items.json", key: "item" },
+  },
   32: {
-    label: "盟约",
+    label: tt("searchCategoryPact" as any),
     data: { file: "optionalfeatures.json", key: "optionalfeature" },
   },
   33: {
-    label: "武僧能力",
+    label: tt("searchCategoryKiFeature" as any),
     data: { file: "optionalfeatures.json", key: "optionalfeature" },
   },
   34: {
-    label: "灌注",
+    label: tt("searchCategoryInfusion" as any),
     data: { file: "optionalfeatures.json", key: "optionalfeature" },
   },
   35: {
-    label: "载具升级",
+    label: tt("searchCategoryVehicleUpgrade" as any),
     data: { file: "vehicles.json", key: "vehicleUpgrade" },
   },
-  36: { label: "船定制" },
+  36: { label: tt("searchCategoryShipCustomization" as any) },
   37: {
-    label: "符文",
+    label: tt("searchCategoryRune" as any),
     data: { file: "optionalfeatures.json", key: "optionalfeature" },
   },
-  40: { label: "子职业", data: { allClassFiles: true, key: "subclass" } },
+  40: {
+    label: tt("searchCategorySubclass" as any),
+    data: { allClassFiles: true, key: "subclass" },
+  },
   41: {
-    label: "子职能力",
+    label: tt("searchCategorySubclassFeature" as any),
     data: { allClassFiles: true, key: "subclassFeature" },
   },
-  42: { label: "动作", data: { file: "actions.json", key: "action" } },
-  43: { label: "语言", data: { file: "languages.json", key: "language" } },
-  44: { label: "整本书", data: { file: "books.json", key: "book" } },
-  45: { label: "页面" },
+  42: {
+    label: tt("searchCategoryAction" as any),
+    data: { file: "actions.json", key: "action" },
+  },
+  43: {
+    label: tt("searchCategoryLanguage" as any),
+    data: { file: "languages.json", key: "language" },
+  },
+  44: {
+    label: tt("searchCategoryBook" as any),
+    data: { file: "books.json", key: "book" },
+  },
+  45: { label: tt("searchCategoryPage" as any) },
   46: {
-    label: "怪物概述",
+    label: tt("searchCategoryMonsterLore" as any),
     data: {
       fileBySource: (s) => `bestiary/fluff-bestiary-${s}.json`,
       key: "monsterFluff",
     },
   },
-  47: { label: "角色选项", data: { file: "items.json", key: "item" } },
-  48: { label: "食谱", data: { file: "recipes.json", key: "recipe" } },
+  47: {
+    label: tt("searchCategoryCharacterOption" as any),
+    data: { file: "items.json", key: "item" },
+  },
+  48: {
+    label: tt("searchCategoryRecipe" as any),
+    data: { file: "recipes.json", key: "recipe" },
+  },
   49: {
-    label: "规则",
+    label: tt("searchCategoryRule" as any),
     data: { file: "conditionsdiseases.json", key: "status" },
   },
-  50: { label: "技能" },
-  51: { label: "感官" },
-  52: { label: "牌组", data: { file: "decks.json", key: "deck" } },
-  53: { label: "牌内容" },
+  50: { label: tt("searchCategorySkill" as any) },
+  51: { label: tt("searchCategorySense" as any) },
+  52: {
+    label: tt("searchCategoryDeck" as any),
+    data: { file: "decks.json", key: "deck" },
+  },
+  53: { label: tt("searchCategoryCard" as any) },
   54: {
-    label: "武器精通",
+    label: tt("searchCategoryWeaponMastery" as any),
     data: { itemsBaseKey: "itemMastery", key: "itemMastery" },
   },
-  // c=58 is a SUITE-synthesised pseudo-category for weapon properties
-  // (轻型 / 灵巧 / 投掷 / …). 5etools doesn't index them, but we
-  // synthesise virtual search entries from items-base.json's
-  // itemProperty array so weapon-property chips on the cc-info popup
-  // can resolve a definition.
   58: {
-    label: "武器属性",
+    label: tt("searchCategoryWeaponProperty" as any),
     data: { itemsBaseKey: "itemProperty", key: "itemProperty" },
   },
-  55: { label: "地点" },
-  56: { label: "物品集合", data: { file: "items.json", key: "itemGroup" } },
-  57: { label: "物品", data: { file: "items.json", key: "item" } },
+  55: { label: tt("searchCategoryPlace" as any) },
+  56: {
+    label: tt("searchCategoryItemGroup" as any),
+    data: { file: "items.json", key: "itemGroup" },
+  },
+  57: {
+    label: tt("searchCategoryItem" as any),
+    data: { file: "items.json", key: "item" },
+  },
 };
 // English labels for the result-category chips (lang === "en"). Keyed by
 // the same numeric category code as CATEGORY. categoryInfo() swaps these
@@ -378,10 +451,10 @@ const CATEGORY_LABEL_EN: Record<number, string> = {
 };
 function categoryInfo(c: number): CategoryInfo {
   const info = CATEGORY[c] ?? { label: `?${c}` };
-  if (getLocalLang() === "en") {
-    const en = CATEGORY_LABEL_EN[c];
-    if (en) return { ...info, label: en };
-  }
+  // if (getLocalLang() === "en") {
+  //   const en = CATEGORY_LABEL_EN[c];
+  //   if (en) return { ...info, label: en };
+  // }
   return info;
 }
 
@@ -783,6 +856,48 @@ async function loadCategoryData(
   const cat = catOverride ?? categoryInfo(entry.c);
   if (!cat.data) return [];
 
+  const srcOriginal = srcCode(entry.s);
+  const src = srcOriginal.toLowerCase();
+  // Cache key must include the data key (not just c+src) so
+  // race-vs-subrace lookups don't collide.
+  const isFilePerSource = "fileBySource" in cat.data;
+  const ck = isFilePerSource
+    ? `${dataCacheKey(entry.c, src)}:${cat.data.key}`
+    : `global:${cat.data.key}`;
+  const cached = dataCache.get(ck);
+  if (cached) {
+    // LOG TEMPORANEO
+    if (entry.c === 24)
+      console.log(
+        "[TABLE DEBUG] HIT CACHE per ck=",
+        ck,
+        "size=",
+        cached.length,
+      );
+    return cached;
+  }
+  const pending = dataPending.get(ck);
+  if (pending) return pending;
+
+  // === MODIFICA COMPENDIO LOCALE: PRIORITÀ ASSOLUTA ===
+  // Eseguiamo il controllo locale prima dei blocchi condizionali nativi.
+  // Se l'utente ha importato un compendio homebrew monolitico (es. Laserllama)
+  // che contiene già l'array per "class" o "subclass", usiamo direttamente quello
+  // ed evitiamo di attivare la logica multithread/multi-file "allClassFiles".
+  try {
+    const localArr = getLocalDataByKeySource(cat.data.key, srcOriginal);
+    if (localArr && localArr.length > 0) {
+      // Per file fissi (global cache) non sovrascriviamo la cache globale
+      // con dati per-source — usiamo una cache separata per-source
+      const localCk = isFilePerSource ? ck : `local:${cat.data.key}:${src}`;
+      dataCache.set(localCk, localArr as DataEntry[]);
+      return localArr as DataEntry[];
+    }
+  } catch (e) {
+    console.warn("[obr-suite/search] local data lookup failed", e);
+  }
+  // ====================================================
+
   // Class-family lookup: pool every class-*.json file. Cache key is
   // independent of entry source/category since the pooled data covers
   // all sources at once.
@@ -797,18 +912,9 @@ async function loadCategoryData(
     return loadItemsBaseSubarray(cat.data.itemsBaseKey);
   }
 
-  const srcOriginal = srcCode(entry.s);
-  const src = srcOriginal.toLowerCase();
-  // Cache key must include the data key (not just c+src) so
-  // race-vs-subrace lookups don't collide.
-  const ck = `${dataCacheKey(entry.c, src)}:${cat.data.key}`;
-  const cached = dataCache.get(ck);
-  if (cached) return cached;
-  const pending = dataPending.get(ck);
-  if (pending) return pending;
   // Build candidate file paths. Different libraries follow different
   // case conventions for the source segment in filenames:
-  //   - kiwee.top:        bestiary-mm.json (lowercase)
+  //   - kiwee.top:      bestiary-mm.json (lowercase)
   //   - homebrew/GitHub:  bestiary-HOMEBREW.json (uppercase)
   // Try every case variant in parallel — case-sensitive servers like
   // GitHub Pages 404 on the wrong case, so we have to send all
@@ -826,17 +932,6 @@ async function loadCategoryData(
   ]);
   const bases = getEnabledLibraryBases();
   const p = (async () => {
-    // Local imports always win — if the user has a homebrew JSON
-    // imported with the matching source, prefer it over any URL.
-    try {
-      const localArr = getLocalDataByKeySource(cat.data!.key, srcCode(entry.s));
-      if (localArr.length > 0) {
-        dataCache.set(ck, localArr as DataEntry[]);
-        return localArr as DataEntry[];
-      }
-    } catch (e) {
-      console.warn("[obr-suite/search] local data lookup failed", e);
-    }
     // Fetch from every (base × candidatePath) combination in parallel
     // and merge. First non-empty result keyed (ENG_name|source)
     // survives. Built-in kiwee will typically have most entries;
@@ -849,6 +944,13 @@ async function loadCategoryData(
             const res = await fetch(`${base}/data/${path}`, {
               cache: "no-cache",
             });
+            if (entry.c === 24)
+              console.log(
+                "[TABLE FETCH]",
+                `${base}/data/${path}`,
+                "→",
+                res.status,
+              );
             if (!res.ok) return null;
             okCount++;
             const json = await res.json();
@@ -872,7 +974,7 @@ async function loadCategoryData(
         console.warn(
           `[obr-suite/search] data file for ${cat.data!.key} source="${srcOriginal}" is missing from every enabled library. ` +
             `Tried paths: ${[...candidatePaths].join(" / ")}. ` +
-            `Workaround: 设置 → 库设置 临时关掉对应的第三方扩展库。`,
+            `Workaround: ${tt("searchMissingLibraryLog" as any)}`,
         );
       }
     }
@@ -881,7 +983,7 @@ async function loadCategoryData(
     for (const arr of responses) {
       if (!arr) continue;
       for (const e of arr) {
-        const key = `${(e.ENG_name || e.name || "").toLowerCase()}|${(e.source || "").toUpperCase()}`;
+        const key = `${(e.ENG_name || e.name || (e as any).caption || "").toLowerCase()}|${(e.source || "").toUpperCase()}`;
         if (seen.has(key)) continue;
         seen.add(key);
         merged.push(e);
@@ -1077,6 +1179,25 @@ async function findEntryData(entry: Entry): Promise<DataEntry | null> {
   //                    Pale Elf, Sea Elf) at key "subrace".
   //   c=5 (class)   — primary "class", but sub-class data may also
   //                    appear at "subclass" / "classFeature".
+
+  if (entry.c === 24) {
+    console.log(
+      "[TABLE DEBUG] entry.n =",
+      entry.n,
+      "| entry.s =",
+      entry.s,
+      "| src =",
+      srcCode(entry.s),
+    );
+    console.log("[TABLE DEBUG] arr.length =", arr.length);
+    if (arr.length > 0) {
+      console.log(
+        "[TABLE DEBUG] primo elemento:",
+        JSON.stringify(arr[0]).slice(0, 300),
+      );
+    }
+  }
+
   const fallbackKeys: Record<number, string[]> = {
     10: ["subrace", "race"],
     5: ["class", "subclass", "classFeature"],
@@ -1152,12 +1273,14 @@ async function findEntryData(entry: Entry): Promise<DataEntry | null> {
     return (
       pool.find(
         (e) =>
-          e.ENG_name?.toLowerCase() === entry.n.toLowerCase() &&
-          e.source?.toUpperCase() === targetSrc,
+          (e.ENG_name || (e as any).caption || "").toLowerCase() ===
+            entry.n.toLowerCase() && e.source?.toUpperCase() === targetSrc,
       ) ??
-      pool.find((e) => e.ENG_name?.toLowerCase() === entry.n.toLowerCase()) ??
-      // Some subrace entries store the sub name in `name` only (e.g.
-      // "苍白精灵") with no separate ENG_name in the cn release.
+      pool.find(
+        (e) =>
+          (e.ENG_name || (e as any).caption || "").toLowerCase() ===
+          entry.n.toLowerCase(),
+      ) ??
       pool.find(
         (e) => (e as any).name?.toLowerCase() === entry.n.toLowerCase(),
       ) ??
@@ -1293,13 +1416,14 @@ function renderEntryInline(e: any): string {
 // --- Category-specific renderers ---
 
 const ABILITY_ZH: Record<string, string> = {
-  str: "力量",
-  dex: "敏捷",
-  con: "体质",
-  int: "智力",
-  wis: "感知",
-  cha: "魅力",
+  str: tt("searchAbilityStr"),
+  dex: tt("searchAbilityDex"),
+  con: tt("searchAbilityCon"),
+  int: tt("searchAbilityInt"),
+  wis: tt("searchAbilityWis"),
+  cha: tt("searchAbilityCha"),
 };
+
 const ABILITY_LABEL: Record<string, string> = {
   str: "STR",
   dex: "DEX",
@@ -1310,14 +1434,15 @@ const ABILITY_LABEL: Record<string, string> = {
 };
 
 const ALIGN_ZH: Record<string, string> = {
-  L: "守序",
-  N: "中立",
-  C: "混乱",
-  G: "善良",
-  E: "邪恶",
-  U: "无属",
-  A: "任意",
+  L: tt("searchAlignL"),
+  N: tt("searchAlignN"),
+  C: tt("searchAlignC"),
+  G: tt("searchAlignG"),
+  E: tt("searchAlignE"),
+  U: tt("searchAlignU"),
+  A: tt("searchAlignA"),
 };
+
 function alignmentStr(a: any): string {
   if (!a) return "";
   if (typeof a === "string") return ALIGN_ZH[a] ?? a;
@@ -1363,16 +1488,18 @@ function chipsFor(entry: Entry, data: DataEntry | null): string {
     );
     if (data.weight != null)
       add(T("ccWeight"), `${data.weight} ${T("ccLbUnit")}`);
-    if (data.value != null)
-      add(T("ccValue"), `${data.value} ${T("ccCoinCP")}`);
+    if (data.value != null) add(T("ccValue"), `${data.value} ${T("ccCoinCP")}`);
     if (data.rarity) add(T("ccRarity"), String(data.rarity));
     if (data.reqAttune)
       add(
         T("ccReqAttune"),
-        typeof data.reqAttune === "string" ? stripTags(data.reqAttune) : T("ccYes"),
+        typeof data.reqAttune === "string"
+          ? stripTags(data.reqAttune)
+          : T("ccYes"),
       );
   } else if (c === 8) {
-    if (data.prerequisite) add(T("ccPrerequisite"), prerequisiteStr(data.prerequisite));
+    if (data.prerequisite)
+      add(T("ccPrerequisite"), prerequisiteStr(data.prerequisite));
   } else if (c === 10) {
     add(T("ccSize"), sizeStr(data.size));
     add(T("ccSpeed"), speedStr(data.speed));
@@ -1398,44 +1525,45 @@ function renderMonster(entry: Entry, data: DataEntry): string {
   if (data.entries) parts.push(renderEntries(data.entries));
 
   if (data.trait?.length) {
-    parts.push("<h4>特性</h4>");
+    const traitLabel = entry.c === 10 ? tt("searchTrait") : tt("searchFeature");
+    parts.push(`<h4>${traitLabel}</h4>`);
     for (const t of data.trait) parts.push(renderTrait(t));
   }
   if (data.spellcasting?.length) {
     for (const sc of data.spellcasting) parts.push(renderSpellcasting(sc));
   }
   if (data.action?.length) {
-    parts.push("<h4>动作</h4>");
+    parts.push(`<h4>${tt("searchActions")}</h4>`);
     for (const t of data.action) parts.push(renderTrait(t));
   }
   if (data.bonus?.length) {
-    parts.push("<h4>附赠动作</h4>");
+    parts.push(`<h4>${tt("searchBonus")}</h4>`);
     for (const t of data.bonus) parts.push(renderTrait(t));
   }
   if (data.reaction?.length) {
-    parts.push("<h4>反应</h4>");
+    parts.push(`<h4>${tt("searchReaction")}</h4>`);
     for (const t of data.reaction) parts.push(renderTrait(t));
   }
   if (data.legendary?.length) {
-    parts.push("<h4>传奇动作</h4>");
+    parts.push(`<h4>${tt("searchLegendary")}</h4>`);
     if (data.legendaryHeader) parts.push(renderEntries(data.legendaryHeader));
     else
       parts.push(
-        `<p>本怪物可执行 ${data.legendaryActions ?? 3} 次传奇动作，从下列动作中选择，每次只能用一个传奇动作选项，且只能在另一生物的回合结束时使用。每回合开始时回复全部消耗。</p>`,
+        `<p>${tt("searchThisCreatureCan")} ${data.legendaryActions ?? 3} ${tt("searchLegendaryActionText")}</p>`,
       );
     for (const t of data.legendary) parts.push(renderTrait(t));
   }
   if (data.mythic?.length) {
-    parts.push("<h4>神话动作</h4>");
+    parts.push(`<h4>${tt("searchMythic")}</h4>`);
     if (data.mythicHeader) parts.push(renderEntries(data.mythicHeader));
     for (const t of data.mythic) parts.push(renderTrait(t));
   }
   if (data.lairActions?.length) {
-    parts.push("<h4>巢穴动作</h4>");
+    parts.push(`<h4>${tt("searchLairActions")}</h4>`);
     for (const t of data.lairActions) parts.push(renderEntries([t]));
   }
   if (data.regionalEffects?.length) {
-    parts.push("<h4>区域效应</h4>");
+    parts.push(`<h4>${tt("searchRegionalEffects")}</h4>`);
     for (const t of data.regionalEffects) parts.push(renderEntries([t]));
   }
   return parts.join("");
@@ -1464,30 +1592,30 @@ function renderMonsterSummary(data: DataEntry): string {
     const parts = Object.entries(data.save).map(
       ([k, v]) => `${ABILITY_ZH[k] ?? k} ${v}`,
     );
-    lines.push(mkLine("豁免", parts.join("，")));
+    lines.push(mkLine(tt("searchSave"), parts.join("，")));
   }
   if (data.skill && Object.keys(data.skill).length) {
     const parts = Object.entries(data.skill).map(([k, v]) => `${k} ${v}`);
-    lines.push(mkLine("技能", parts.join("，")));
+    lines.push(mkLine(tt("searchSkill"), parts.join("，")));
   }
-  if (data.resist) lines.push(mkLine("抗性", formatTypeList(data.resist)));
-  if (data.immune) lines.push(mkLine("免疫", formatTypeList(data.immune)));
+  if (data.resist) lines.push(mkLine(tt("searchResist"), formatTypeList(data.resist)));
+  if (data.immune) lines.push(mkLine(tt("searchImmune"), formatTypeList(data.immune)));
   if (data.vulnerable)
-    lines.push(mkLine("易伤", formatTypeList(data.vulnerable)));
+    lines.push(mkLine(tt("searchVulnerable"), formatTypeList(data.vulnerable)));
   if (data.conditionImmune)
-    lines.push(mkLine("状态免疫", formatTypeList(data.conditionImmune)));
+    lines.push(mkLine(tt("searchConditionImmune"), formatTypeList(data.conditionImmune)));
   if (data.senses) {
     const senses = Array.isArray(data.senses)
       ? data.senses.map(stripTags).join("，")
       : stripTags(String(data.senses));
-    const passive = data.passive != null ? `，被动察觉 ${data.passive}` : "";
-    lines.push(mkLine("感官", `${senses}${passive}`));
+    const passive = data.passive != null ? `，${tt("searchPassive")} ${data.passive}` : "";
+    lines.push(mkLine(tt("searchSenses"), `${senses}${passive}`));
   }
   if (data.languages) {
     const langs = Array.isArray(data.languages)
       ? data.languages.map(stripTags).join("，")
       : stripTags(String(data.languages));
-    lines.push(mkLine("语言", langs));
+    lines.push(mkLine(tt("searchLanguages"), langs));
   }
   return lines.length ? `<div class="mon-summary">${lines.join("")}</div>` : "";
 }
@@ -1518,7 +1646,7 @@ function renderTrait(t: any): string {
 function renderSpellcasting(sc: any): string {
   const parts: string[] = [];
   parts.push(
-    `<div class="trait"><b>${escapeHtml(stripTags(sc.name ?? "施法"))}.</b> `,
+    `<div class="trait"><b>${escapeHtml(stripTags(sc.name ?? tt("searchSpellcasting")))}.</b> `,
   );
   if (sc.headerEntries) parts.push(renderEntries(sc.headerEntries));
   parts.push("</div>");
@@ -1527,12 +1655,12 @@ function renderSpellcasting(sc: any): string {
     (arr || []).map((s) => escapeHtml(stripTags(String(s)))).join("、");
 
   if (sc.will?.length)
-    parts.push(`<p><b>随意施放：</b>${fmtSpells(sc.will)}</p>`);
+    parts.push(`<p><b>${tt("searchSpellWill")}：</b>${fmtSpells(sc.will)}</p>`);
   if (sc.daily) {
     for (const k of ["1", "1e", "2", "2e", "3", "3e", "4", "4e", "5", "5e"]) {
       const arr = (sc.daily as any)[k];
       if (Array.isArray(arr) && arr.length) {
-        const label = k.endsWith("e") ? `每日 ${k.slice(0, -1)}/天` : `${k}/天`;
+        const label = k.endsWith("e") ? `${tt("searchDaily")} ${k.slice(0, -1)}/${tt("searchDay")}` : `${k}/${tt("searchDay")}`;
         parts.push(`<p><b>${label}：</b>${fmtSpells(arr)}</p>`);
       }
     }
@@ -1540,18 +1668,18 @@ function renderSpellcasting(sc: any): string {
   if (sc.rest) {
     for (const [k, v] of Object.entries(sc.rest)) {
       if (Array.isArray(v) && v.length)
-        parts.push(`<p><b>每次休整 ${k}/次：</b>${fmtSpells(v as any[])}</p>`);
+        parts.push(`<p><b>${tt("searchRest")} ${k}/${tt("searchRestUsage")}：</b>${fmtSpells(v as any[])}</p>`);
     }
   }
   if (sc.spells) {
     for (const [level, info] of Object.entries(sc.spells)) {
-      const lvl = level === "0" ? "戏法" : `${level} 环`;
+      const lvl = level === "0" ? tt("searchSpellCantrip") : `${level} ${tt("searchSpellLevelSuffix")}`;
       const slots =
         (info as any).slots != null
-          ? `（${(info as any).slots} 个法术位）`
+          ? `（${(info as any).slots} ${tt("searchSpellSlots")}）`
           : "";
       const ll = (info as any).lower
-        ? `（${(info as any).lower}–${level} 环）`
+        ? `（${(info as any).lower}–${level} ${tt("searchSpellLevelSuffix")}）`
         : "";
       const arr = (info as any).spells ?? [];
       parts.push(`<p><b>${lvl}${slots}${ll}：</b>${fmtSpells(arr)}</p>`);
@@ -1565,7 +1693,6 @@ function renderSpell(_entry: Entry, data: DataEntry): string {
   const parts: string[] = [];
   if (data.entries) parts.push(renderEntries(data.entries));
   if (data.entriesHigherLevel) {
-    parts.push("<h4>当以更高阶法术位施放时</h4>");
     parts.push(renderEntries(data.entriesHigherLevel));
   }
   const fromClass: string[] = [];
@@ -1578,7 +1705,7 @@ function renderSpell(_entry: Entry, data: DataEntry): string {
         `${stripTags(c.class?.name ?? "")} (${stripTags(c.subclass?.name ?? "")})`,
       );
   if (fromClass.length)
-    parts.push(`<p><b>职业列表：</b>${escapeHtml(fromClass.join("、"))}</p>`);
+    parts.push(`<p><b>${tt("searchFromClass")}：</b>${escapeHtml(fromClass.join("、"))}</p>`);
   return parts.join("");
 }
 
@@ -1589,34 +1716,34 @@ function renderItem(_entry: Entry, data: DataEntry): string {
     weaponBits.push(
       `${stripTags(String(data.dmg1))} ${dmgTypeStr(data.dmgType)}`,
     );
-  if (data.dmg2) weaponBits.push(`双手 ${stripTags(String(data.dmg2))}`);
+  if (data.dmg2) weaponBits.push(`${tt("searchSecondDamage")} ${stripTags(String(data.dmg2))}`);
   if (Array.isArray(data.property) && data.property.length)
-    weaponBits.push(`属性：${data.property.map(stripTags).join("、")}`);
-  if (data.range) weaponBits.push(`射程：${stripTags(String(data.range))}`);
+    weaponBits.push(`${tt("searchWeaponProperties")}：${data.property.map(stripTags).join("、")}`);
+  if (data.range) weaponBits.push(`${tt("searchRange")}：${stripTags(String(data.range))}`);
   if (weaponBits.length)
     parts.push(`<p>${escapeHtml(weaponBits.join("　"))}</p>`);
   if (data.ac != null)
-    parts.push(`<p><b>AC</b> ${escapeHtml(String(data.ac))}</p>`);
+    parts.push(`<p><b>${tt("searchACBonus")}</b> ${escapeHtml(String(data.ac))}</p>`);
   if (data.entries) parts.push(renderEntries(data.entries));
   return parts.join("");
 }
 
 function dmgTypeStr(t: any): string {
   const M: Record<string, string> = {
-    A: "酸",
-    B: "钝击",
-    C: "冷冻",
-    F: "火焰",
-    FORCE: "力场",
-    F_: "力场",
-    L: "闪电",
-    N: "死灵",
-    P: "穿刺",
-    POISON: "毒素",
-    PSY: "心灵",
-    RAD: "光耀",
-    S: "挥砍",
-    T: "雷鸣",
+    A: tt("searchDmgAcid"),
+    B: tt("searchDmgBludgeoning"),
+    C: tt("searchDmgCold"),
+    F: tt("searchDmgFire"),
+    FORCE: tt("searchDmgForce"),
+    F_: tt("searchDmgForce"),
+    L: tt("searchDmgLightning"),
+    N: tt("searchDmgNecrotic"),
+    P: tt("searchDmgPiercing"),
+    POISON: tt("searchDmgPoison"),
+    PSY: tt("searchDmgPsychic"),
+    RAD: tt("searchDmgRadiant"),
+    S: tt("searchDmgSlashing"),
+    T: tt("searchDmgThunder"),
   };
   if (typeof t === "string") return M[t] ?? t;
   return "";
@@ -1649,7 +1776,7 @@ function hpStr(hp: any): string {
 }
 function speedStr(sp: any): string {
   if (!sp) return "";
-  if (typeof sp === "number") return `${sp} 尺`;
+  if (typeof sp === "number") return `${sp} ${tt("ccFtUnit")}`;
   const parts: string[] = [];
   for (const [k, v] of Object.entries(sp)) {
     const n = typeof v === "object" && v != null ? (v as any).number : v;
@@ -1657,29 +1784,34 @@ function speedStr(sp: any): string {
       typeof v === "object" && (v as any).condition
         ? `（${stripTags((v as any).condition)}）`
         : "";
-    if (k === "walk") parts.unshift(`${n} 尺${cond}`);
-    else if (typeof n === "number") parts.push(`${k} ${n} 尺${cond}`);
+    if (k === "walk") parts.unshift(`${n} ${tt("ccFtUnit")}${cond}`);
+    else if (typeof n === "number") parts.push(`${k} ${n} ${tt("ccFtUnit")}${cond}`);
   }
   return parts.join("，");
 }
+
 function sizeStr(size: any): string {
   const SZ: Record<string, string> = {
-    T: "微型",
-    S: "小型",
-    M: "中型",
-    L: "大型",
-    H: "巨型",
-    G: "超巨",
+    T: tt("searchSizeTiny"),
+    S: tt("searchSizeSmall"),
+    M: tt("searchSizeMedium"),
+    L: tt("searchSizeLarge"),
+    H: tt("searchSizeHuge"),
+    G: tt("searchSizeGargantuan"),
   };
   if (Array.isArray(size)) return size.map((c) => SZ[c] ?? c).join("/");
   if (typeof size === "string") return SZ[size] ?? size;
   return "";
 }
+
 function spellLevelStr(lvl: any): string {
   if (lvl == null) return "";
-  if (lvl === 0) return "戏法";
-  return `${lvl} 环`;
+  if (lvl === 0) return tt("searchSpellCantrip" as any);
+  return lang === "en"
+    ? `${lvl}${tt("searchSpellLevelSuffix" as any)}`
+    : `${lvl}${tt("searchSpellLevelSuffix" as any)}`;
 }
+
 // 2026-05-16 — school code → 中文学派 mapping. 5etools uses single-
 // letter codes for the eight 5e schools:
 //   A = Abjuration (防护)     C = Conjuration (咒法)
@@ -1743,29 +1875,31 @@ function timeStr(t: any): string {
 // "cone" / "line" / "sphere" / "cube" etc. Localize both so spells
 // show "60 尺 锥形" instead of "60 feet cone".
 const DISTANCE_UNIT_ZH: Record<string, string> = {
-  feet: "尺",
-  foot: "尺",
-  miles: "英里",
-  mile: "英里",
-  unlimited: "无限",
-  sight: "视野范围",
+  feet: tt("searchDistanceFeet"),
+  foot: tt("searchDistanceFeet"),
+  miles: tt("searchDistanceMiles"),
+  mile: tt("searchDistanceMiles"),
+  unlimited: tt("searchDistanceUnlimited"),
+  sight: tt("searchDistanceSight"),
 };
+
 const RANGE_SHAPE_ZH: Record<string, string> = {
-  radius: "半径",
-  cone: "锥形",
-  line: "线状",
-  sphere: "球状",
-  cube: "立方",
-  hemisphere: "半球",
-  cylinder: "圆柱",
+  radius: tt("searchShapeRadius"),
+  cone: tt("searchShapeCone"),
+  line: tt("searchShapeLine"),
+  sphere: tt("searchShapeSphere"),
+  cube: tt("searchShapeCube"),
+  hemisphere: tt("searchShapeHemisphere"),
+  cylinder: tt("searchShapeCylinder"),
 };
+
 function rangeStr(r: any): string {
   if (!r) return "";
   if (typeof r === "string") return r;
   const d = r.distance;
   if (r.type === "point" && d) {
-    if (d.type === "self") return "自身";
-    if (d.type === "touch") return "触及";
+    if (d.type === "self") return tt("searchDistanceSelf");
+    if (d.type === "touch") return tt("searchDistanceTouch");
     const unit =
       DISTANCE_UNIT_ZH[String(d.type ?? "").toLowerCase()] ?? d.type ?? "";
     return `${d.amount ?? ""} ${unit}`.trim();
@@ -1802,10 +1936,10 @@ function componentsStr(c: any): string {
       if (typeof cost === "number" && cost > 0) {
         // 5etools "cost" is in copper pieces; show as gp for spell-component readability.
         mText = mText
-          ? `${mText}（价值 ${(cost / 100).toFixed(0)} 金币）`
-          : `（${(cost / 100).toFixed(0)} 金币材料）`;
+          ? `${mText}（${tt("searchCost")} ${(cost / 100).toFixed(0)} ${tt("searchGP")}）`
+          : `（${(cost / 100).toFixed(0)} ${tt("searchGPMaterials")}）`;
       }
-      if ((c.m as any).consume) mText = mText ? `${mText} · 消耗` : "消耗";
+      if ((c.m as any).consume) mText = mText ? `${mText} · ${tt("searchConsumed")}` : `${tt("searchConsumed")}`;
     }
     parts.push(mText ? `M（${mText}）` : "M");
   }
@@ -1816,21 +1950,22 @@ function componentsStr(c: any): string {
 // Without this map the duration chip on Chinese cards read "10 minute"
 // instead of "10 分钟". Falls back to the raw unit when not mapped.
 const DURATION_UNIT_ZH: Record<string, string> = {
-  round: "回合",
-  rounds: "回合",
-  minute: "分钟",
-  minutes: "分钟",
-  hour: "小时",
-  hours: "小时",
-  day: "天",
-  days: "天",
-  week: "周",
-  weeks: "周",
-  month: "月",
-  months: "月",
-  year: "年",
-  years: "年",
+  round: tt("searchDurationRound"),
+  rounds: tt("searchDurationRounds"),
+  minute: tt("searchDurationMinute"),
+  minutes: tt("searchDurationMinutes"),
+  hour: tt("searchDurationHour"),
+  hours: tt("searchDurationHours"),
+  day: tt("searchDurationDay"),
+  days: tt("searchDurationDays"),
+  week: tt("searchDurationWeek"),
+  weeks: tt("searchDurationWeeks"),
+  month: tt("searchDurationMonth"),
+  months: tt("searchDurationMonths"),
+  year: tt("searchDurationYear"),
+  years: tt("searchDurationYears"),
 };
+
 function durationUnitZh(u: unknown): string {
   if (typeof u !== "string") return "";
   return DURATION_UNIT_ZH[u.toLowerCase()] ?? u;
@@ -1839,16 +1974,16 @@ function durationStr(d: any): string {
   if (!Array.isArray(d) || !d.length) return "";
   const x = d[0];
   if (typeof x === "string") return x;
-  if (x.type === "instant") return "瞬发";
-  if (x.type === "permanent") return "永久";
-  if (x.type === "special") return "特殊";
+  if (x.type === "instant") return tt("searchDurationInstant");
+  if (x.type === "permanent") return tt("searchDurationDispelled");
+  if (x.type === "special") return tt("searchDurationSpecial");
   // 2026-05-16 — concentration spells from 5etools come through as
   // `{ type: "timed", duration: {...}, concentration: true }`. The
   // old code matched `type === "timed"` first and returned without
   // ever checking `concentration`, so "专注" never appeared on any
   // spell using the standard 5e shape. Prefix it inline now.
   if (x.type === "timed" && x.duration) {
-    const prefix = x.concentration ? "专注 " : "";
+    const prefix = x.concentration ? tt("searchDurationConcentration") : "";
     const amount = x.duration.amount ?? "";
     const unit = durationUnitZh(x.duration.type);
     return `${prefix}${amount} ${unit}`.trim();
@@ -1856,7 +1991,7 @@ function durationStr(d: any): string {
   if (x.concentration) {
     const amount = x.duration?.amount ?? "";
     const unit = durationUnitZh(x.duration?.type);
-    return `专注 ${amount} ${unit}`.trim();
+    return `${tt("searchDurationConcentration")} ${amount} ${unit}`.trim();
   }
   return x.type ?? "";
 }
@@ -1878,16 +2013,16 @@ function renderAdventure(_entry: Entry, data: DataEntry): string {
   const parts: string[] = [];
   const lvl =
     data.level && (data.level.start != null || data.level.end != null)
-      ? `<p><b>等级范围：</b>${escapeHtml(`${data.level.start ?? "?"} - ${data.level.end ?? "?"}`)}</p>`
+      ? `<p><b>${tt("searchLevelRange")}：</b>${escapeHtml(`${data.level.start ?? "?"} - ${data.level.end ?? "?"}`)}</p>`
       : "";
   const author = data.author
-    ? `<p><b>作者：</b>${escapeHtml(stripTags(String(data.author)))}</p>`
+    ? `<p><b>${tt("searchAuthor")}：</b>${escapeHtml(stripTags(String(data.author)))}</p>`
     : "";
   const story = data.storyline
-    ? `<p><b>故事线：</b>${escapeHtml(stripTags(String(data.storyline)))}</p>`
+    ? `<p><b>${tt("searchStoryline")}：</b>${escapeHtml(stripTags(String(data.storyline)))}</p>`
     : "";
   const published = data.published
-    ? `<p><b>出版：</b>${escapeHtml(String(data.published))}</p>`
+    ? `<p><b>${tt("searchPublished")}：</b>${escapeHtml(String(data.published))}</p>`
     : "";
   parts.push(lvl, author, story, published);
   if (Array.isArray(data.contents) && data.contents.length) {
@@ -1912,18 +2047,332 @@ function renderAdventure(_entry: Entry, data: DataEntry): string {
         return `<li>${ord}${title}${headers}</li>`;
       })
       .join("");
-    parts.push(`<h4>章节</h4><ol class="chap-list">${chapters}</ol>`);
+    parts.push(`<h4>${tt("searchContents")}</h4><ol class="chap-list">${chapters}</ol>`);
   }
   return parts.join("");
+}
+
+function renderClass(data: any): string {
+  if (!data) return "";
+  console.log(data);
+
+  let html = `<div class="class-preview-wrapper" style="padding: 4px 0; font-family: system-ui, -apple-system, sans-serif;">`;
+
+  // Helper interno per pulire o interpretare i tag inline di 5etools
+  const cleanTags = (str: string): string => {
+    if (!str) return "";
+    return str
+      .replace(/\{@b\s+(.*?)\}/g, "<b>$1</b>")
+      .replace(/\{@i\s+(.*?)\}/g, "<i>$1</i>")
+      .replace(/\{@filter\s+(.*?)\|.*?\}/g, "$1")
+      .replace(/\{@filter\s+(.*?)\}/g, "$1")
+      .replace(/\{@item\s+(.*?)\|.*?\}/g, "$1")
+      .replace(/\{@item\s+(.*?)\}/g, "$1")
+      .replace(/\{@spell\s+(.*?)\|.*?\}/g, "<i>$1</i>")
+      .replace(/\{@spell\s+(.*?)\}/g, "<i>$1</i>")
+      .replace(/\{@dice\s+(.*?)\|.*?\}/g, "$1")
+      .replace(/\{@dice\s+(.*?)\}/g, "$1");
+  };
+
+  // Helper interno per convertire gli oggetti complessi delle celle in testo
+  const formatTableCell = (cell: any): string => {
+    if (cell === undefined || cell === null) return "-";
+    if (typeof cell !== "object") return cell.toString();
+
+    if (cell.type === "dice" && Array.isArray(cell.toRoll)) {
+      return cell.toRoll
+        .map((d: any) => `${d.number || 1}d${d.faces || 6}`)
+        .join(" + ");
+    }
+
+    if (cell.type === "bonusSpeed") {
+      const val = parseInt(cell.value, 10) || 0;
+      if (val === 0) return "-";
+      return lang === "zh" ? `+${val} 尺` : `+${val} ft.`;
+    }
+
+    if (cell.roll) {
+      return cell.roll.val !== undefined
+        ? cell.roll.val.toString()
+        : cell.roll.exact?.toString() || "-";
+    }
+
+    return "-";
+  };
+
+  // Mappatura abbreviazioni caratteristiche
+  const abilityMap: Record<string, { en: string; zh: string }> = {
+    str: { en: "Strength", zh: "力量" },
+    dex: { en: "Dexterity", zh: "敏捷" },
+    con: { en: "Constitution", zh: "体质" },
+    int: { en: "Intelligence", zh: "智力" },
+    wis: { en: "Wisdom", zh: "感知" },
+    cha: { en: "Charisma", zh: "魅力" },
+  };
+
+  // --- 1. INFORMAZIONI BASE ---
+  html += `<div class="class-base-info" style="margin-bottom: 15px; font-size: 13px; line-height: 1.6;">`;
+  if (data.hd) {
+    const faces = data.hd.faces ? `d${data.hd.faces}` : "d8";
+    const labelHd = lang === "zh" ? "生命骰" : "Hit Dice";
+    const textHd = lang === "zh" ? `每等级 1${faces}` : `1${faces} per level`;
+    html += `<p style="margin: 2px 0;"><b>${labelHd}:</b> ${textHd}</p>`;
+  }
+  if (data.proficiency && Array.isArray(data.proficiency)) {
+    const labelSaves = lang === "zh" ? "豁免熟练" : "Saving Throws";
+    const savesText = data.proficiency
+      .map((p: string) => {
+        const ab = p.toLowerCase();
+        return abilityMap[ab]
+          ? lang === "zh"
+            ? abilityMap[ab].zh
+            : abilityMap[ab].en
+          : p.toUpperCase();
+      })
+      .join(", ");
+    html += `<p style="margin: 2px 0;"><b>${labelSaves}:</b> ${savesText}</p>`;
+  }
+  if (data.spellcastingAbility) {
+    const labelSpellAb =
+      lang === "zh" ? "施法关键属性" : "Spellcasting Ability";
+    const ab = data.spellcastingAbility.toLowerCase();
+    const abText = abilityMap[ab]
+      ? lang === "zh"
+        ? abilityMap[ab].zh
+        : abilityMap[ab].en
+      : ab.toUpperCase();
+    html += `<p style="margin: 2px 0;"><b>${labelSpellAb}:</b> ${abText}</p>`;
+  }
+  html += `</div>`;
+
+  // --- 2. COMPETENZE INIZIALI ---
+  if (data.startingProficiencies) {
+    const sp = data.startingProficiencies;
+    const titleProf = lang === "zh" ? "初始熟练项" : "Starting Proficiencies";
+    html += `<div class="starting-proficiencies" style="margin-bottom: 15px; font-size: 12px; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 4px;">`;
+    html += `<b style="font-size: 13px; display: block; margin-bottom: 4px; color: #e5c158;">${titleProf}</b>`;
+
+    if (sp.armor && Array.isArray(sp.armor)) {
+      const label = lang === "zh" ? "护甲" : "Armor";
+      html += `<div style="margin: 2px 0;"><b>${label}:</b> ${sp.armor.map((x: any) => (typeof x === "object" ? cleanTags(x.full || x.proficiency) : cleanTags(x.toString()))).join(", ")}</div>`;
+    }
+    if (sp.weapons && Array.isArray(sp.weapons)) {
+      const label = lang === "zh" ? "武器" : "Weapons";
+      html += `<div style="margin: 2px 0;"><b>${label}:</b> ${sp.weapons.map((x: any) => cleanTags(x.toString())).join(", ")}</div>`;
+    }
+    if (sp.tools && Array.isArray(sp.tools)) {
+      const label = lang === "zh" ? "工具" : "Tools";
+      html += `<div style="margin: 2px 0;"><b>${label}:</b> ${sp.tools.map((x: any) => cleanTags(x.toString())).join(", ")}</div>`;
+    }
+    if (sp.skills && Array.isArray(sp.skills)) {
+      const label = lang === "zh" ? "技能" : "Skills";
+      const skillsText = sp.skills
+        .map((s: any) => {
+          if (s.choose) {
+            const fromList = Array.isArray(s.choose.from)
+              ? s.choose.from.join(", ")
+              : "";
+            return lang === "zh"
+              ? `任选 ${s.choose.count} 项（自: ${fromList}）`
+              : `Choose ${s.choose.count} from: ${fromList}`;
+          }
+          return JSON.stringify(s);
+        })
+        .join("; ");
+      html += `<div style="margin: 2px 0;"><b>${label}:</b> ${cleanTags(skillsText)}</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // --- 3. EQUIPAGGIAMENTO INIZIALE ---
+  if (
+    data.startingEquipment &&
+    data.startingEquipment.default &&
+    Array.isArray(data.startingEquipment.default)
+  ) {
+    const titleEquip = lang === "zh" ? "初始装备" : "Starting Equipment";
+    html += `<div class="starting-equipment" style="margin-bottom: 15px; font-size: 12px; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 4px;">`;
+    html += `<b style="font-size: 13px; display: block; margin-bottom: 4px; color: #e5c158;">${titleEquip}</b>`;
+    html += `<ul style="margin: 0; padding-left: 20px; line-height: 1.5;">`;
+    data.startingEquipment.default.forEach((eq: string) => {
+      html += `<li>${cleanTags(eq)}</li>`;
+    });
+    html += `</ul>`;
+    if (data.startingEquipment.goldAlternative) {
+      const labelGold = lang === "zh" ? "替代金币" : "Gold Alternative";
+      html += `<p style="margin: 4px 0 0 0; font-style: italic;"><b>${labelGold}:</b> ${cleanTags(data.startingEquipment.goldAlternative)}</p>`;
+    }
+    html += `</div>`;
+  }
+
+  // --- 4. MULTICLASSE ---
+  if (data.multiclassing) {
+    const mc = data.multiclassing;
+    const titleMc = lang === "zh" ? "兼职需求与熟练" : "Multiclassing";
+    html += `<div class="multiclassing-info" style="margin-bottom: 15px; font-size: 12px; padding: 6px 8px; border-left: 3px solid #6c757d; background: rgba(255,255,255,0.02);">`;
+    html += `<b style="display: block; margin-bottom: 2px;">${titleMc}</b>`;
+    if (mc.requirements) {
+      const reqs = Object.keys(mc.requirements)
+        .map((k) => {
+          const abText = abilityMap[k]
+            ? lang === "zh"
+              ? abilityMap[k].zh
+              : abilityMap[k].en
+            : k.toUpperCase();
+          return `${abText} ${mc.requirements[k]}`;
+        })
+        .join(", ");
+      const labelReq = lang === "zh" ? "属性要求" : "Requirements";
+      html += `<div><b>${labelReq}:</b> ${reqs}</div>`;
+    }
+    if (mc.proficienciesGained) {
+      const pg = mc.proficienciesGained;
+      let gainedList: string[] = [];
+      if (pg.armor)
+        gainedList.push(
+          `${lang === "zh" ? "护甲" : "Armor"}: ${pg.armor.map((x: any) => (typeof x === "object" ? x.full || x.proficiency : x)).join(", ")}`,
+        );
+      if (pg.weapons)
+        gainedList.push(
+          `${lang === "zh" ? "武器" : "Weapons"}: ${pg.weapons.join(", ")}`,
+        );
+      if (pg.tools)
+        gainedList.push(
+          `${lang === "zh" ? "工具" : "Tools"}: ${pg.tools.join(", ")}`,
+        );
+      if (pg.skills)
+        gainedList.push(
+          `${lang === "zh" ? "技能" : "Skills"}: ${JSON.stringify(pg.skills)}`,
+        );
+      const labelGain = lang === "zh" ? "获得熟练" : "Proficiencies Gained";
+      html += `<div><b>${labelGain}:</b> ${cleanTags(gainedList.join(" | "))}</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // --- 5. TABELLA DI PROGRESSIONE LIVELLI (Fissata per gli Spell Slots!) ---
+  if (data.classTableGroups && Array.isArray(data.classTableGroups)) {
+    html += `<div class="class-table-scroll" style="width:100%; overflow-x:auto; margin-bottom:14px; border:1px solid rgba(255,255,255,0.15); border-radius:4px; background: rgba(0,0,0,0.15);">`;
+    html += `<table class="class-progression-table" style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">`;
+
+    // Costruzione delle Intestazioni
+    html += `<thead style="background: rgba(255,255,255,0.07);"><tr>`;
+    html += `<th style="padding: 6px 8px; border-bottom:1px solid rgba(255,255,255,0.2); text-align:center; width:35px;">${lang === "zh" ? "等级" : "Lvl"}</th>`;
+    html += `<th style="padding: 6px 8px; border-bottom:1px solid rgba(255,255,255,0.2);">${lang === "zh" ? "职业特性" : "Features"}</th>`;
+
+    const extraHeaders: { title: string; colIdx: number; groupIdx: number }[] =
+      [];
+    data.classTableGroups.forEach((group: any, gIdx: number) => {
+      if (group.colLabels && Array.isArray(group.colLabels)) {
+        group.colLabels.forEach((label: string, cIdx: number) => {
+          extraHeaders.push({
+            title: cleanTags(label),
+            colIdx: cIdx,
+            groupIdx: gIdx,
+          });
+        });
+      }
+    });
+
+    extraHeaders.forEach((h) => {
+      html += `<th style="padding: 6px 8px; border-bottom:1px solid rgba(255,255,255,0.2); text-align:center;">${h.title}</th>`;
+    });
+    html += `</tr></thead><tbody>`;
+
+    // Generazione ciclica delle righe per i 20 Livelli
+    for (let lvl = 1; lvl <= 20; lvl++) {
+      const rowBg = lvl % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent";
+      html += `<tr style="background: ${rowBg};">`;
+      html += `<td style="padding: 5px 8px; border-bottom:1px solid rgba(255,255,255,0.05); text-align:center; font-weight:bold; color:rgba(255,255,255,0.6);">${lvl}</td>`;
+
+      // Recupero delle Features sbloccate
+      let featuresList = "-";
+      if (data.classFeatures && Array.isArray(data.classFeatures)) {
+        const matchingFeats = data.classFeatures
+          .filter((f: any) => {
+            if (typeof f === "object" && f !== null) {
+              const featStr = f.classFeature || "";
+              const parts = featStr.split("|");
+              return parts.length >= 4 && parseInt(parts[3], 10) === lvl;
+            }
+            if (typeof f === "string") {
+              const parts = f.split("|");
+              return parts.length >= 4 && parseInt(parts[3], 10) === lvl;
+            }
+            return false;
+          })
+          .map((f: any) => {
+            if (typeof f === "object" && f !== null) {
+              return (
+                f.name || (f.classFeature ? f.classFeature.split("|")[0] : "")
+              );
+            }
+            if (typeof f === "string") return f.split("|")[0];
+            return "";
+          })
+          .filter((name: string) => name.length > 0);
+
+        if (matchingFeats.length > 0) {
+          featuresList = matchingFeats.join(", ");
+        }
+      }
+      html += `<td style="padding: 5px 8px; border-bottom:1px solid rgba(255,255,255,0.05); font-weight:500;">${cleanTags(featuresList)}</td>`;
+
+      // Inserimento dei valori corrispondenti nelle colonne extra (CON SUPPORTO SPELL SLOTS)
+      extraHeaders.forEach((h) => {
+        let cellContent = "-";
+        const targetGroup = data.classTableGroups[h.groupIdx];
+        if (targetGroup) {
+          // MODIFICA QUI: Controlla se le righe sono in 'rows' o in 'rowsSpellProgression'
+          const rowsArray =
+            targetGroup.rows || targetGroup.rowsSpellProgression;
+
+          if (rowsArray && Array.isArray(rowsArray)) {
+            const targetRow = rowsArray[lvl - 1];
+            if (Array.isArray(targetRow)) {
+              const rawCell = targetRow[h.colIdx];
+              cellContent = formatTableCell(rawCell);
+            }
+          }
+        }
+
+        // Se lo slot incantesimo è 0, puoi scegliere se mostrare "-" o "0" (di solito si preferisce "-")
+        if (cellContent === "0") cellContent = "-";
+
+        html += `<td style="padding: 5px 8px; border-bottom:1px solid rgba(255,255,255,0.05); text-align:center; color:rgba(255,255,255,0.85);">${cleanTags(cellContent)}</td>`;
+      });
+
+      html += `</tr>`;
+    }
+    html += `</tbody></table></div>`;
+  }
+
+  // --- 6. DESCRIZIONE TESTUALE E FLUFF ---
+  if (data.entries && Array.isArray(data.entries)) {
+    html += `<div class="class-fluff-entries" style="margin-top: 10px; line-height: 1.5;">`;
+    if (typeof renderEntries === "function") {
+      html += renderEntries(data.entries);
+    } else {
+      html += data.entries
+        .map((e: any) =>
+          typeof e === "string" ? `<p>${cleanTags(e)}</p>` : JSON.stringify(e),
+        )
+        .join("");
+    }
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  return html;
 }
 
 function renderBook(_entry: Entry, data: DataEntry): string {
   const parts: string[] = [];
   if (data.published)
-    parts.push(`<p><b>出版：</b>${escapeHtml(String(data.published))}</p>`);
+    parts.push(`<p><b> ${tt("searchPublished")}：</b>${escapeHtml(String(data.published))}</p>`);
   if (data.author)
     parts.push(
-      `<p><b>作者：</b>${escapeHtml(stripTags(String(data.author)))}</p>`,
+      `<p><b> ${tt("searchAuthor")}：</b>${escapeHtml(stripTags(String(data.author)))}</p>`,
     );
   if (Array.isArray(data.contents) && data.contents.length) {
     const chapters = data.contents
@@ -1935,7 +2384,7 @@ function renderBook(_entry: Entry, data: DataEntry): string {
         return `<li>${ord}${title}</li>`;
       })
       .join("");
-    parts.push(`<h4>目录</h4><ol class="chap-list">${chapters}</ol>`);
+    parts.push(`<h4> ${tt("searchContents")} </h4><ol class="chap-list">${chapters}</ol>`);
   }
   return parts.join("");
 }
@@ -2021,7 +2470,7 @@ function renderResults(hits: Entry[], q: string) {
   pinnedEntry = null;
   if (hits.length === 0) {
     countEl.textContent = "0";
-    renderHint("无匹配条目");
+    renderHint(tt("searchNoResults" as any) as string);
     renderPreviewIdle();
     return;
   }
@@ -2070,7 +2519,8 @@ function renderResults(hits: Entry[], q: string) {
 }
 
 function renderPreviewIdle() {
-  previewEl.innerHTML = `<div class="prev-empty">悬停或点击词条查看详情<br><span class="prev-empty-sub">Esc 关闭 · ↑↓ 选择</span></div>`;
+  const prevIdleText = tt("searchPreviewIdle" as any) as string;
+  previewEl.innerHTML = `<div class="prev-empty">${prevIdleText}</div>`;
 }
 
 async function onRowHover(idx: number) {
@@ -2110,7 +2560,7 @@ async function sendMissingReport(
   if (btn.disabled) return;
   btn.disabled = true;
   const originalLabel = btn.innerHTML;
-  btn.innerHTML = `<span style="opacity:0.7">汇报中…</span>`;
+  btn.innerHTML = `<span style="opacity:0.7">${escapeHtml(tt("searchReportSending" as any) as string)}</span>`;
   // Lightweight visible-context snapshot: first ~600 chars of the
   // body's textContent. Helps me see what DID render (or that it's
   // empty) without needing the user to type anything.
@@ -2143,14 +2593,14 @@ async function sendMissingReport(
       body: JSON.stringify(payload),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    btn.innerHTML = `<span style="color:#7be0a0">✓ 已汇报，谢谢</span>`;
+    btn.innerHTML = `<span style="color:#7be0a0">${escapeHtml(tt("searchReportSuccess" as any) as string)}</span>`;
     // Restore after a moment so the user can resubmit if needed
     setTimeout(() => {
       btn.innerHTML = originalLabel;
       btn.disabled = false;
     }, 2400);
   } catch (e) {
-    btn.innerHTML = `<span style="color:#ff7a6b">汇报失败，稍后再试</span>`;
+    btn.innerHTML = `<span style="color:#ff7a6b">${escapeHtml(tt("searchReportFailure" as any) as string)}</span>`;
     setTimeout(() => {
       btn.innerHTML = originalLabel;
       btn.disabled = false;
@@ -2170,25 +2620,27 @@ async function renderPreviewFor(entry: Entry) {
 
   previewEl.innerHTML = `
     <div class="prev-head">
-      <button class="prev-report" id="prev-report" type="button"
-              title="该词条没正确显示？点一下汇报，我会收集起来做适配。">
+      <button class="prev-report" id="prev-report" type="button" data-i18n-title="searchPreviewReportTitle">
         <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true" fill="none"
              stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
              style="vertical-align:-1px;margin-right:3px">
           <circle cx="8" cy="8" r="6"/><path d="M8 5v4"/><path d="M8 11.2v.05"/>
-        </svg>未显示？顺手汇报
+        </svg><span data-i18n="searchPreviewReportBtn"></span>
       </button>
       <div class="prev-title">${escapeHtml(display)}</div>
       ${entry.n && entry.n !== display ? `<div class="prev-eng">${escapeHtml(entry.n)}</div>` : ""}
       <div class="prev-meta">${escapeHtml(cat.label)} · ${escapeHtml(srcDisplay)}${escapeHtml(page)}</div>
     </div>
-    <div class="prev-body" id="prev-body"><div class="prev-loading">加载中…</div></div>
+    <div class="prev-body" id="prev-body">
+      <div class="prev-loading" data-i18n="searchPreviewLoading"></div>
+    </div>
   `;
+
+  // Applica le traduzioni dichiarative sul contenitore principale appena creato
+  applyI18nDom(lang, previewEl);
+
   const bodyEl = previewEl.querySelector("#prev-body") as HTMLDivElement;
-  // Wire the "未显示？汇报" button. POST the search entry to the
-  // character-cards Flask service (it logs to a JSONL file the
-  // maintainer reviews). Single-shot per click, with a small toast on
-  // success/failure — see sendMissingReport below.
+
   const reportBtn = previewEl.querySelector<HTMLButtonElement>("#prev-report");
   if (reportBtn) {
     reportBtn.addEventListener(
@@ -2198,7 +2650,12 @@ async function renderPreviewFor(entry: Entry) {
   }
 
   if (!cat.data) {
-    bodyEl.innerHTML = `<div class="prev-empty">该分类暂无内置详情<br><span class="prev-empty-sub">${escapeHtml(cat.label)} · 仅显示名称与来源</span></div>`;
+    bodyEl.innerHTML = `
+      <div class="prev-empty">
+        <span data-i18n="searchPreviewNoDetail"></span><br>
+        <span class="prev-empty-sub">${escapeHtml(cat.label)} · <span data-i18n="searchPreviewNameSourceOnly"></span></span>
+      </div>`;
+    applyI18nDom(lang, bodyEl);
     return;
   }
 
@@ -2209,41 +2666,63 @@ async function renderPreviewFor(entry: Entry) {
   if (!pinnedEntry && lastHoverEntry && lastHoverEntry.id !== entry.id) return;
 
   if (!data) {
-    // If we've previously detected that this source's data files are
-    // entirely missing from every enabled library (the all-404 path
-    // in loadCategoryData also recorded a probeKey), show a more
-    // specific workaround pointing to the library settings — the
-    // generic "尚未同步" message wasn't actionable. Most common
-    // culprit: the kiwee.top "合作版" library whose index lists
-    // ~5300 stub entries with no backing JSON files.
     const isMissing = isSourceDataKnownMissing(cat.data?.key, srcCode(entry.s));
     if (isMissing) {
       bodyEl.innerHTML = `
-        <div class="prev-empty">该来源的详情数据不在任何已启用库的镜像上
-          <br><span class="prev-empty-sub">
-            来源 <b>${escapeHtml(code)}</b> · 仅有搜索条目，没有对应的内容文件。
-            <br>建议在「<b>设置 → 库设置</b>」临时关掉
-            「<b>5etools (kiwee.top, 合作版)</b>」等收录该来源的库，
-            或等镜像维护者补齐数据文件。
+        <div class="prev-empty">
+          <span data-i18n="searchPreviewDataMissing"></span>
+          <br>
+          <span class="prev-empty-sub">
+            <span data-i18n="searchPreviewSource"></span><b>${escapeHtml(code)}</b><span data-i18n="searchPreviewNoContentFile"></span>
+            <br>
+            <span data-i18n-html="searchPreviewSuggestDisable"></span>
           </span>
         </div>`;
     } else {
-      bodyEl.innerHTML = `<div class="prev-empty">未找到详情数据<br><span class="prev-empty-sub">来源 ${escapeHtml(code)} 的数据可能尚未同步</span></div>`;
+      bodyEl.innerHTML = `
+        <div class="prev-empty">
+          <span data-i18n="searchPreviewNotFound"></span><br>
+          <span class="prev-empty-sub"><span data-i18n="searchPreviewSource"></span> ${escapeHtml(code)}<span data-i18n="searchPreviewNotSynced"></span></span>
+        </div>`;
     }
+
+    // Traduce dinamicamente i blocchi di errore iniettati nel body
+    applyI18nDom(lang, bodyEl);
     return;
   }
 
   const c = entry.c;
+  console.log(data, entry);
+
   if (c === 1 || c === 46) {
     bodyEl.innerHTML = renderMonster(entry, data);
   } else if (c === 2) {
     bodyEl.innerHTML = chipsFor(entry, data) + renderSpell(entry, data);
+  } else if (c === 5) {
+    // <--- INTERCETTA LA CATEGORIA CLASS (5)
+    bodyEl.innerHTML = chipsFor(entry, data) + renderClass(data);
   } else if (c === 4 || c === 56 || c === 57) {
     bodyEl.innerHTML = chipsFor(entry, data) + renderItem(entry, data);
   } else if (c === 13) {
     bodyEl.innerHTML = chipsFor(entry, data) + renderAdventure(entry, data);
   } else if (c === 18 || c === 44) {
     bodyEl.innerHTML = chipsFor(entry, data) + renderBook(entry, data);
+  } else if (c === 24) {
+    // Le tabelle 5etools hanno colLabels e rows al livello radice
+    // Costruiamo un array "entries" sintetico per riusare renderEntry
+    const tableEntry = {
+      type: "table",
+      caption: data.caption,
+      colLabels: data.colLabels,
+      colStyles: data.colStyles,
+      rows: data.rows,
+      intro: data.intro,
+      footnotes: data.footnotes,
+    };
+    const intro = data.intro ? renderEntries(data.intro) : "";
+    const tableHtml = renderEntry(tableEntry);
+    const footnotes = data.footnotes ? renderEntries(data.footnotes) : "";
+    bodyEl.innerHTML = intro + tableHtml + footnotes;
   } else {
     const body = data.entries ? renderEntries(data.entries) : "";
     bodyEl.innerHTML = chipsFor(entry, data) + body;
