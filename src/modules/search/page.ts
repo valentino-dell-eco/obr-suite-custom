@@ -28,6 +28,8 @@ import {
 
 const POPOVER_ID = "com.obr-suite/search-bar";
 
+let lang = getLocalLang();
+const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
 // Data source — kiwee.top works for both languages, but additional
 // libraries can be wired in via the suite's library list (set in
 // Settings → 库设置). When >1 library is enabled, loadIndex fetches
@@ -1687,14 +1689,14 @@ function spellLevelStr(lvl: any): string {
 // The previous table had C→塑能, D→死灵, N→塑能, V→预言 — four of
 // the eight schools were displaying the wrong Chinese name. Fixed.
 const SCHOOLS: Record<string, string> = {
-  A: "防护",
-  C: "咒法",
-  D: "预言",
-  E: "附魔",
-  V: "塑能",
-  I: "幻术",
-  N: "死灵",
-  T: "变化",
+  A: tt("searchAbjuration"),
+  C: tt("searchConjuration"),
+  D: tt("searchDivination"),
+  E: tt("searchEnchantment"),
+  V: tt("searchEvocation"),
+  I: tt("searchIllusion"),
+  N: tt("searchNecromancy"),
+  T: tt("searchTransmutation"),
 };
 function schoolStr(s: any): string {
   return typeof s === "string" ? (SCHOOLS[s] ?? s) : "";
@@ -1704,15 +1706,15 @@ function schoolStr(s: any): string {
 // "reaction", "minute", "hour"). Untranslated this read as "1 action"
 // on the chip; localize for the Chinese UI.
 const CAST_TIME_UNIT_ZH: Record<string, string> = {
-  action: "动作",
-  bonus: "附赠动作",
-  reaction: "反应",
-  minute: "分钟",
-  minutes: "分钟",
-  hour: "小时",
-  hours: "小时",
-  round: "回合",
-  rounds: "回合",
+  action: tt("searchAction"),
+  bonus: tt("searchBonusAction"),
+  reaction: tt("searchReaction"),
+  minute: tt("searchMinute"),
+  minutes: tt("searchMinutes"),
+  hour: tt("searchHour"),
+  hours: tt("searchHours"),
+  round: tt("searchRound"),
+  rounds: tt("searchRounds"),
 };
 function castTimeUnitZh(u: unknown): string {
   if (typeof u !== "string") return "";

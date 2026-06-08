@@ -5,10 +5,19 @@ import { applyI18nDom, t } from "../../i18n";
 import { getLocalLang, onLangChange } from "../../state";
 import { assetUrl } from "../../asset-base";
 import {
-  writeSkin, isVideoSkin, type DiceSkins, type DiceSkin,
-  readActiveSkins, readMyLibrary,
-  addToLibrary, removeFromLibrary, setActiveSkin, setRandomMode,
-  saveCurrentAsSet, applySet, deleteSet,
+  writeSkin,
+  isVideoSkin,
+  type DiceSkins,
+  type DiceSkin,
+  readActiveSkins,
+  readMyLibrary,
+  addToLibrary,
+  removeFromLibrary,
+  setActiveSkin,
+  setRandomMode,
+  saveCurrentAsSet,
+  applySet,
+  deleteSet,
 } from "./dice-skins";
 
 let lang = getLocalLang();
@@ -35,7 +44,7 @@ const BC_DICE_HISTORY_FILTER = "com.obr-suite/dice-history-filter";
 const BC_DICE_REPLAY = "com.obr-suite/dice-replay";
 const ANIM_FALLBACK_MS = 6000;
 
-const LS_COMBOS  = "obr-suite/dice/combos";
+const LS_COMBOS = "obr-suite/dice/combos";
 // Per-room dice history. See history-page.ts for the rationale —
 // suffix the key with `OBR.room.id` so different rooms keep
 // independent scrollbacks.
@@ -55,10 +64,14 @@ const LS_GLOBAL_DARK_ROLL = "obr-suite/dice/global-dark-roll";
 function getGlobalDarkRoll(): boolean {
   try {
     return localStorage.getItem(LS_GLOBAL_DARK_ROLL) === "1";
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 function setGlobalDarkRoll(v: boolean): void {
-  try { localStorage.setItem(LS_GLOBAL_DARK_ROLL, v ? "1" : "0"); } catch {}
+  try {
+    localStorage.setItem(LS_GLOBAL_DARK_ROLL, v ? "1" : "0");
+  } catch {}
 }
 
 interface DiceRollPayload {
@@ -140,7 +153,11 @@ let historyFilter = "";
 // listener that wasn't subscribed yet).
 const LS_ACTIVE_REPLAY_CID = "obr-suite/dice/active-replay-cid";
 let activeReplayCid: string | null = (() => {
-  try { return localStorage.getItem(LS_ACTIVE_REPLAY_CID); } catch { return null; }
+  try {
+    return localStorage.getItem(LS_ACTIVE_REPLAY_CID);
+  } catch {
+    return null;
+  }
 })();
 function setActiveReplayCid(v: string | null) {
   activeReplayCid = v;
@@ -164,24 +181,26 @@ let isDM = false;
 let myPlayerId = "";
 
 // --- DOM refs ---
-const diceRow      = document.getElementById("diceRow")      as HTMLDivElement;
-const exprInput    = document.getElementById("exprInput")    as HTMLInputElement;
-const labelInput   = document.getElementById("labelInput")   as HTMLInputElement;
-const btnRoll      = document.getElementById("btnRoll")      as HTMLButtonElement;
-const btnLastRoll  = document.getElementById("btnLastRoll")  as HTMLButtonElement;
-const btnSave      = document.getElementById("btnSave")      as HTMLButtonElement;
-const btnClear     = document.getElementById("btnClear")     as HTMLButtonElement;
-const btnForceClr  = document.getElementById("btnForceClr")  as HTMLButtonElement;
-const btnAdv       = document.getElementById("btnAdv")       as HTMLButtonElement;
-const btnDis       = document.getElementById("btnDis")       as HTMLButtonElement;
-const btnCrit      = document.getElementById("btnCrit")      as HTMLButtonElement | null;
-const comboList    = document.getElementById("comboList")    as HTMLDivElement;
-const historyList  = document.getElementById("historyList")  as HTMLDivElement;
-const historySeg   = document.getElementById("historySeg")   as HTMLDivElement;
-const btnClearHist = document.getElementById("btnClearHistory") as HTMLButtonElement;
-const tabBtns      = document.querySelectorAll<HTMLButtonElement>(".tab");
-const tabPanes     = document.querySelectorAll<HTMLDivElement>(".tabPane");
-const skinList     = document.getElementById("skinList")     as HTMLDivElement | null;
+const diceRow = document.getElementById("diceRow") as HTMLDivElement;
+const exprInput = document.getElementById("exprInput") as HTMLInputElement;
+const labelInput = document.getElementById("labelInput") as HTMLInputElement;
+const btnRoll = document.getElementById("btnRoll") as HTMLButtonElement;
+const btnLastRoll = document.getElementById("btnLastRoll") as HTMLButtonElement;
+const btnSave = document.getElementById("btnSave") as HTMLButtonElement;
+const btnClear = document.getElementById("btnClear") as HTMLButtonElement;
+const btnForceClr = document.getElementById("btnForceClr") as HTMLButtonElement;
+const btnAdv = document.getElementById("btnAdv") as HTMLButtonElement;
+const btnDis = document.getElementById("btnDis") as HTMLButtonElement;
+const btnCrit = document.getElementById("btnCrit") as HTMLButtonElement | null;
+const comboList = document.getElementById("comboList") as HTMLDivElement;
+const historyList = document.getElementById("historyList") as HTMLDivElement;
+const historySeg = document.getElementById("historySeg") as HTMLDivElement;
+const btnClearHist = document.getElementById(
+  "btnClearHistory",
+) as HTMLButtonElement;
+const tabBtns = document.querySelectorAll<HTMLButtonElement>(".tab");
+const tabPanes = document.querySelectorAll<HTMLDivElement>(".tabPane");
+const skinList = document.getElementById("skinList") as HTMLDivElement | null;
 
 // --- localStorage helpers ---
 function loadCombos(): { combos: SavedCombo[]; categoryOrder: string[] } {
@@ -228,11 +247,23 @@ function loadHistory(): DiceRollPayload[] {
   } catch {}
   return [];
 }
-function saveHistory() { try { localStorage.setItem(LS_HISTORY, JSON.stringify(history)); } catch {} }
-function loadLastExpr(): string {
-  try { return localStorage.getItem(LS_LAST_EXPR) ?? ""; } catch { return ""; }
+function saveHistory() {
+  try {
+    localStorage.setItem(LS_HISTORY, JSON.stringify(history));
+  } catch {}
 }
-function saveLastExpr(v: string) { try { localStorage.setItem(LS_LAST_EXPR, v); } catch {} }
+function loadLastExpr(): string {
+  try {
+    return localStorage.getItem(LS_LAST_EXPR) ?? "";
+  } catch {
+    return "";
+  }
+}
+function saveLastExpr(v: string) {
+  try {
+    localStorage.setItem(LS_LAST_EXPR, v);
+  } catch {}
+}
 
 // --- Expression parser ---
 //
@@ -264,9 +295,33 @@ function saveLastExpr(v: string) { try { localStorage.setItem(LS_LAST_EXPR, v); 
 //
 // Chinese full-width parens / commas are normalised to ASCII first.
 
-interface ExprGroup { type: string; count: number }
-interface PlainExpr { groups: ExprGroup[]; modifier: number }
-type WrapperKind = "adv" | "dis" | "max" | "min" | "reset" | "resetmin" | "resetmax" | "same" | "burst" | "repeat" | "save" | "check";
+interface ExprGroup {
+  type: string;
+  count: number;
+}
+interface PlainExpr {
+  groups: ExprGroup[];
+  modifier: number;
+  customModifiers?: CustomModifier[];
+}
+interface CustomModifier {
+  term: string;
+  sign: 1 | -1;
+}
+
+type WrapperKind =
+  | "adv"
+  | "dis"
+  | "max"
+  | "min"
+  | "reset"
+  | "resetmin"
+  | "resetmax"
+  | "same"
+  | "burst"
+  | "repeat"
+  | "save"
+  | "check";
 interface Wrapper {
   kind: WrapperKind;
   // adv/dis: extra sets (N from "adv(...,N)"); default 1.
@@ -303,7 +358,7 @@ interface ParsedExpr {
   wrappers: Wrapper[];
 }
 
-const TERM_RE = /([+\-]?)(?:(\d*)d(\d+)|(\d+))/gi;
+const TERM_RE = /([+\-]?)(?:(\d*)d(\d+)|(\d+)|([a-z]+))/gi;
 
 function normalizeExpr(s: string): string {
   return s
@@ -316,10 +371,15 @@ function normalizeExpr(s: string): string {
 function parsePlain(s: string): PlainExpr {
   const groups: ExprGroup[] = [];
   let modifier = 0;
-  if (!s) return { groups, modifier };
+  const customModifiers: CustomModifier[] = []; // Array temporaneo per accumulare i termini testuali
+
+  if (!s) return { groups, modifier, customModifiers };
+
   for (const m of s.matchAll(TERM_RE)) {
     const sign = m[1] === "-" ? -1 : 1;
+
     if (m[3] !== undefined) {
+      // È un dado (es: 1d12)
       const count = (m[2] ? parseInt(m[2], 10) : 1) * sign;
       const sides = parseInt(m[3], 10);
       if (!sides || sides < 2 || sides > 1000) continue;
@@ -328,15 +388,35 @@ function parsePlain(s: string): PlainExpr {
       if (ex) ex.count += count;
       else groups.push({ type, count });
     } else if (m[4] !== undefined) {
+      // È un numero statico (es: +5)
       modifier += sign * parseInt(m[4], 10);
+    } else if (m[5] !== undefined) {
+      // È un modificatore dinamico testuale (es: dex, prof, jat)
+      const term = m[5].toLowerCase();
+      // Verifichiamo che sia una delle parole chiave supportate
+      if (
+        [
+          "str",
+          "dex",
+          "con",
+          "int",
+          "wis",
+          "cha",
+          "prof",
+          "exp",
+          "jat",
+        ].includes(term)
+      ) {
+        customModifiers.push({ term, sign });
+      }
     }
   }
-  // Drop zero-count groups but PRESERVE negative-count ones — they
-  // represent subtraction dice (e.g. `1d20-1d6` keeps `{type:"d6",
-  // count:-1}` so rollPlainSet can roll it and stamp `subtract:true`
-  // on each die. Removed-from-total dice are still rolled + animated
-  // for the visual.
-  return { groups: groups.filter((g) => g.count !== 0), modifier };
+
+  return {
+    groups: groups.filter((g) => g.count !== 0),
+    modifier,
+    customModifiers,
+  };
 }
 
 // Split a string at the LAST top-level comma — so "1d20+5,2" splits
@@ -403,7 +483,10 @@ function readWrapperHead(s: string): {
   inner: string;
   tail: string;
 } | null {
-  const m = /^(adv|dis|max|min|resetmin|resetmax|reset|same|burst|repeat|save|check)\(/i.exec(s);
+  const m =
+    /^(adv|dis|max|min|resetmin|resetmax|reset|same|burst|repeat|save|check)\(/i.exec(
+      s,
+    );
   if (!m) return null;
   const fnName = m[1].toLowerCase() as WrapperKind;
   const innerStart = m[0].length;
@@ -413,7 +496,10 @@ function readWrapperHead(s: string): {
     if (s[i] === "(") depth++;
     else if (s[i] === ")") {
       depth--;
-      if (depth === 0) { innerEnd = i; break; }
+      if (depth === 0) {
+        innerEnd = i;
+        break;
+      }
     }
   }
   if (innerEnd < 0) return null;
@@ -436,8 +522,11 @@ function readWrapperHead(s: string): {
     }
     wrapper = { kind: fnName, param: extraSets };
   } else if (
-    fnName === "max" || fnName === "min" ||
-    fnName === "reset" || fnName === "resetmin" || fnName === "resetmax"
+    fnName === "max" ||
+    fnName === "min" ||
+    fnName === "reset" ||
+    fnName === "resetmin" ||
+    fnName === "resetmax"
   ) {
     const lastComma = topLevelLastComma(innerRaw);
     if (lastComma < 0) return null;
@@ -488,42 +577,96 @@ function splitTopLevelArgs(s: string): string[] {
 
 function normalizeAbilityKey(raw: string): string {
   const key = raw.trim().toLowerCase();
-  return {
-    str: "str", strength: "str", 力量: "str", 力: "str",
-    dex: "dex", dexterity: "dex", 敏捷: "dex", 敏: "dex",
-    con: "con", constitution: "con", 体质: "con", 体: "con",
-    int: "int", intelligence: "int", 智力: "int", 智: "int",
-    wis: "wis", wisdom: "wis", 感知: "wis", 感: "wis",
-    cha: "cha", charisma: "cha", 魅力: "cha", 魅: "cha",
-  }[key] ?? key;
+  return (
+    {
+      str: "str",
+      strength: "str",
+      力量: "str",
+      力: "str",
+      dex: "dex",
+      dexterity: "dex",
+      敏捷: "dex",
+      敏: "dex",
+      con: "con",
+      constitution: "con",
+      体质: "con",
+      体: "con",
+      int: "int",
+      intelligence: "int",
+      智力: "int",
+      智: "int",
+      wis: "wis",
+      wisdom: "wis",
+      感知: "wis",
+      感: "wis",
+      cha: "cha",
+      charisma: "cha",
+      魅力: "cha",
+      魅: "cha",
+    }[key] ?? key
+  );
 }
 
 function normalizeSkillKey(raw: string): string {
   const key = raw.trim().toLowerCase();
-  return {
-    acrobatics: "acrobatics", acro: "acrobatics", "敏捷运动": "acrobatics",
-    "animal handling": "animal handling", animalhandling: "animal handling", "animal": "animal handling", "驯兽": "animal handling",
-    arcana: "arcana", athletics: "athletics", ath: "athletics", 运动: "athletics",
-    deception: "deception", 欺瞒: "deception",
-    history: "history", insight: "insight", 洞悉: "insight",
-    intimidation: "intimidation", 恐吓: "intimidation", "威吓": "intimidation",
-    investigation: "investigation", 调查: "investigation",
-    medicine: "medicine", nature: "nature", perception: "perception", 察觉: "perception",
-    performance: "performance", persuasion: "persuasion", religion: "religion",
-    "sleight of hand": "sleight of hand", sleightofhand: "sleight of hand", sleight: "sleight of hand", "巧手": "sleight of hand",
-    stealth: "stealth", survival: "survival", 隐匿: "stealth", 侦查: "perception",
-  }[key] ?? key;
+  return (
+    {
+      acrobatics: "acrobatics",
+      acro: "acrobatics",
+      敏捷运动: "acrobatics",
+      "animal handling": "animal handling",
+      animalhandling: "animal handling",
+      animal: "animal handling",
+      驯兽: "animal handling",
+      arcana: "arcana",
+      athletics: "athletics",
+      ath: "athletics",
+      运动: "athletics",
+      deception: "deception",
+      欺瞒: "deception",
+      history: "history",
+      insight: "insight",
+      洞悉: "insight",
+      intimidation: "intimidation",
+      恐吓: "intimidation",
+      威吓: "intimidation",
+      investigation: "investigation",
+      调查: "investigation",
+      medicine: "medicine",
+      nature: "nature",
+      perception: "perception",
+      察觉: "perception",
+      performance: "performance",
+      persuasion: "persuasion",
+      religion: "religion",
+      "sleight of hand": "sleight of hand",
+      sleightofhand: "sleight of hand",
+      sleight: "sleight of hand",
+      巧手: "sleight of hand",
+      stealth: "stealth",
+      survival: "survival",
+      隐匿: "stealth",
+      侦查: "perception",
+    }[key] ?? key
+  );
 }
 
 // Apply `sign` to a PlainExpr — flips dice counts and modifier sign.
 // Used when a wrapped term has a leading minus, like `-adv(1d4)`.
 function negatePlain(p: PlainExpr): PlainExpr {
   return {
-    groups: p.groups.map((g) => ({ type: g.type, count: g.count })).filter((g) => {
-      g.count = -g.count;
-      return g.count !== 0;
-    }),
+    groups: p.groups
+      .map((g) => ({ type: g.type, count: g.count }))
+      .filter((g) => {
+        g.count = -g.count;
+        return g.count !== 0;
+      }),
     modifier: -p.modifier,
+    customModifiers:
+      p.customModifiers?.map((cm) => ({
+        term: cm.term,
+        sign: cm.sign === 1 ? -1 : 1, // Inverte il segno (es: da +dex a -dex)
+      })) || [],
   };
 }
 
@@ -536,12 +679,21 @@ function mergePlain(dst: PlainExpr, src: PlainExpr): void {
   }
   dst.modifier += src.modifier;
   dst.groups = dst.groups.filter((g) => g.count !== 0);
+
+  // Unisce i modificatori personalizzati
+  if (src.customModifiers) {
+    if (!dst.customModifiers) dst.customModifiers = [];
+    dst.customModifiers.push(...src.customModifiers);
+  }
 }
 
 // LEGACY peelOne — replaced by `readWrapperHead` + `parseExprInner`.
 // Kept temporarily so I don't break unrelated callers in this commit;
 // nothing reaches it at runtime.
-function peelOne(s: string, outerOut?: PlainExpr): { wrapper: Wrapper; combined: string } | null {
+function peelOne(
+  s: string,
+  outerOut?: PlainExpr,
+): { wrapper: Wrapper; combined: string } | null {
   // Find the first wrapper-call signature anywhere in the string.
   const fnRe = /(adv|dis|max|min|resetmin|resetmax|reset|same|burst|repeat)\(/i;
   const m = s.match(fnRe);
@@ -558,7 +710,10 @@ function peelOne(s: string, outerOut?: PlainExpr): { wrapper: Wrapper; combined:
     if (s[i] === "(") depth++;
     else if (s[i] === ")") {
       depth--;
-      if (depth === 0) { innerEnd = i; break; }
+      if (depth === 0) {
+        innerEnd = i;
+        break;
+      }
     }
   }
   if (innerEnd < 0) return null;
@@ -585,8 +740,11 @@ function peelOne(s: string, outerOut?: PlainExpr): { wrapper: Wrapper; combined:
     }
     wrapper = { kind: fnName, param: extraSets };
   } else if (
-    fnName === "max" || fnName === "min" ||
-    fnName === "reset" || fnName === "resetmin" || fnName === "resetmax"
+    fnName === "max" ||
+    fnName === "min" ||
+    fnName === "reset" ||
+    fnName === "resetmin" ||
+    fnName === "resetmax"
   ) {
     const lastComma = topLevelLastComma(innerRaw);
     if (lastComma < 0) return null;
@@ -616,7 +774,8 @@ function peelOne(s: string, outerOut?: PlainExpr): { wrapper: Wrapper; combined:
   // iteration handles them; until then we don't risk corrupting nested
   // wrapper syntax by stripping their internal dice.
   if ((wrapper.kind === "adv" || wrapper.kind === "dis") && outerOut) {
-    const wrapperRe = /(adv|dis|max|min|resetmin|resetmax|reset|same|burst|repeat)\(/i;
+    const wrapperRe =
+      /(adv|dis|max|min|resetmin|resetmax|reset|same|burst|repeat)\(/i;
     const prefixHasWrapper = wrapperRe.test(prefix);
     const suffixHasWrapper = wrapperRe.test(suffix);
     let prefixOut = prefix;
@@ -636,7 +795,8 @@ function peelOne(s: string, outerOut?: PlainExpr): { wrapper: Wrapper; combined:
     };
     if (!prefixHasWrapper) prefixOut = absorbInto(prefix);
     if (!suffixHasWrapper) suffixOut = absorbInto(suffix);
-    const needsSep = prefixOut && !/[+\-]$/.test(prefixOut) && inner && !/^[+\-]/.test(inner);
+    const needsSep =
+      prefixOut && !/[+\-]$/.test(prefixOut) && inner && !/^[+\-]/.test(inner);
     const combined = prefixOut + (needsSep ? "+" : "") + inner + suffixOut;
     return { wrapper, combined };
   }
@@ -646,7 +806,8 @@ function peelOne(s: string, outerOut?: PlainExpr): { wrapper: Wrapper; combined:
   // Suffix should already start with an operator. If a sign-less prefix
   // is followed by a sign-less inner, separate them with "+" so the
   // plain parser doesn't run them together.
-  const needsSepBefore = prefix && !/[+\-]$/.test(prefix) && inner && !/^[+\-]/.test(inner);
+  const needsSepBefore =
+    prefix && !/[+\-]$/.test(prefix) && inner && !/^[+\-]/.test(inner);
   const combined = prefix + (needsSepBefore ? "+" : "") + inner + suffix;
   return { wrapper, combined };
 }
@@ -682,7 +843,11 @@ function parseExprInner(s: string): {
       // save/check wrapper, which has no inner dice expression.
       if (head.wrapper.kind === "save" || head.wrapper.kind === "check") {
         const seg: ParsedSegment = {
-          plain: { groups: [], modifier: 0 },
+          // MODIFICA: Iniettiamo automaticamente il dado d20 regolato dal segno (positivo o negativo)
+          plain: {
+            groups: [{ type: "d20", count: term.sign }],
+            modifier: 0,
+          },
           wrappers: [head.wrapper],
         };
         segments.push(seg);
@@ -701,7 +866,8 @@ function parseExprInner(s: string): {
         // (outer-of-inner = applied later by rollExpr).
         for (const innerSeg of innerParsed.segments) {
           const seg: ParsedSegment = {
-            plain: term.sign === -1 ? negatePlain(innerSeg.plain) : innerSeg.plain,
+            plain:
+              term.sign === -1 ? negatePlain(innerSeg.plain) : innerSeg.plain,
             wrappers: [...innerSeg.wrappers, head.wrapper],
           };
           segments.push(seg);
@@ -738,7 +904,10 @@ function finalizeParse(p: {
   // Drop segments whose plain has no dice and no modifier — happens
   // when an empty wrapper inner gets pushed.
   const segments = p.segments.filter(
-    (seg) => seg.plain.groups.length > 0 || seg.plain.modifier !== 0 || seg.wrappers.length > 0,
+    (seg) =>
+      seg.plain.groups.length > 0 ||
+      seg.plain.modifier !== 0 ||
+      seg.wrappers.length > 0,
   );
   const outerPlain = p.outerPlain;
   // Backward-compat shim: legacy callers read `parsed.plain` and
@@ -774,7 +943,10 @@ function rollPlainSet(plain: PlainExpr): DieResult[] {
     const isSubtract = g.count < 0;
     const n = Math.abs(g.count);
     for (let i = 0; i < n; i++) {
-      const die: DieResult = { type: g.type as DiceType, value: rollDieType(g.type) };
+      const die: DieResult = {
+        type: g.type as DiceType,
+        value: rollDieType(g.type),
+      };
       if (isSubtract) die.subtract = true;
       dice.push(die);
     }
@@ -807,9 +979,10 @@ function formatSegment(seg: ParsedSegment): string {
     switch (w.kind) {
       case "adv":
       case "dis":
-        body = w.param && w.param > 1
-          ? `${w.kind}(${body},${w.param})`
-          : `${w.kind}(${body})`;
+        body =
+          w.param && w.param > 1
+            ? `${w.kind}(${body},${w.param})`
+            : `${w.kind}(${body})`;
         break;
       case "max":
       case "min":
@@ -828,9 +1001,10 @@ function formatSegment(seg: ParsedSegment): string {
       case "save":
       case "check": {
         const args = [w.arg, w.arg2].filter(Boolean).join(",");
-        body = body && body !== "—"
-          ? `${w.kind}(${args},${body})`
-          : `${w.kind}(${args})`;
+        body =
+          body && body !== "—"
+            ? `${w.kind}(${args},${body})`
+            : `${w.kind}(${args})`;
         break;
       }
     }
@@ -878,12 +1052,14 @@ function applyValueClamp(
   kind: "max" | "min" | "reset" | "resetmin" | "resetmax",
   X: number,
 ): DieResult {
-  if (d.loser) return d;     // discarded set is preserved as-rolled
+  if (d.loser) return d; // discarded set is preserved as-rolled
   if (kind === "reset" || kind === "resetmin" || kind === "resetmax") {
     const triggers =
-      kind === "reset" ? d.value === X :
-      kind === "resetmin" ? d.value <= X :
-      d.value >= X;
+      kind === "reset"
+        ? d.value === X
+        : kind === "resetmin"
+          ? d.value <= X
+          : d.value >= X;
     if (!triggers) return d;
     const sides = sidesOf(d.type);
     const newVal = Math.floor(Math.random() * sides) + 1;
@@ -901,7 +1077,10 @@ function applyValueClamp(
 // Wrappers are innermost-first, applied in order. adv/dis are special:
 // they recurse to roll the INNER chain multiple times, then pick a
 // winning set and mark losers.
-function rollExpr(plain: PlainExpr, wrappers: Wrapper[]): { dice: DieResult[]; winnerIdx: number } {
+function rollExpr(
+  plain: PlainExpr,
+  wrappers: Wrapper[],
+): { dice: DieResult[]; winnerIdx: number } {
   if (wrappers.length === 0) {
     return { dice: rollPlainSet(plain), winnerIdx: -1 };
   }
@@ -918,13 +1097,16 @@ function rollExpr(plain: PlainExpr, wrappers: Wrapper[]): { dice: DieResult[]; w
     }
     let winSetIdx = 0;
     for (let i = 1; i < sets.length; i++) {
-      if (outer.kind === "adv" && sets[i].sum > sets[winSetIdx].sum) winSetIdx = i;
-      else if (outer.kind === "dis" && sets[i].sum < sets[winSetIdx].sum) winSetIdx = i;
+      if (outer.kind === "adv" && sets[i].sum > sets[winSetIdx].sum)
+        winSetIdx = i;
+      else if (outer.kind === "dis" && sets[i].sum < sets[winSetIdx].sum)
+        winSetIdx = i;
     }
     const dice: DieResult[] = [];
     for (let i = 0; i < sets.length; i++) {
       const isLoser = i !== winSetIdx;
-      for (const d of sets[i].dice) dice.push(isLoser ? { ...d, loser: true } : d);
+      for (const d of sets[i].dice)
+        dice.push(isLoser ? { ...d, loser: true } : d);
     }
     let winnerIdx = -1;
     if (sets[winSetIdx].dice.length === 1) {
@@ -948,12 +1130,19 @@ function rollExpr(plain: PlainExpr, wrappers: Wrapper[]): { dice: DieResult[]; w
   }
 
   if (
-    outer.kind === "max" || outer.kind === "min" ||
-    outer.kind === "reset" || outer.kind === "resetmin" || outer.kind === "resetmax"
+    outer.kind === "max" ||
+    outer.kind === "min" ||
+    outer.kind === "reset" ||
+    outer.kind === "resetmin" ||
+    outer.kind === "resetmax"
   ) {
     const X = outer.param ?? 1;
     dice = dice.map((d) =>
-      applyValueClamp(d, outer.kind as "max" | "min" | "reset" | "resetmin" | "resetmax", X),
+      applyValueClamp(
+        d,
+        outer.kind as "max" | "min" | "reset" | "resetmin" | "resetmax",
+        X,
+      ),
     );
   } else if (outer.kind === "burst") {
     const out: DieResult[] = [];
@@ -1017,7 +1206,7 @@ async function findFocusTokenId(): Promise<string | null> {
         it.type === "IMAGE" &&
         (it.layer === "CHARACTER" || it.layer === "MOUNT") &&
         it.visible &&
-        it.createdUserId === myId
+        it.createdUserId === myId,
     );
     if (items.length === 1) return items[0].id;
   } catch {}
@@ -1063,8 +1252,12 @@ function forceClear() {
     animationTimer = null;
   }
   setLocked(false);
-  OBR.broadcast.sendMessage(BC_DICE_FORCE_CLEAR, {}, { destination: "LOCAL" }).catch(() => {});
-  OBR.broadcast.sendMessage(BC_DICE_FORCE_CLEAR, {}, { destination: "REMOTE" }).catch(() => {});
+  OBR.broadcast
+    .sendMessage(BC_DICE_FORCE_CLEAR, {}, { destination: "LOCAL" })
+    .catch(() => {});
+  OBR.broadcast
+    .sendMessage(BC_DICE_FORCE_CLEAR, {}, { destination: "REMOTE" })
+    .catch(() => {});
 }
 
 // --- Dice button click adjusts expression (left=+1, right=-1) ---
@@ -1130,7 +1323,12 @@ function totalModifier(p: ParsedExpr): number {
 function exprIsEmpty(p: ParsedExpr): boolean {
   if (p.outerPlain.groups.length || p.outerPlain.modifier !== 0) return false;
   for (const seg of p.segments) {
-    if (seg.plain.groups.length || seg.plain.modifier !== 0 || seg.wrappers.length) return false;
+    if (
+      seg.plain.groups.length ||
+      seg.plain.modifier !== 0 ||
+      seg.wrappers.length
+    )
+      return false;
   }
   return true;
 }
@@ -1149,9 +1347,11 @@ function refreshBadges() {
   // there are zero segments, so reading both `plain` and `outerPlain`
   // would double-count plain expressions like "1d20" → badge showed 2.
   for (const seg of parsed.segments) {
-    for (const g of seg.plain.groups) counts[g.type] = (counts[g.type] ?? 0) + g.count;
+    for (const g of seg.plain.groups)
+      counts[g.type] = (counts[g.type] ?? 0) + g.count;
   }
-  for (const g of parsed.outerPlain.groups) counts[g.type] = (counts[g.type] ?? 0) + g.count;
+  for (const g of parsed.outerPlain.groups)
+    counts[g.type] = (counts[g.type] ?? 0) + g.count;
   diceRow.querySelectorAll<HTMLElement>(".dice-btn[data-type]").forEach((b) => {
     const t = b.dataset.type!;
     const c = counts[t] ?? 0;
@@ -1166,7 +1366,11 @@ function refreshBadges() {
 // Group combos by category, returning [category, combos[]] pairs in
 // the user-defined `categoryOrder` sequence. Uncategorized combos
 // always render first under the empty-string key.
-function groupCombosByCategory(): Array<{ key: string; label: string; items: SavedCombo[] }> {
+function groupCombosByCategory(): Array<{
+  key: string;
+  label: string;
+  items: SavedCombo[];
+}> {
   // Bucketize. Preserve in-array order inside each bucket — that's
   // what the drag-reorder writes back, so the rendered order matches
   // the persisted order without extra sorting.
@@ -1174,7 +1378,10 @@ function groupCombosByCategory(): Array<{ key: string; label: string; items: Sav
   for (const c of combos) {
     const key = (c.category ?? "").trim();
     let arr = buckets.get(key);
-    if (!arr) { arr = []; buckets.set(key, arr); }
+    if (!arr) {
+      arr = [];
+      buckets.set(key, arr);
+    }
     arr.push(c);
   }
   const out: Array<{ key: string; label: string; items: SavedCombo[] }> = [];
@@ -1214,7 +1421,8 @@ function renderCombos() {
     : "";
 
   const groups = groupCombosByCategory();
-  const hasAny = groups.some((g) => g.items.length > 0) || categoryOrder.length > 0;
+  const hasAny =
+    groups.some((g) => g.items.length > 0) || categoryOrder.length > 0;
 
   // Toolbar across the top of the combos tab — drag hint + add-category
   // button. Always rendered (even when empty) so a fresh user can
@@ -1227,16 +1435,18 @@ function renderCombos() {
   `;
 
   if (!hasAny) {
-    comboList.innerHTML = toolbar +
-      `<div class="empty-state">${tt("diceComboEmpty")}</div>`;
+    comboList.innerHTML =
+      toolbar + `<div class="empty-state">${tt("diceComboEmpty")}</div>`;
     wireToolbar();
     return;
   }
 
-  const sectionsHtml = groups.map((g) => {
-    const cards = g.items.map((c) => {
-      const formula = formatExpr(parseExpr(c.expr));
-      return `
+  const sectionsHtml = groups
+    .map((g) => {
+      const cards = g.items
+        .map((c) => {
+          const formula = formatExpr(parseExpr(c.expr));
+          return `
         <div class="combo-card" data-id="${escapeHtml(c.id)}" data-cat="${escapeHtml(g.key)}" draggable="true">
           <div class="combo-card-head">
             <span class="combo-grip" title="${tt("diceComboDragHint")}" aria-hidden="true">⋮⋮</span>
@@ -1252,15 +1462,19 @@ function renderCombos() {
           </div>
         </div>
       `;
-    }).join("");
-    // Categories other than uncategorized get rename/delete affordances
-    // on the header. The uncategorized header is always present for
-    // its label only — no rename / delete (it's the implicit fallback).
-    const headerActions = g.key === UNCATEGORIZED_KEY ? "" : `
+        })
+        .join("");
+      // Categories other than uncategorized get rename/delete affordances
+      // on the header. The uncategorized header is always present for
+      // its label only — no rename / delete (it's the implicit fallback).
+      const headerActions =
+        g.key === UNCATEGORIZED_KEY
+          ? ""
+          : `
       <button class="cat-act" data-act="rename" type="button" title="${tt("diceComboCatRename")}">✎</button>
       <button class="cat-act" data-act="del-cat" type="button" title="${tt("diceComboCatDelete")}">✕</button>
     `;
-    return `
+      return `
       <div class="combo-section" data-cat="${escapeHtml(g.key)}">
         <div class="combo-section-head">
           <span class="combo-section-title">${escapeHtml(g.label)}</span>
@@ -1270,7 +1484,8 @@ function renderCombos() {
         <div class="combo-section-body" data-cat="${escapeHtml(g.key)}">${cards || `<div class="combo-empty-drop">—</div>`}</div>
       </div>
     `;
-  }).join("");
+    })
+    .join("");
 
   comboList.innerHTML = toolbar + sectionsHtml;
   wireToolbar();
@@ -1293,70 +1508,75 @@ function wireToolbar() {
 }
 
 function wireCardActions() {
-  comboList.querySelectorAll<HTMLButtonElement>(".combo-card .combo-actions button").forEach((b) => {
-    b.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const card = b.closest(".combo-card") as HTMLElement;
-      const id = card.dataset.id!;
-      const c = combos.find((x) => x.id === id);
-      if (!c) return;
-      const act = b.dataset.act;
-      if (act === "roll") {
-        // Honour DM's 全局暗骰 toggle on the normal-roll path. The
-        // explicit 暗骰 button below always rolls hidden regardless.
-        rollFromCombo(c.expr, c.name, { hidden: getGlobalDarkRoll() }, b);
-      } else if (act === "roll-dark") {
-        rollFromCombo(c.expr, c.name, { hidden: true }, b);
-      } else if (act === "roll-crit") {
-        // 重击 — double dice counts in the combo's saved expression
-        // before rolling. Pure pre-roll text transform; the combo's
-        // stored expression isn't mutated. Also honours 全局暗骰.
-        const critExpr = doubleDiceCounts(c.expr);
-        rollFromCombo(critExpr, c.name, { hidden: getGlobalDarkRoll() }, b);
-      } else if (act === "load") {
-        setExpression(c.expr);
-        labelText = c.name;
-        labelInput.value = labelText;
-        switchTab("roll");
-      } else if (act === "del") {
-        combos = combos.filter((x) => x.id !== id);
-        saveCombos();
-        renderCombos();
-      }
-    });
-  });
-  // Header rename / delete-category actions.
-  comboList.querySelectorAll<HTMLButtonElement>(".combo-section .cat-act").forEach((b) => {
-    b.addEventListener("click", () => {
-      const section = b.closest(".combo-section") as HTMLElement;
-      const cat = section.dataset.cat!;
-      const act = b.dataset.act;
-      if (act === "rename") {
-        const next = window.prompt(tt("diceComboCatRenamePrompt"), cat);
-        if (!next) return;
-        const trimmed = next.trim().slice(0, 32);
-        if (!trimmed || trimmed === cat) return;
-        for (const c of combos) if (c.category === cat) c.category = trimmed;
-        const idx = categoryOrder.indexOf(cat);
-        if (idx >= 0) {
-          categoryOrder[idx] = trimmed;
-        } else {
-          categoryOrder.push(trimmed);
+  comboList
+    .querySelectorAll<HTMLButtonElement>(".combo-card .combo-actions button")
+    .forEach((b) => {
+      b.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const card = b.closest(".combo-card") as HTMLElement;
+        const id = card.dataset.id!;
+        const c = combos.find((x) => x.id === id);
+        if (!c) return;
+        const act = b.dataset.act;
+        if (act === "roll") {
+          // Honour DM's 全局暗骰 toggle on the normal-roll path. The
+          // explicit 暗骰 button below always rolls hidden regardless.
+          rollFromCombo(c.expr, c.name, { hidden: getGlobalDarkRoll() }, b);
+        } else if (act === "roll-dark") {
+          rollFromCombo(c.expr, c.name, { hidden: true }, b);
+        } else if (act === "roll-crit") {
+          // 重击 — double dice counts in the combo's saved expression
+          // before rolling. Pure pre-roll text transform; the combo's
+          // stored expression isn't mutated. Also honours 全局暗骰.
+          const critExpr = doubleDiceCounts(c.expr);
+          rollFromCombo(critExpr, c.name, { hidden: getGlobalDarkRoll() }, b);
+        } else if (act === "load") {
+          setExpression(c.expr);
+          labelText = c.name;
+          labelInput.value = labelText;
+          switchTab("roll");
+        } else if (act === "del") {
+          combos = combos.filter((x) => x.id !== id);
+          saveCombos();
+          renderCombos();
         }
-        // Dedup in case rename collided with an existing category.
-        categoryOrder = categoryOrder.filter(
-          (v, i, arr) => arr.indexOf(v) === i,
-        );
-        saveCombos();
-        renderCombos();
-      } else if (act === "del-cat") {
-        for (const c of combos) if (c.category === cat) c.category = undefined;
-        categoryOrder = categoryOrder.filter((v) => v !== cat);
-        saveCombos();
-        renderCombos();
-      }
+      });
     });
-  });
+  // Header rename / delete-category actions.
+  comboList
+    .querySelectorAll<HTMLButtonElement>(".combo-section .cat-act")
+    .forEach((b) => {
+      b.addEventListener("click", () => {
+        const section = b.closest(".combo-section") as HTMLElement;
+        const cat = section.dataset.cat!;
+        const act = b.dataset.act;
+        if (act === "rename") {
+          const next = window.prompt(tt("diceComboCatRenamePrompt"), cat);
+          if (!next) return;
+          const trimmed = next.trim().slice(0, 32);
+          if (!trimmed || trimmed === cat) return;
+          for (const c of combos) if (c.category === cat) c.category = trimmed;
+          const idx = categoryOrder.indexOf(cat);
+          if (idx >= 0) {
+            categoryOrder[idx] = trimmed;
+          } else {
+            categoryOrder.push(trimmed);
+          }
+          // Dedup in case rename collided with an existing category.
+          categoryOrder = categoryOrder.filter(
+            (v, i, arr) => arr.indexOf(v) === i,
+          );
+          saveCombos();
+          renderCombos();
+        } else if (act === "del-cat") {
+          for (const c of combos)
+            if (c.category === cat) c.category = undefined;
+          categoryOrder = categoryOrder.filter((v) => v !== cat);
+          saveCombos();
+          renderCombos();
+        }
+      });
+    });
 }
 
 // HTML5 drag-and-drop. dragstart fires on the combo-card, dragover
@@ -1378,96 +1598,102 @@ function wireDragAndDrop() {
     card.addEventListener("dragend", () => {
       card.classList.remove("dragging");
       draggedId = null;
-      comboList.querySelectorAll<HTMLElement>(".combo-card.drop-before").forEach(
-        (n) => n.classList.remove("drop-before"),
-      );
-      comboList.querySelectorAll<HTMLElement>(".combo-section.drop-target").forEach(
-        (n) => n.classList.remove("drop-target"),
-      );
+      comboList
+        .querySelectorAll<HTMLElement>(".combo-card.drop-before")
+        .forEach((n) => n.classList.remove("drop-before"));
+      comboList
+        .querySelectorAll<HTMLElement>(".combo-section.drop-target")
+        .forEach((n) => n.classList.remove("drop-target"));
     });
   });
-  comboList.querySelectorAll<HTMLElement>(".combo-section-body").forEach((body) => {
-    body.addEventListener("dragover", (e) => {
-      if (!draggedId) return;
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-      const section = body.closest(".combo-section") as HTMLElement;
-      section?.classList.add("drop-target");
-      // Highlight the card we'd drop BEFORE so the user can preview
-      // the insertion. Walk siblings to find the first one whose
-      // midpoint is below the cursor.
-      body.querySelectorAll<HTMLElement>(".combo-card.drop-before").forEach(
-        (n) => n.classList.remove("drop-before"),
-      );
-      const cards = Array.from(body.querySelectorAll<HTMLElement>(".combo-card"));
-      const y = e.clientY;
-      const target = cards.find((c) => {
-        const r = c.getBoundingClientRect();
-        return y < r.top + r.height / 2;
+  comboList
+    .querySelectorAll<HTMLElement>(".combo-section-body")
+    .forEach((body) => {
+      body.addEventListener("dragover", (e) => {
+        if (!draggedId) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        const section = body.closest(".combo-section") as HTMLElement;
+        section?.classList.add("drop-target");
+        // Highlight the card we'd drop BEFORE so the user can preview
+        // the insertion. Walk siblings to find the first one whose
+        // midpoint is below the cursor.
+        body
+          .querySelectorAll<HTMLElement>(".combo-card.drop-before")
+          .forEach((n) => n.classList.remove("drop-before"));
+        const cards = Array.from(
+          body.querySelectorAll<HTMLElement>(".combo-card"),
+        );
+        const y = e.clientY;
+        const target = cards.find((c) => {
+          const r = c.getBoundingClientRect();
+          return y < r.top + r.height / 2;
+        });
+        if (target && target.dataset.id !== draggedId) {
+          target.classList.add("drop-before");
+        }
       });
-      if (target && target.dataset.id !== draggedId) {
-        target.classList.add("drop-before");
-      }
-    });
-    body.addEventListener("dragleave", (e) => {
-      const section = body.closest(".combo-section") as HTMLElement;
-      // Only clear if the cursor truly left the section, not just
-      // moved between children. relatedTarget check guards that.
-      const rt = e.relatedTarget as Node | null;
-      if (!section || (rt && section.contains(rt))) return;
-      section.classList.remove("drop-target");
-      body.querySelectorAll<HTMLElement>(".combo-card.drop-before").forEach(
-        (n) => n.classList.remove("drop-before"),
-      );
-    });
-    body.addEventListener("drop", (e) => {
-      if (!draggedId) return;
-      e.preventDefault();
-      const section = body.closest(".combo-section") as HTMLElement;
-      const targetCat = body.dataset.cat ?? "";
-      const movedIdx = combos.findIndex((c) => c.id === draggedId);
-      if (movedIdx < 0) return;
-      const moved = combos[movedIdx];
+      body.addEventListener("dragleave", (e) => {
+        const section = body.closest(".combo-section") as HTMLElement;
+        // Only clear if the cursor truly left the section, not just
+        // moved between children. relatedTarget check guards that.
+        const rt = e.relatedTarget as Node | null;
+        if (!section || (rt && section.contains(rt))) return;
+        section.classList.remove("drop-target");
+        body
+          .querySelectorAll<HTMLElement>(".combo-card.drop-before")
+          .forEach((n) => n.classList.remove("drop-before"));
+      });
+      body.addEventListener("drop", (e) => {
+        if (!draggedId) return;
+        e.preventDefault();
+        const section = body.closest(".combo-section") as HTMLElement;
+        const targetCat = body.dataset.cat ?? "";
+        const movedIdx = combos.findIndex((c) => c.id === draggedId);
+        if (movedIdx < 0) return;
+        const moved = combos[movedIdx];
 
-      // Determine insertion position within the bucket.
-      const cards = Array.from(body.querySelectorAll<HTMLElement>(".combo-card"));
-      const y = e.clientY;
-      let insertBeforeId: string | null = null;
-      for (const c of cards) {
-        if (c.dataset.id === draggedId) continue;
-        const r = c.getBoundingClientRect();
-        if (y < r.top + r.height / 2) {
-          insertBeforeId = c.dataset.id ?? null;
-          break;
+        // Determine insertion position within the bucket.
+        const cards = Array.from(
+          body.querySelectorAll<HTMLElement>(".combo-card"),
+        );
+        const y = e.clientY;
+        let insertBeforeId: string | null = null;
+        for (const c of cards) {
+          if (c.dataset.id === draggedId) continue;
+          const r = c.getBoundingClientRect();
+          if (y < r.top + r.height / 2) {
+            insertBeforeId = c.dataset.id ?? null;
+            break;
+          }
         }
-      }
-      // Apply category change first.
-      moved.category = targetCat || undefined;
-      // Splice out, then splice into the new position relative to the
-      // CURRENT array (after removal).
-      combos.splice(movedIdx, 1);
-      let insertAt: number;
-      if (insertBeforeId) {
-        insertAt = combos.findIndex((c) => c.id === insertBeforeId);
-        if (insertAt < 0) insertAt = combos.length;
-      } else {
-        // Drop at end of the target bucket: find last index whose
-        // category matches targetCat, insert just after it. If none,
-        // append at the very end.
-        let lastInBucket = -1;
-        for (let i = 0; i < combos.length; i++) {
-          if ((combos[i].category ?? "") === targetCat) lastInBucket = i;
+        // Apply category change first.
+        moved.category = targetCat || undefined;
+        // Splice out, then splice into the new position relative to the
+        // CURRENT array (after removal).
+        combos.splice(movedIdx, 1);
+        let insertAt: number;
+        if (insertBeforeId) {
+          insertAt = combos.findIndex((c) => c.id === insertBeforeId);
+          if (insertAt < 0) insertAt = combos.length;
+        } else {
+          // Drop at end of the target bucket: find last index whose
+          // category matches targetCat, insert just after it. If none,
+          // append at the very end.
+          let lastInBucket = -1;
+          for (let i = 0; i < combos.length; i++) {
+            if ((combos[i].category ?? "") === targetCat) lastInBucket = i;
+          }
+          insertAt = lastInBucket + 1;
+          if (insertAt < 0) insertAt = combos.length;
         }
-        insertAt = lastInBucket + 1;
-        if (insertAt < 0) insertAt = combos.length;
-      }
-      combos.splice(insertAt, 0, moved);
+        combos.splice(insertAt, 0, moved);
 
-      saveCombos();
-      section?.classList.remove("drop-target");
-      renderCombos();
+        saveCombos();
+        section?.classList.remove("drop-target");
+        renderCombos();
+      });
     });
-  });
 }
 
 function renderHistorySeg() {
@@ -1485,7 +1711,7 @@ function renderHistorySeg() {
   for (const n of names) {
     const isOn = historyFilter === n;
     buttons.push(
-      `<button class="seg-btn ${isOn ? "on" : ""}" data-p="${escapeHtml(n)}" type="button">${escapeHtml(n)}</button>`
+      `<button class="seg-btn ${isOn ? "on" : ""}" data-p="${escapeHtml(n)}" type="button">${escapeHtml(n)}</button>`,
     );
   }
   historySeg.innerHTML = buttons.join("");
@@ -1508,7 +1734,15 @@ function renderHistorySeg() {
 // container with a roller-color-bound left border + click target wired to
 // BC_DICE_REPLAY (handled by the panel's historyList click delegate).
 
-const STANDARD_DIE_TYPES = new Set(["d4", "d6", "d8", "d10", "d12", "d20", "d100"]);
+const STANDARD_DIE_TYPES = new Set([
+  "d4",
+  "d6",
+  "d8",
+  "d10",
+  "d12",
+  "d20",
+  "d100",
+]);
 function dieImgUrl(type: string): string {
   return assetUrl(`${STANDARD_DIE_TYPES.has(type) ? type : "d100"}.png`);
 }
@@ -1517,17 +1751,20 @@ function chipsHtml(dice: DieResult[]): string {
   const parts: string[] = [];
   for (const d of dice) {
     const sides = sidesOf(d.type);
-    const cls =
-      d.loser ? "loser" :
-      d.value === sides ? "crit" :
-      d.value === 1 ? "fail" : "";
+    const cls = d.loser
+      ? "loser"
+      : d.value === sides
+        ? "crit"
+        : d.value === 1
+          ? "fail"
+          : "";
     const subtractCls = d.subtract ? " subtract" : "";
     const valueStr = d.subtract ? `−${d.value}` : String(d.value);
     parts.push(
       `<span class="die-chip ${cls}${subtractCls}">` +
-      `<img src="${dieImgUrl(d.type)}" alt="${escapeHtml(d.type)}" draggable="false">` +
-      `<span>${valueStr}</span>` +
-      `</span>`,
+        `<img src="${dieImgUrl(d.type)}" alt="${escapeHtml(d.type)}" draggable="false">` +
+        `<span>${valueStr}</span>` +
+        `</span>`,
     );
   }
   return parts.join("");
@@ -1539,16 +1776,19 @@ function buildFormulaInner(entry: DiceRollPayload, showLabel = true): string {
   if (entry.modifier !== 0) {
     const N = entry.rowStarts?.length ?? 0;
     const sign = entry.modifier > 0 ? "+" : "";
-    modStr = N > 1
-      ? `<span class="mod">${sign}${entry.modifier}×${N}</span>`
-      : `<span class="mod">${sign}${entry.modifier}</span>`;
+    modStr =
+      N > 1
+        ? `<span class="mod">${sign}${entry.modifier}×${N}</span>`
+        : `<span class="mod">${sign}${entry.modifier}</span>`;
   }
-  const repeatTag = (entry.rowStarts?.length ?? 0) > 1
-    ? `<span class="label-tag" style="background:rgba(93,173,226,0.18);color:#9ad9ff">repeat×${entry.rowStarts!.length}</span>`
-    : "";
-  const labelStr = showLabel && entry.label
-    ? `<span class="label-tag">${escapeHtml(entry.label)}</span>`
-    : "";
+  const repeatTag =
+    (entry.rowStarts?.length ?? 0) > 1
+      ? `<span class="label-tag" style="background:rgba(93,173,226,0.18);color:#9ad9ff">repeat×${entry.rowStarts!.length}</span>`
+      : "";
+  const labelStr =
+    showLabel && entry.label
+      ? `<span class="label-tag">${escapeHtml(entry.label)}</span>`
+      : "";
   const list = `<div class="dice-list">${repeatTag}${chips}${modStr}${labelStr}<span class="eq">=</span></div>`;
   const total = `<span class="total">${entry.total}</span>`;
   return list + total;
@@ -1556,9 +1796,10 @@ function buildFormulaInner(entry: DiceRollPayload, showLabel = true): string {
 
 function buildMemberCard(m: DiceRollPayload): string {
   const chips = chipsHtml(m.dice);
-  const modStr = m.modifier !== 0
-    ? `<span class="mod">${m.modifier > 0 ? `+${m.modifier}` : m.modifier}</span>`
-    : "";
+  const modStr =
+    m.modifier !== 0
+      ? `<span class="mod">${m.modifier > 0 ? `+${m.modifier}` : m.modifier}</span>`
+      : "";
   const kept = m.dice.filter((d) => !d.loser);
   const isCrit = kept.some((d) => d.type === "d20" && d.value === 20);
   const isFail = kept.some((d) => d.type === "d20" && d.value === 1);
@@ -1573,11 +1814,17 @@ function buildMemberStripHtml(members: DiceRollPayload[]): string {
   return `<div class="member-strip">${members.map(buildMemberCard).join("")}</div>`;
 }
 
-function buildRepeatRowCard(entry: DiceRollPayload, rowIdx: number, rowDice: DieResult[], rowTotal: number): string {
+function buildRepeatRowCard(
+  entry: DiceRollPayload,
+  rowIdx: number,
+  rowDice: DieResult[],
+  rowTotal: number,
+): string {
   const chips = chipsHtml(rowDice);
-  const modStr = entry.modifier !== 0
-    ? `<span class="mod">${entry.modifier > 0 ? `+${entry.modifier}` : entry.modifier}</span>`
-    : "";
+  const modStr =
+    entry.modifier !== 0
+      ? `<span class="mod">${entry.modifier > 0 ? `+${entry.modifier}` : entry.modifier}</span>`
+      : "";
   const kept = rowDice.filter((d) => !d.loser);
   const isCrit = kept.some((d) => d.type === "d20" && d.value === 20);
   const isFail = kept.some((d) => d.type === "d20" && d.value === 1);
@@ -1621,7 +1868,9 @@ function renderEntrySolo(h: DiceRollPayload): string {
   const body = isRepeat
     ? buildRepeatStripHtml(h)
     : `<div class="formula">${buildFormulaInner(h, /* showLabel */ false)}</div>`;
-  const darkTag = h.hidden ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>` : "";
+  const darkTag = h.hidden
+    ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>`
+    : "";
   const titleText = escapeHtml(h.label || h.rollerName);
   return `
     <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${h.rollerColor}" title="${tt("diceHistoryReplayTooltip")}">
@@ -1637,7 +1886,10 @@ function renderEntrySolo(h: DiceRollPayload): string {
   `;
 }
 
-function renderEntryCollective(cid: string, members: DiceRollPayload[]): string {
+function renderEntryCollective(
+  cid: string,
+  members: DiceRollPayload[],
+): string {
   const head = members[0];
   const ago = formatAgo(Date.now() - head.ts);
   const cls = ["entry", "coll-entry"];
@@ -1651,7 +1903,9 @@ function renderEntryCollective(cid: string, members: DiceRollPayload[]): string 
   );
   if (hasCrit) cls.push("crit");
   else if (hasFail) cls.push("fail");
-  const darkTag = head.hidden ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>` : "";
+  const darkTag = head.hidden
+    ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>`
+    : "";
   const collTag = `<span class="coll-tag">${tt("diceHistColl")} ${members.length}</span>`;
   const labelOrName = escapeHtml(head.label || head.rollerName);
   return `
@@ -1696,9 +1950,11 @@ function renderHistoryList() {
       }
     }
     if (!members.length) continue;
-    blocks.push(members.length === 1
-      ? renderEntrySolo(members[0])
-      : renderEntryCollective(cid, members));
+    blocks.push(
+      members.length === 1
+        ? renderEntrySolo(members[0])
+        : renderEntryCollective(cid, members),
+    );
   }
   historyList.innerHTML = blocks.join("");
 }
@@ -1769,61 +2025,93 @@ let webmExtractChain: Promise<unknown> = Promise.resolve();
 function extractWebmPoster(url: string): Promise<string | null> {
   const hit = webmPosterCache.get(url);
   if (hit !== undefined) return Promise.resolve(hit || null);
-  const next = webmExtractChain.then(() => new Promise<string | null>((resolve) => {
-    if (webmPosterCache.has(url)) { resolve(webmPosterCache.get(url) || null); return; }
-    const v = document.createElement("video");
-    v.muted = true;
-    v.crossOrigin = "anonymous";
-    // `preload="metadata"` is enough — we only need the FIRST frame.
-    // `auto` would download more bytes than we ever use.
-    v.preload = "metadata";
-    v.playsInline = true;
-    let done = false;
-    const finish = (result: string | null) => {
-      if (done) return;
-      done = true;
-      webmPosterCache.set(url, result);
-      try { v.src = ""; v.removeAttribute("src"); v.load(); } catch { /* ignore */ }
-      try { v.remove(); } catch { /* ignore */ }
-      resolve(result);
-    };
-    v.onloadeddata = () => {
-      try { v.currentTime = 0.01; } catch { finish(null); }
-    };
-    v.onseeked = () => {
-      try {
-        // Cap poster size at 64×64 — chips render at 32px so this is
-        // already 2× retina headroom. Keeping the canvas small makes
-        // both `drawImage` and `toBlob` an order of magnitude cheaper
-        // than the native frame size (typical webm = 256×256+).
-        const srcW = v.videoWidth || 64;
-        const srcH = v.videoHeight || 64;
-        const MAX = 64;
-        const sc = Math.min(1, MAX / Math.max(srcW, srcH));
-        const w = Math.max(1, Math.round(srcW * sc));
-        const h = Math.max(1, Math.round(srcH * sc));
-        const c = document.createElement("canvas");
-        c.width = w; c.height = h;
-        const ctx = c.getContext("2d");
-        if (!ctx) { finish(null); return; }
-        ctx.drawImage(v, 0, 0, w, h);
-        // `toBlob` is async + uses the optimised image-encoder path
-        // (worker thread, no base64 inflation) — vastly faster than
-        // `toDataURL` on the main thread for many chips. Tainted
-        // canvases reject inside the callback (`null` blob).
-        c.toBlob((blob) => {
-          if (!blob) { finish(null); return; }
-          try { finish(URL.createObjectURL(blob)); }
-          catch { finish(null); }
-        }, "image/png");
-      } catch { finish(null); }
-    };
-    v.onerror = () => finish(null);
-    // Safety net: 6s ceiling per extraction so a stuck URL doesn't
-    // block the whole queue forever.
-    setTimeout(() => finish(null), 6000);
-    v.src = url;
-  }));
+  const next = webmExtractChain.then(
+    () =>
+      new Promise<string | null>((resolve) => {
+        if (webmPosterCache.has(url)) {
+          resolve(webmPosterCache.get(url) || null);
+          return;
+        }
+        const v = document.createElement("video");
+        v.muted = true;
+        v.crossOrigin = "anonymous";
+        // `preload="metadata"` is enough — we only need the FIRST frame.
+        // `auto` would download more bytes than we ever use.
+        v.preload = "metadata";
+        v.playsInline = true;
+        let done = false;
+        const finish = (result: string | null) => {
+          if (done) return;
+          done = true;
+          webmPosterCache.set(url, result);
+          try {
+            v.src = "";
+            v.removeAttribute("src");
+            v.load();
+          } catch {
+            /* ignore */
+          }
+          try {
+            v.remove();
+          } catch {
+            /* ignore */
+          }
+          resolve(result);
+        };
+        v.onloadeddata = () => {
+          try {
+            v.currentTime = 0.01;
+          } catch {
+            finish(null);
+          }
+        };
+        v.onseeked = () => {
+          try {
+            // Cap poster size at 64×64 — chips render at 32px so this is
+            // already 2× retina headroom. Keeping the canvas small makes
+            // both `drawImage` and `toBlob` an order of magnitude cheaper
+            // than the native frame size (typical webm = 256×256+).
+            const srcW = v.videoWidth || 64;
+            const srcH = v.videoHeight || 64;
+            const MAX = 64;
+            const sc = Math.min(1, MAX / Math.max(srcW, srcH));
+            const w = Math.max(1, Math.round(srcW * sc));
+            const h = Math.max(1, Math.round(srcH * sc));
+            const c = document.createElement("canvas");
+            c.width = w;
+            c.height = h;
+            const ctx = c.getContext("2d");
+            if (!ctx) {
+              finish(null);
+              return;
+            }
+            ctx.drawImage(v, 0, 0, w, h);
+            // `toBlob` is async + uses the optimised image-encoder path
+            // (worker thread, no base64 inflation) — vastly faster than
+            // `toDataURL` on the main thread for many chips. Tainted
+            // canvases reject inside the callback (`null` blob).
+            c.toBlob((blob) => {
+              if (!blob) {
+                finish(null);
+                return;
+              }
+              try {
+                finish(URL.createObjectURL(blob));
+              } catch {
+                finish(null);
+              }
+            }, "image/png");
+          } catch {
+            finish(null);
+          }
+        };
+        v.onerror = () => finish(null);
+        // Safety net: 6s ceiling per extraction so a stuck URL doesn't
+        // block the whole queue forever.
+        setTimeout(() => finish(null), 6000);
+        v.src = url;
+      }),
+  );
   webmExtractChain = next.catch(() => null);
   return next;
 }
@@ -1832,7 +2120,10 @@ function extractWebmPoster(url: string): Promise<string | null> {
 // in their library / sets. Runs on idle so the actual page-load cost
 // is zero; by the time the user clicks the 皮肤 tab the chips render
 // from cache hits with no extraction wait. Called once from boot.
-function prewarmWebmPosters(library: { libs: Partial<Record<DiceType, DiceSkin[]>>; sets: Array<{ skins: Partial<Record<DiceType, DiceSkin>> }> }): void {
+function prewarmWebmPosters(library: {
+  libs: Partial<Record<DiceType, DiceSkin[]>>;
+  sets: Array<{ skins: Partial<Record<DiceType, DiceSkin>> }>;
+}): void {
   const urls = new Set<string>();
   for (const t of ALL_TYPES) {
     for (const s of library.libs[t] ?? []) {
@@ -1857,7 +2148,11 @@ function prewarmWebmPosters(library: { libs: Partial<Record<DiceType, DiceSkin[]
   });
 }
 
-function thumbHtml(skin: DiceSkin | null, type: DiceType, animate = false): string {
+function thumbHtml(
+  skin: DiceSkin | null,
+  type: DiceType,
+  animate = false,
+): string {
   if (skin) {
     if (isVideoSkin(skin)) {
       // Active thumb (max 7 globally) — full animated video.
@@ -1888,7 +2183,8 @@ function thumbHtml(skin: DiceSkin | null, type: DiceType, animate = false): stri
 // extraction landed) get skipped.
 function hydrateWebmPosters(): void {
   if (!skinList) return;
-  const pending = skinList.querySelectorAll<HTMLImageElement>("img[data-webm-src]");
+  const pending =
+    skinList.querySelectorAll<HTMLImageElement>("img[data-webm-src]");
   pending.forEach((img) => {
     const url = img.dataset.webmSrc;
     if (!url) return;
@@ -1915,38 +2211,51 @@ async function renderSkinsTab(): Promise<void> {
   // Two reads: (1) the active map (what each die is currently rendering
   // with), (2) the library + sets + random flags blob (the new model).
   let active: DiceSkins = {};
-  let lib = { v: 2 as const, libs: {} as Partial<Record<DiceType, DiceSkin[]>>,
-              random: {} as Partial<Record<DiceType, boolean>>,
-              sets: [] as Array<{ id: string; name: string; skins: DiceSkins }> };
-  try { active = await readActiveSkins(); } catch { /* default empty */ }
-  try { lib = await readMyLibrary(); } catch { /* default empty */ }
+  let lib = {
+    v: 2 as const,
+    libs: {} as Partial<Record<DiceType, DiceSkin[]>>,
+    random: {} as Partial<Record<DiceType, boolean>>,
+    sets: [] as Array<{ id: string; name: string; skins: DiceSkins }>,
+  };
+  try {
+    active = await readActiveSkins();
+  } catch {
+    /* default empty */
+  }
+  try {
+    lib = await readMyLibrary();
+  } catch {
+    /* default empty */
+  }
 
   // ===== upload hint banner =====
   // Static — local-file imports don't survive a different iframe in the
   // effect modal, so the URL HAS to point at an OBR-hosted asset.
-  const hintHtml =
-    `<div class="skin-hint">${tt("diceSkinHintLocal")}</div>`;
+  const hintHtml = `<div class="skin-hint">${tt("diceSkinHintLocal")}</div>`;
 
   // ===== skin sets row =====
   const setsHtml =
     `<div class="skin-sets">` +
-      `<div class="skin-sets-head">` +
-        `<span class="skin-sets-title">${tt("diceSkinSetsTitle")}</span>` +
-        `<button class="btn small skin-set-save" type="button" title="${tt("diceSkinSetSaveBtnTitle")}">${tt("diceSkinSetSaveBtn")}</button>` +
-      `</div>` +
-      (lib.sets.length === 0
-        ? `<div class="skin-sets-empty">${tt("diceSkinSetsEmpty")}</div>`
-        : `<div class="skin-sets-list">` +
-            lib.sets.map((s) => {
-              const covered = ALL_TYPES.filter((t) => !!s.skins[t]).length;
-              return `<span class="skin-set-chip" data-set-id="${escapeHtml(s.id)}" title="${tt("diceSkinSetChipTitleLoad").replace("{name}", escapeHtml(s.name)).replace("{n}", String(covered))}">` +
-                `<span class="skin-set-name">${escapeHtml(s.name)}</span>` +
-                `<span class="skin-set-count">${covered}/7</span>` +
-                `<button class="skin-set-del" type="button" data-set-id="${escapeHtml(s.id)}" title="${tt("diceSkinSetDelTitle")}">×</button>` +
-              `</span>`;
-            }).join("") +
-          `</div>`
-      ) +
+    `<div class="skin-sets-head">` +
+    `<span class="skin-sets-title">${tt("diceSkinSetsTitle")}</span>` +
+    `<button class="btn small skin-set-save" type="button" title="${tt("diceSkinSetSaveBtnTitle")}">${tt("diceSkinSetSaveBtn")}</button>` +
+    `</div>` +
+    (lib.sets.length === 0
+      ? `<div class="skin-sets-empty">${tt("diceSkinSetsEmpty")}</div>`
+      : `<div class="skin-sets-list">` +
+        lib.sets
+          .map((s) => {
+            const covered = ALL_TYPES.filter((t) => !!s.skins[t]).length;
+            return (
+              `<span class="skin-set-chip" data-set-id="${escapeHtml(s.id)}" title="${tt("diceSkinSetChipTitleLoad").replace("{name}", escapeHtml(s.name)).replace("{n}", String(covered))}">` +
+              `<span class="skin-set-name">${escapeHtml(s.name)}</span>` +
+              `<span class="skin-set-count">${covered}/7</span>` +
+              `<button class="skin-set-del" type="button" data-set-id="${escapeHtml(s.id)}" title="${tt("diceSkinSetDelTitle")}">×</button>` +
+              `</span>`
+            );
+          })
+          .join("") +
+        `</div>`) +
     `</div>`;
 
   // ===== per-die rows =====
@@ -1963,42 +2272,50 @@ async function renderSkinsTab(): Promise<void> {
     const isDefaultActive = !isRandom && !activeSkin;
     const defaultChipHtml =
       `<span class="skin-lib-chip default-chip${isDefaultActive ? " on" : ""}" data-type="${type}" data-default="1" title="${isDefaultActive ? tt("diceSkinDefaultActive") : tt("diceSkinDefaultTitle")}">` +
-        `<span class="skin-lib-thumb"><img src="${escapeHtml(defaultUrl)}" alt="${type}" class="is-default" loading="lazy"></span>` +
+      `<span class="skin-lib-thumb"><img src="${escapeHtml(defaultUrl)}" alt="${type}" class="is-default" loading="lazy"></span>` +
       `</span>`;
-    const customChipsHtml = library.map((s) => {
-      const isActive = !isRandom && !!activeSkin && activeSkin.url === s.url;
-      return `<span class="skin-lib-chip${isActive ? " on" : ""}" data-type="${type}" data-url="${escapeHtml(s.url)}" title="${isActive ? tt("diceSkinActiveTitle") : tt("diceSkinSetTitle")}">` +
-        `<span class="skin-lib-thumb">${thumbHtml(s, type)}</span>` +
-        `<button class="skin-lib-del" type="button" data-type="${type}" data-url="${escapeHtml(s.url)}" title="${tt("diceSkinLibDelTitle")}">×</button>` +
-      `</span>`;
-    }).join("");
-    const libStripHtml = defaultChipHtml + (
-      library.length === 0
+    const customChipsHtml = library
+      .map((s) => {
+        const isActive = !isRandom && !!activeSkin && activeSkin.url === s.url;
+        return (
+          `<span class="skin-lib-chip${isActive ? " on" : ""}" data-type="${type}" data-url="${escapeHtml(s.url)}" title="${isActive ? tt("diceSkinActiveTitle") : tt("diceSkinSetTitle")}">` +
+          `<span class="skin-lib-thumb">${thumbHtml(s, type)}</span>` +
+          `<button class="skin-lib-del" type="button" data-type="${type}" data-url="${escapeHtml(s.url)}" title="${tt("diceSkinLibDelTitle")}">×</button>` +
+          `</span>`
+        );
+      })
+      .join("");
+    const libStripHtml =
+      defaultChipHtml +
+      (library.length === 0
         ? `<span class="skin-lib-empty">${tt("diceSkinLibEmpty")}</span>`
-        : customChipsHtml
-    );
+        : customChipsHtml);
     const statusLabel = isRandom
       ? tt("diceSkinStatusRandom").replace("{n}", String(library.length))
-      : (activeSkin ? tt("diceSkinStatusCustom") : tt("diceSkinStatusDefault"));
+      : activeSkin
+        ? tt("diceSkinStatusCustom")
+        : tt("diceSkinStatusDefault");
     return (
       `<div class="skin-row" data-type="${type}">` +
-        `<span class="skin-thumb">${thumbHtml(activeSkin, type, true)}</span>` +
-        `<div class="skin-body">` +
-          `<div class="skin-head">` +
-            `<span class="skin-name">${type}</span>` +
-            `<span class="skin-status${(activeSkin || isRandom) ? " custom" : ""}">${statusLabel}</span>` +
-            `<label class="skin-random" title="开启后，每次掷出该骰子都会从皮肤库里随机抽一张。皮肤库为空时回退到当前皮肤 / 默认。">` +
-              `<input type="checkbox" data-rand="${type}"${isRandom ? " checked" : ""}> 随机池` +
-            `</label>` +
-            (activeSkin && !isRandom ? `<button class="skin-reset" data-type="${type}" type="button" title="清掉当前活动皮肤（皮肤库保留）">重置</button>` : "") +
-          `</div>` +
-          `<div class="skin-lib-strip">${libStripHtml}</div>` +
-          `<div class="skin-url-row">` +
-            `<input class="skin-url-input" data-type="${type}" type="text" spellcheck="false" placeholder="https:// 开头的图片 / webm 绝对地址">` +
-            `<button class="skin-url-set" data-type="${type}" type="button">加入皮肤库</button>` +
-            `<button class="skin-url-set primary" data-type="${type}" data-also-active="1" type="button" title="加入皮肤库 + 设为当前">加入并应用</button>` +
-          `</div>` +
-        `</div>` +
+      `<span class="skin-thumb">${thumbHtml(activeSkin, type, true)}</span>` +
+      `<div class="skin-body">` +
+      `<div class="skin-head">` +
+      `<span class="skin-name">${type}</span>` +
+      `<span class="skin-status${activeSkin || isRandom ? " custom" : ""}">${statusLabel}</span>` +
+      `<label class="skin-random" title="开启后，每次掷出该骰子都会从皮肤库里随机抽一张。皮肤库为空时回退到当前皮肤 / 默认。">` +
+      `<input type="checkbox" data-rand="${type}"${isRandom ? " checked" : ""}> 随机池` +
+      `</label>` +
+      (activeSkin && !isRandom
+        ? `<button class="skin-reset" data-type="${type}" type="button" title="清掉当前活动皮肤（皮肤库保留）">重置</button>`
+        : "") +
+      `</div>` +
+      `<div class="skin-lib-strip">${libStripHtml}</div>` +
+      `<div class="skin-url-row">` +
+      `<input class="skin-url-input" data-type="${type}" type="text" spellcheck="false" placeholder="https:// 开头的图片 / webm 绝对地址">` +
+      `<button class="skin-url-set" data-type="${type}" type="button">加入皮肤库</button>` +
+      `<button class="skin-url-set primary" data-type="${type}" data-also-active="1" type="button" title="加入皮肤库 + 设为当前">加入并应用</button>` +
+      `</div>` +
+      `</div>` +
       `</div>`
     );
   }).join("");
@@ -2013,8 +2330,17 @@ async function renderSkinsTab(): Promise<void> {
   // pause + src="" + load() forces immediate release.
   const oldVideos = skinList.querySelectorAll<HTMLVideoElement>("video");
   oldVideos.forEach((v) => {
-    try { v.pause(); } catch { /* ignore */ }
-    try { v.removeAttribute("src"); v.load(); } catch { /* ignore */ }
+    try {
+      v.pause();
+    } catch {
+      /* ignore */
+    }
+    try {
+      v.removeAttribute("src");
+      v.load();
+    } catch {
+      /* ignore */
+    }
   });
 
   skinList.innerHTML = hintHtml + setsHtml + rowsHtml;
@@ -2048,8 +2374,11 @@ if (skinList) {
       e.stopPropagation();
       const id = setDelBtn.dataset.setId;
       if (id) {
-        try { await deleteSet(id); }
-        catch (err) { console.error("[obr-suite/dice] delete set failed", err); }
+        try {
+          await deleteSet(id);
+        } catch (err) {
+          console.error("[obr-suite/dice] delete set failed", err);
+        }
         scheduleRenderSkinsTab();
       }
       return;
@@ -2058,8 +2387,11 @@ if (skinList) {
     if (setChip) {
       const id = setChip.dataset.setId;
       if (id) {
-        try { await applySet(id); }
-        catch (err) { console.error("[obr-suite/dice] apply set failed", err); }
+        try {
+          await applySet(id);
+        } catch (err) {
+          console.error("[obr-suite/dice] apply set failed", err);
+        }
         scheduleRenderSkinsTab();
       }
       return;
@@ -2068,8 +2400,11 @@ if (skinList) {
     if (setSaveBtn) {
       const name = window.prompt("给这套骰子皮肤起个名字：", "我的套组");
       if (name && name.trim()) {
-        try { await saveCurrentAsSet(name.trim()); }
-        catch (err) { console.error("[obr-suite/dice] save set failed", err); }
+        try {
+          await saveCurrentAsSet(name.trim());
+        } catch (err) {
+          console.error("[obr-suite/dice] save set failed", err);
+        }
         scheduleRenderSkinsTab();
       }
       return;
@@ -2082,8 +2417,11 @@ if (skinList) {
       const type = libDelBtn.dataset.type as DiceType | undefined;
       const url = libDelBtn.dataset.url;
       if (type && url) {
-        try { await removeFromLibrary(type, url); }
-        catch (err) { console.error("[obr-suite/dice] remove from library failed", err); }
+        try {
+          await removeFromLibrary(type, url);
+        } catch (err) {
+          console.error("[obr-suite/dice] remove from library failed", err);
+        }
         scheduleRenderSkinsTab();
       }
       return;
@@ -2123,8 +2461,11 @@ if (skinList) {
     const resetBtn = target.closest<HTMLButtonElement>(".skin-reset");
     if (resetBtn) {
       const type = resetBtn.dataset.type as DiceType;
-      try { await setActiveSkin(type, null); }
-      catch (err) { console.error("[obr-suite/dice] reset skin failed", err); }
+      try {
+        await setActiveSkin(type, null);
+      } catch (err) {
+        console.error("[obr-suite/dice] reset skin failed", err);
+      }
       scheduleRenderSkinsTab();
       return;
     }
@@ -2162,11 +2503,16 @@ if (skinList) {
   // Random-pool toggle (checkbox change isn't a click on the input
   // itself — bind separately).
   skinList.addEventListener("change", async (e) => {
-    const cb = (e.target as HTMLElement).closest<HTMLInputElement>("input[data-rand]");
+    const cb = (e.target as HTMLElement).closest<HTMLInputElement>(
+      "input[data-rand]",
+    );
     if (!cb) return;
     const type = cb.dataset.rand as DiceType;
-    try { await setRandomMode(type, cb.checked); }
-    catch (err) { console.error("[obr-suite/dice] toggle random failed", err); }
+    try {
+      await setRandomMode(type, cb.checked);
+    } catch (err) {
+      console.error("[obr-suite/dice] toggle random failed", err);
+    }
     scheduleRenderSkinsTab();
   });
 }
@@ -2234,7 +2580,9 @@ async function getBestiaryTable(): Promise<Record<string, any>> {
   try {
     const meta = await OBR.scene.getMetadata();
     const table = meta[BESTIARY_DATA_KEY];
-    return typeof table === "object" && table ? (table as Record<string, any>) : {};
+    return typeof table === "object" && table
+      ? (table as Record<string, any>)
+      : {};
   } catch {
     return {};
   }
@@ -2271,17 +2619,20 @@ function findCardSkillBonus(card: any, skillKey: string): number | null {
   if (Array.isArray(skills)) {
     for (const s of skills) {
       const name = typeof s?.name === "string" ? normalizeSkillKey(s.name) : "";
-      if (name === skillKey) {     
+      if (name === skillKey) {
         console.log(name, skillKey, coreStats.proficiency_bonus);
-        
+
         // Return the PROFICIENCY/EXPERTISE bonus only, not the total.
         // Total already includes the ability modifier, so we want just
         // the competence bonus (proficiency, expertise, jack-of-all-trades).
         if (typeof s.proficiency === "number") return s.proficiency;
         if (typeof s.proficiency === "string" && s.proficiency) {
           console.log();
-          
-          const prof = typeof coreStats?.proficiency_bonus === "number" ? coreStats.proficiency_bonus : 0;
+
+          const prof =
+            typeof coreStats?.proficiency_bonus === "number"
+              ? coreStats.proficiency_bonus
+              : 0;
           switch (s.proficiency) {
             case "proficient":
               return prof;
@@ -2321,18 +2672,23 @@ function computeCardSaveBonus(card: any, ablKey: string): number {
   const abl = abilities[ablKey] || {};
   if (typeof abl?.save?.bonus === "number") return abl.save.bonus;
   const aMod = typeof abl?.modifier === "number" ? abl.modifier : 0;
-  const prof = typeof core?.proficiency_bonus === "number" ? core.proficiency_bonus : 0;
+  const prof =
+    typeof core?.proficiency_bonus === "number" ? core.proficiency_bonus : 0;
   return abl?.save?.proficient ? aMod + prof : aMod;
 }
 
-function computeCardCheckBonus(card: any, ablKey: string, skillKey?: string): number {
+function computeCardCheckBonus(
+  card: any,
+  ablKey: string,
+  skillKey?: string,
+): number {
   if (!ablKey) return 0;
   const aMod = computeCardAbilityCheck(card, ablKey);
   if (skillKey) {
     const skillBonus = findCardSkillBonus(card, skillKey);
     console.log("SKILL BONUS", skillKey, skillBonus);
-    
-    if (typeof skillBonus === "number") return aMod + (skillBonus??0);
+
+    if (typeof skillBonus === "number") return aMod + (skillBonus ?? 0);
   }
   return aMod;
 }
@@ -2344,7 +2700,11 @@ function computeBestiarySaveBonus(monster: any, ablKey: string): number {
   return parseSaveBonus(saves[ablKey], score);
 }
 
-function computeBestiaryCheckBonus(monster: any, ablKey: string, skillKey?: string): number {
+function computeBestiaryCheckBonus(
+  monster: any,
+  ablKey: string,
+  skillKey?: string,
+): number {
   const score = monster?.[ablKey];
   const base = parseAbilityMod(score);
   if (!skillKey) return base;
@@ -2360,39 +2720,192 @@ function computeBestiaryCheckBonus(monster: any, ablKey: string, skillKey?: stri
   return base;
 }
 
-async function resolveWrapperModifier(itemId: string | null, wrapper: Wrapper): Promise<number> {
-  if (!itemId || (wrapper.kind !== "save" && wrapper.kind !== "check")) return 0;
+async function resolveWrapperModifier(
+  itemId: string | null,
+  wrapper: Wrapper,
+): Promise<number> {
+  if (!itemId || (wrapper.kind !== "save" && wrapper.kind !== "check"))
+    return 0;
   const item = await getItemData(itemId);
   if (!item) return 0;
-  const cardId = typeof item.metadata?.[CC_BOUND_KEY] === "string" ? item.metadata[CC_BOUND_KEY] : "";
+  const cardId =
+    typeof item.metadata?.[CC_BOUND_KEY] === "string"
+      ? item.metadata[CC_BOUND_KEY]
+      : "";
   if (cardId) {
     const card = await fetchCardData(cardId);
     if (card) {
-      if (wrapper.kind === "save") return computeCardSaveBonus(card, wrapper.arg ?? "");
+      if (wrapper.kind === "save")
+        return computeCardSaveBonus(card, wrapper.arg ?? "");
       return computeCardCheckBonus(card, wrapper.arg ?? "", wrapper.arg2);
     }
   }
-  const slug = typeof item.metadata?.[BESTIARY_SLUG_KEY] === "string" ? item.metadata[BESTIARY_SLUG_KEY] : "";
+  const slug =
+    typeof item.metadata?.[BESTIARY_SLUG_KEY] === "string"
+      ? item.metadata[BESTIARY_SLUG_KEY]
+      : "";
   if (slug) {
     const table = await getBestiaryTable();
     const monster = table[slug];
     if (monster) {
-      if (wrapper.kind === "save") return computeBestiarySaveBonus(monster, wrapper.arg ?? "");
-      return computeBestiaryCheckBonus(monster, wrapper.arg ?? "", wrapper.arg2);
+      if (wrapper.kind === "save")
+        return computeBestiarySaveBonus(monster, wrapper.arg ?? "");
+      return computeBestiaryCheckBonus(
+        monster,
+        wrapper.arg ?? "",
+        wrapper.arg2,
+      );
     }
   }
   return 0;
 }
 
-async function computeParsedModifier(parsed: ParsedExpr, itemId: string | null): Promise<number> {
+async function resolveDynamicTextModifier(
+  itemId: string | null,
+  rawText: string,
+): Promise<number> {
+  if (!itemId) return 0;
+  const item = await getItemData(itemId);
+  if (!item) return 0;
+
+  const key = rawText.trim().toLowerCase();
+
+  // 1. Recupero del Bonus di Competenza Base (prof)
+  let profBonus = 0;
+
+  // Proviamo a estrarre i dati se è una Character Card o un Mostro dal Bestiario
+  const cardId =
+    typeof item.metadata?.[CC_BOUND_KEY] === "string"
+      ? item.metadata[CC_BOUND_KEY]
+      : "";
+  let stats: any = null;
+
+  if (cardId) {
+    const card = await fetchCardData(cardId);
+    if (card) {
+      // Sostituisci con le proprietà reali del tuo oggetto 'card'
+
+      const core = card?.core_stats || {};
+      console.log(card);
+      stats = card.abilities; // es. { str: 14, dex: 16, ... } o i modificatori diretti
+      profBonus = core.proficiency_bonus || 0;
+    }
+  } else {
+    const slug =
+      typeof item.metadata?.[BESTIARY_SLUG_KEY] === "string"
+        ? item.metadata[BESTIARY_SLUG_KEY]
+        : "";
+    if (slug) {
+      const table = await getBestiaryTable();
+      const monster = table[slug];
+      if (monster) {
+        stats = monster.abilities;
+        profBonus = monster.proficiency_bonus || 0;
+      }
+    }
+  }
+
+  // Se non abbiamo trovato statistiche, usciamo con 0
+  if (!stats && !profBonus) return 0;
+
+  // 2. Logica di mappatura dei modificatori richiesti:
+
+  // Gestione caratteristiche (Prende il modificatore matematico, es: (16 - 10) / 2 = +3)
+  if (["str", "dex", "con", "int", "wis", "cha"].includes(key)) {
+    return stats?.[key].modifier || 0;
+  }
+
+  // Gestione competenza (prof)
+  if (key === "prof") {
+    return profBonus;
+  }
+
+  // Gestione Maestria / Esperto (exp) -> Doppio della competenza
+  if (key === "exp") {
+    return profBonus * 2;
+  }
+
+  // Gestione "Jack of all Trades" (jat) -> Metà competenza arrotondata per difetto
+  if (key === "jat") {
+    return Math.floor(profBonus / 2);
+  }
+
+  return 0;
+}
+
+function getFullAbilityName(raw: string): string {
+  const key = raw.trim().toLowerCase();
+  const names: Record<string, string> = {
+    str: "Strength",
+    dex: "Dexterity",
+    con: "Constitution",
+    int: "Intelligence",
+    wis: "Wisdom",
+    cha: "Charisma",
+    prof: "Proficiency",
+    exp: "Expertise",
+    jat: "Jack of All Trades",
+  };
+  return names[key] || key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+/**
+ * Analizza l'espressione e genera la nota (es. "Dexterity Save")
+ */
+function generateRollNotes(parsed: ParsedExpr): string {
+  const notes: string[] = [];
+
+  for (const seg of parsed.segments) {
+    for (const w of seg.wrappers) {
+      // Nel parser di panel-page.ts, le proprietà di save/check sono .arg e .arg2
+      if (w.kind === "save" && w.arg) {
+        notes.push(`${getFullAbilityName(w.arg)} Save`);
+      } else if (w.kind === "check" && w.arg) {
+        if (w.arg2) {
+          notes.push(
+            `${getFullAbilityName(w.arg)}(${getFullAbilityName(w.arg2)})`,
+          );
+        } else {
+          notes.push(`${getFullAbilityName(w.arg)} Check`);
+        }
+      }
+    }
+  }
+
+  return notes.join(", ");
+}
+
+async function computeParsedModifier(
+  parsed: ParsedExpr,
+  itemId: string | null,
+): Promise<number> {
   let total = totalModifier(parsed);
+
+  // 1. Risoluzione dei wrapper standard (save/check)
   for (const seg of parsed.segments) {
     for (const w of seg.wrappers) {
       if (w.kind === "save" || w.kind === "check") {
         total += await resolveWrapperModifier(itemId, w);
       }
     }
+
+    // 2. Risoluzione dei modificatori dinamici testuali dentro i segmenti wrapped
+    if (seg.plain.customModifiers) {
+      for (const cm of seg.plain.customModifiers) {
+        const val = await resolveDynamicTextModifier(itemId, cm.term);
+        total += cm.sign * val; // Gestisce nativamente sia +3 che -3
+      }
+    }
   }
+
+  // 3. Risoluzione dei modificatori dinamici testuali rimasti fuori dai wrapper (outerPlain)
+  if (parsed.outerPlain.customModifiers) {
+    for (const cm of parsed.outerPlain.customModifiers) {
+      const val = await resolveDynamicTextModifier(itemId, cm.term);
+      total += cm.sign * val;
+    }
+  }
+
   return total;
 }
 
@@ -2491,16 +3004,24 @@ async function focusCameraOnTokens(tokenIds: string[]): Promise<void> {
         OBR.viewport.getScale(),
       ]);
       const p = items[0].position;
-      OBR.viewport.animateTo({
-        position: { x: -p.x * currentScale + vw / 2, y: -p.y * currentScale + vh / 2 },
-        scale: currentScale,
-      }).catch(() => {});
+      OBR.viewport
+        .animateTo({
+          position: {
+            x: -p.x * currentScale + vw / 2,
+            y: -p.y * currentScale + vh / 2,
+          },
+          scale: currentScale,
+        })
+        .catch(() => {});
       return;
     }
     // Multi-target — bounding box across every token position. Padding
     // (in world units) keeps tokens away from the screen edge so the
     // dice that anchor on each token's TOP have room to fly in.
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
     for (const it of items) {
       const p = (it as any).position;
       if (!p) continue;
@@ -2511,9 +3032,11 @@ async function focusCameraOnTokens(tokenIds: string[]): Promise<void> {
     }
     if (!Number.isFinite(minX)) return;
     let dpi = 150;
-    try { dpi = await OBR.scene.grid.getDpi(); } catch {}
+    try {
+      dpi = await OBR.scene.grid.getDpi();
+    } catch {}
     const padX = dpi * 1.5;
-    const padY = dpi * 2;   // extra vertical so dice above heads stay visible
+    const padY = dpi * 2; // extra vertical so dice above heads stay visible
     const min = { x: minX - padX, y: minY - padY };
     const max = { x: maxX + padX, y: maxY + padY };
     const w = max.x - min.x;
@@ -2542,20 +3065,25 @@ async function focusCameraOnTokens(tokenIds: string[]): Promise<void> {
       // Tiny slack so a bbox edge that's pixel-perfectly at the
       // viewport edge isn't penalised by floating-point jitter.
       const slack = 2;
-      const fits = tlX >= -slack && tlY >= -slack && brX <= vw + slack && brY <= vh + slack;
+      const fits =
+        tlX >= -slack &&
+        tlY >= -slack &&
+        brX <= vw + slack &&
+        brY <= vh + slack;
       if (fits) return;
     } catch {}
 
-    OBR.viewport.animateToBounds({
-      min,
-      max,
-      width: w,
-      height: h,
-      center: { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2 },
-    }).catch(() => {});
+    OBR.viewport
+      .animateToBounds({
+        min,
+        max,
+        width: w,
+        height: h,
+        center: { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2 },
+      })
+      .catch(() => {});
   } catch {}
 }
-
 
 async function emitOneRoll(opts: {
   dice: DieResult[];
@@ -2567,6 +3095,7 @@ async function emitOneRoll(opts: {
   rowStarts?: number[];
   sameHighlight?: boolean;
   collectiveId?: string;
+  parsed?: ParsedExpr;
 }): Promise<void> {
   if (!opts.dice.length) return;
   // Total: sum of all NON-loser dice. Subtraction dice contribute
@@ -2580,9 +3109,10 @@ async function emitOneRoll(opts: {
     (a, d) => a + (d.subtract ? -d.value : d.value),
     0,
   );
-  const total = opts.rowStarts && opts.rowStarts.length > 0
-    ? baseTotal + opts.modifier * opts.rowStarts.length
-    : baseTotal + opts.modifier;
+  const total =
+    opts.rowStarts && opts.rowStarts.length > 0
+      ? baseTotal + opts.modifier * opts.rowStarts.length
+      : baseTotal + opts.modifier;
 
   let rollerId = "";
   let rollerName = tt("diceRollerFallback");
@@ -2597,12 +3127,21 @@ async function emitOneRoll(opts: {
 
   const rollId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   myActiveRollIds.add(rollId);
+  
+  let finalLabel = opts.label.trim();
+  if (opts.parsed) {
+    const dynamicNote = generateRollNotes(opts.parsed);
+    if (dynamicNote) {
+      finalLabel = finalLabel ? `${finalLabel} (${dynamicNote})` : dynamicNote;
+    }
+  }
+  
   const payload: DiceRollPayload = {
     itemId: opts.itemId,
     dice: opts.dice,
     winnerIdx: opts.winnerIdx,
     modifier: opts.modifier,
-    label: opts.label,
+    label: finalLabel, 
     total,
     rollerId,
     rollerName,
@@ -2619,11 +3158,17 @@ async function emitOneRoll(opts: {
     if (opts.hidden) {
       // Dark roll: LOCAL only — players never receive it; only the
       // sender's own client renders the (translucent) modal.
-      await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "LOCAL" });
+      await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
+        destination: "LOCAL",
+      });
     } else {
       await Promise.all([
-        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "LOCAL" }),
-        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "REMOTE" }),
+        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
+          destination: "LOCAL",
+        }),
+        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
+          destination: "REMOTE",
+        }),
       ]);
     }
   } catch (e) {
@@ -2644,7 +3189,7 @@ async function emitOneRoll(opts: {
 interface BuiltRoll {
   dice: DieResult[];
   winnerIdx: number;
-  rowStarts?: number[];  // repeat: row[i] spans [rowStarts[i], rowStarts[i+1] || dice.length)
+  rowStarts?: number[]; // repeat: row[i] spans [rowStarts[i], rowStarts[i+1] || dice.length)
   sameHighlight?: boolean;
 }
 function buildOneRollDice(parsed: ParsedExpr): BuiltRoll {
@@ -2662,10 +3207,16 @@ function buildOneRollDice(parsed: ParsedExpr): BuiltRoll {
   );
   const outerDice = rollPlainSet(parsed.outerPlain);
 
-  if (repeatSegIdx >= 0 && parsed.segments.length === 1 && outerDice.length === 0) {
+  if (
+    repeatSegIdx >= 0 &&
+    parsed.segments.length === 1 &&
+    outerDice.length === 0
+  ) {
     const seg = parsed.segments[0];
     const repeatW = seg.wrappers.find((w) => w.kind === "repeat")!;
-    const inner = seg.wrappers.filter((w) => w.kind !== "same" && w.kind !== "repeat");
+    const inner = seg.wrappers.filter(
+      (w) => w.kind !== "same" && w.kind !== "repeat",
+    );
     const N = Math.max(1, repeatW.param ?? 1);
     const allDice: DieResult[] = [];
     const rowStarts: number[] = [];
@@ -2685,7 +3236,9 @@ function buildOneRollDice(parsed: ParsedExpr): BuiltRoll {
   const allDice: DieResult[] = [];
   let winnerIdx = -1;
   for (const seg of parsed.segments) {
-    const inner = seg.wrappers.filter((w) => w.kind !== "same" && w.kind !== "repeat");
+    const inner = seg.wrappers.filter(
+      (w) => w.kind !== "same" && w.kind !== "repeat",
+    );
     const r = rollExpr(seg.plain, inner);
     if (parsed.segments.length === 1 && outerDice.length === 0) {
       winnerIdx = r.winnerIdx;
@@ -2700,7 +3253,8 @@ async function performRoll(opts: { hidden: boolean }): Promise<void> {
   // The button to shake — for the main panel that's btnRoll, for the
   // dark-roll variant it's btnDarkRoll (visible only to DM).
   const btnSelf = opts.hidden
-    ? (document.getElementById("btnDarkRoll") as HTMLButtonElement | null) ?? btnRoll
+    ? ((document.getElementById("btnDarkRoll") as HTMLButtonElement | null) ??
+      btnRoll)
     : btnRoll;
 
   if (isAnimating) {
@@ -2711,7 +3265,10 @@ async function performRoll(opts: { hidden: boolean }): Promise<void> {
   const label = labelText.trim();
   const parsed = parseExpr(expr);
   if (exprIsEmpty(parsed)) {
-    shakeButtonWithReason(btnSelf, expr.trim() ? tt("diceShakeParse") : tt("diceShakeEmpty"));
+    shakeButtonWithReason(
+      btnSelf,
+      expr.trim() ? tt("diceShakeParse") : tt("diceShakeEmpty"),
+    );
     return;
   }
 
@@ -2761,6 +3318,7 @@ async function performRoll(opts: { hidden: boolean }): Promise<void> {
       rowStarts: built.rowStarts,
       sameHighlight: built.sameHighlight,
       collectiveId,
+      parsed: parsed
     });
     sent++;
   }
@@ -2779,6 +3337,20 @@ async function performRoll(opts: { hidden: boolean }): Promise<void> {
   setExpression("");
   labelText = "";
   labelInput.value = "";
+  const dynamicNote = generateRollNotes(parsed);
+
+  // 2. Unisci la nota alla label inserita dall'utente (evitando duplicati o spazi vuoti)
+  let finalLabel = labelText.trim();
+  if (dynamicNote) {
+    finalLabel = finalLabel ? `${finalLabel} (${dynamicNote})` : dynamicNote;
+  }
+
+  // 3. Modifica l'oggetto del payload (es. rollData / metadata) destinato al broadcast
+  // in modo che salvi finalLabel invece della vecchia labelText statica:
+  const rollPayload = {
+    // ... altri campi del tiro (risultati, dadi, itemId, ecc.) ...
+    label: finalLabel, // o il nome esatto della proprietà che visualizza la stringa a schermo
+  };
 }
 
 // Combos tab roll. Same flow as performRoll — the panel just builds
@@ -2789,13 +3361,10 @@ async function performRoll(opts: { hidden: boolean }): Promise<void> {
  *  untouched. Used by the combo card's 重击 button to apply 5e crit
  *  damage rules without mutating the saved expression. */
 function doubleDiceCounts(expr: string): string {
-  return expr.replace(
-    /(\d*)d(\d+)/gi,
-    (_m, count: string, sides: string) => {
-      const c = count ? parseInt(count, 10) : 1;
-      return `${c * 2}d${sides}`;
-    },
-  );
+  return expr.replace(/(\d*)d(\d+)/gi, (_m, count: string, sides: string) => {
+    const c = count ? parseInt(count, 10) : 1;
+    return `${c * 2}d${sides}`;
+  });
 }
 
 async function rollFromCombo(
@@ -2874,9 +3443,8 @@ function saveCurrentCombo() {
   if (!name) return;
   // Optional category — show the existing list as a hint so users
   // don't have to remember the exact spelling.
-  const hintList = categoryOrder.length > 0
-    ? `\n（${categoryOrder.join(" / ")}）`
-    : "";
+  const hintList =
+    categoryOrder.length > 0 ? `\n（${categoryOrder.join(" / ")}）` : "";
   const cat = window.prompt(tt("diceComboCatPrompt") + hintList, "");
   // Cancel of the category prompt is treated as "uncategorized" — it
   // would be jarring to abort the save just because the user didn't
@@ -2906,14 +3474,16 @@ function clearAll() {
 
 // Dice buttons on the row (excluding the d20-box's children which are
 // also .dice-btn but already rendered in HTML).
-diceRow.querySelectorAll<HTMLButtonElement>(".dice-btn[data-type]").forEach((b) => {
-  const type = b.dataset.type as DiceType;
-  b.addEventListener("click", () => adjustExprForType(type, +1));
-  b.addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    adjustExprForType(type, -1);
+diceRow
+  .querySelectorAll<HTMLButtonElement>(".dice-btn[data-type]")
+  .forEach((b) => {
+    const type = b.dataset.type as DiceType;
+    b.addEventListener("click", () => adjustExprForType(type, +1));
+    b.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      adjustExprForType(type, -1);
+    });
   });
-});
 
 // Adv / Dis: WRAP every dice term currently in the expression with
 // adv(...) / dis(...). Empty input → defaults to adv(1d20) / dis(1d20).
@@ -2933,9 +3503,10 @@ function applyAdvWrap(kind: "adv" | "dis") {
   // kind (or push a fresh one if none).
   for (const seg of parsed.segments) {
     const ws = [...seg.wrappers];
-    const advIdx = ws.length - 1 - [...ws].reverse().findIndex(
-      (w) => w.kind === "adv" || w.kind === "dis",
-    );
+    const advIdx =
+      ws.length -
+      1 -
+      [...ws].reverse().findIndex((w) => w.kind === "adv" || w.kind === "dis");
     if (advIdx >= 0 && advIdx < ws.length) {
       ws[advIdx] = { kind, param: ws[advIdx].param ?? 1 };
     } else {
@@ -2946,7 +3517,10 @@ function applyAdvWrap(kind: "adv" | "dis") {
   // outerPlain dice → wrap as a NEW segment under the chosen kind.
   // outerPlain modifier stays outside (modifiers don't get advantage).
   const outerHasDice = parsed.outerPlain.groups.length > 0;
-  let newOuter: PlainExpr = { groups: [], modifier: parsed.outerPlain.modifier };
+  let newOuter: PlainExpr = {
+    groups: [],
+    modifier: parsed.outerPlain.modifier,
+  };
   if (outerHasDice) {
     next.push({
       plain: { groups: parsed.outerPlain.groups, modifier: 0 },
@@ -3053,7 +3627,9 @@ btnRoll.addEventListener("click", () => {
 });
 
 // Dark-roll button (DM-only — visibility wired up in OBR.onReady).
-const btnDarkRoll = document.getElementById("btnDarkRoll") as HTMLButtonElement | null;
+const btnDarkRoll = document.getElementById(
+  "btnDarkRoll",
+) as HTMLButtonElement | null;
 btnDarkRoll?.addEventListener("click", () => {
   performRoll({ hidden: true });
 });
@@ -3062,7 +3638,9 @@ btnDarkRoll?.addEventListener("click", () => {
 // and visually reflects via the .on class so the DM sees current state
 // at a glance. Affects: btnRoll above + each combo card's 投掷 action
 // (data-act="roll") + the combo card's 重击 (also a non-dark roll).
-const btnDarkRollGlobal = document.getElementById("btnDarkRollGlobal") as HTMLButtonElement | null;
+const btnDarkRollGlobal = document.getElementById(
+  "btnDarkRollGlobal",
+) as HTMLButtonElement | null;
 function refreshDarkRollGlobalBtn(): void {
   if (!btnDarkRollGlobal) return;
   const on = getGlobalDarkRoll();
@@ -3094,14 +3672,16 @@ btnForceClr.addEventListener("click", () => forceClear());
 // Quick-fill example buttons under the rules-hint. Each carries
 // `data-expr` with a ready-made expression — clicking drops it into
 // the input so players can try things without memorising syntax.
-document.querySelectorAll<HTMLButtonElement>("#examplesRow .example-btn").forEach((b) => {
-  b.addEventListener("click", () => {
-    const expr = b.dataset.expr ?? "";
-    if (!expr) return;
-    setExpression(expr);
-    exprInput.focus();
+document
+  .querySelectorAll<HTMLButtonElement>("#examplesRow .example-btn")
+  .forEach((b) => {
+    b.addEventListener("click", () => {
+      const expr = b.dataset.expr ?? "";
+      if (!expr) return;
+      setExpression(expr);
+      exprInput.focus();
+    });
   });
-});
 
 btnClearHist.addEventListener("click", () => {
   if (!confirm(tt("diceConfirmClearHistory"))) return;
@@ -3112,8 +3692,16 @@ btnClearHist.addEventListener("click", () => {
     const cid = activeReplayCid;
     setActiveReplayCid(null);
     try {
-      OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action: "close" }, { destination: "LOCAL" });
-      OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action: "close" }, { destination: "REMOTE" });
+      OBR.broadcast.sendMessage(
+        BC_DICE_REPLAY,
+        { cid, action: "close" },
+        { destination: "LOCAL" },
+      );
+      OBR.broadcast.sendMessage(
+        BC_DICE_REPLAY,
+        { cid, action: "close" },
+        { destination: "REMOTE" },
+      );
     } catch {}
   }
   history = [];
@@ -3123,7 +3711,9 @@ btnClearHist.addEventListener("click", () => {
 });
 
 tabBtns.forEach((b) => {
-  b.addEventListener("click", () => switchTab(b.dataset.tab as typeof activeTab));
+  b.addEventListener("click", () =>
+    switchTab(b.dataset.tab as typeof activeTab),
+  );
 });
 
 // --- Live history + lock-release subscriptions ---
@@ -3152,7 +3742,9 @@ OBR.onReady(async () => {
   try {
     const lib = await readMyLibrary();
     prewarmWebmPosters(lib);
-  } catch { /* no library, no prewarm */ }
+  } catch {
+    /* no library, no prewarm */
+  }
 
   // Resolve role + this client's player id. Both feed into the
   // dark-roll redact gate in the BROADCAST_DICE_ROLL listener below.
@@ -3165,13 +3757,17 @@ OBR.onReady(async () => {
   try {
     myPlayerId = await OBR.player.getId();
   } catch {}
-  const btnDark = document.getElementById("btnDarkRoll") as HTMLButtonElement | null;
+  const btnDark = document.getElementById(
+    "btnDarkRoll",
+  ) as HTMLButtonElement | null;
   if (btnDark) btnDark.style.display = isDM ? "" : "none";
   // 2026-05-14 — 全局暗骰 toggle visibility mirrors btnDarkRoll. Both
   // are DM-only; we also refresh the label in case localStorage flipped
   // out-of-band (e.g., another panel page in the same client) between
   // initial paint and OBR onReady.
-  const btnDarkGlobal = document.getElementById("btnDarkRollGlobal") as HTMLButtonElement | null;
+  const btnDarkGlobal = document.getElementById(
+    "btnDarkRollGlobal",
+  ) as HTMLButtonElement | null;
   if (btnDarkGlobal) {
     btnDarkGlobal.style.display = isDM ? "" : "none";
     refreshDarkRollGlobalBtn();
@@ -3228,10 +3824,12 @@ OBR.onReady(async () => {
   // or save the user clicked on). We don't auto-roll; the user
   // reviews and clicks 投掷.
   OBR.broadcast.onMessage("com.obr-suite/dice-panel-fill", (event) => {
-    const data = event.data as {
-      expression?: string;
-      label?: string;
-    } | undefined;
+    const data = event.data as
+      | {
+          expression?: string;
+          label?: string;
+        }
+      | undefined;
     if (!data || typeof data.expression !== "string") return;
     setExpression(data.expression);
     if (typeof data.label === "string" && data.label) {
@@ -3242,7 +3840,9 @@ OBR.onReady(async () => {
     setTimeout(() => exprInput.focus(), 50);
     // Consume the localStorage fallback if the live broadcast got
     // there first — keeps re-opens of the panel from re-applying it.
-    try { localStorage.removeItem("obr-suite/dice-pending-prefill"); } catch {}
+    try {
+      localStorage.removeItem("obr-suite/dice-pending-prefill");
+    } catch {}
   });
 
   OBR.broadcast.onMessage(BC_DICE_FADE_START, (event) => {
@@ -3298,15 +3898,16 @@ OBR.onReady(async () => {
       // that never reset, and the new open wouldn't visually update
       // the highlight border.
       if (activeTab !== "history") {
-        switchTab("history");   // calls renderHistoryList internally
+        switchTab("history"); // calls renderHistoryList internally
       } else {
         renderHistoryList();
       }
       const targetCid = data.cid;
       setTimeout(() => {
-        const sel = typeof CSS !== "undefined" && CSS.escape
-          ? CSS.escape(targetCid)
-          : targetCid.replace(/["\\]/g, "\\$&");
+        const sel =
+          typeof CSS !== "undefined" && CSS.escape
+            ? CSS.escape(targetCid)
+            : targetCid.replace(/["\\]/g, "\\$&");
         const row = document.querySelector<HTMLElement>(
           `.entry[data-cid="${sel}"]`,
         );
@@ -3347,8 +3948,16 @@ historyList.addEventListener("click", (e) => {
     if (activeReplayCid === cid) {
       setActiveReplayCid(null);
       try {
-        OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action: "close" }, { destination: "LOCAL" });
-        OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action: "close" }, { destination: "REMOTE" });
+        OBR.broadcast.sendMessage(
+          BC_DICE_REPLAY,
+          { cid, action: "close" },
+          { destination: "LOCAL" },
+        );
+        OBR.broadcast.sendMessage(
+          BC_DICE_REPLAY,
+          { cid, action: "close" },
+          { destination: "REMOTE" },
+        );
       } catch {}
     }
     // A collective roll has multiple entries with the same cid; remove
@@ -3372,8 +3981,16 @@ historyList.addEventListener("click", (e) => {
   setActiveReplayCid(action === "open" ? cid : null);
   renderHistoryList();
   try {
-    OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action }, { destination: "LOCAL" });
-    OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action }, { destination: "REMOTE" });
+    OBR.broadcast.sendMessage(
+      BC_DICE_REPLAY,
+      { cid, action },
+      { destination: "LOCAL" },
+    );
+    OBR.broadcast.sendMessage(
+      BC_DICE_REPLAY,
+      { cid, action },
+      { destination: "REMOTE" },
+    );
   } catch {}
 });
 
@@ -3388,6 +4005,7 @@ function renderRulesList() {
   if (!el) return;
   const items = [
     `<code>2d6 + 1d20 + 5</code>${tt("diceRule1")}`,
+    `<code> 1d8+ dex +| prof +| exp +| jat </code>${tt("diceRule1b")}`,
     `<code>adv(1d20)</code>${tt("diceRule2")}`,
     `<code>dis(1d20)</code>${tt("diceRule3")}`,
     `<code>max(1d20, 10)</code>${tt("diceRule4")}`,
@@ -3452,9 +4070,10 @@ try {
       // After-paint scroll so the now-highlighted row is in view.
       const targetCid = activeReplayCid;
       setTimeout(() => {
-        const sel = typeof CSS !== "undefined" && CSS.escape
-          ? CSS.escape(targetCid)
-          : targetCid.replace(/["\\]/g, "\\$&");
+        const sel =
+          typeof CSS !== "undefined" && CSS.escape
+            ? CSS.escape(targetCid)
+            : targetCid.replace(/["\\]/g, "\\$&");
         const row = document.querySelector<HTMLElement>(
           `.entry[data-cid="${sel}"]`,
         );
@@ -3479,7 +4098,8 @@ try {
     if (pending.startsWith("{")) {
       try {
         const obj = JSON.parse(pending);
-        if (obj && typeof obj.expression === "string") expression = obj.expression;
+        if (obj && typeof obj.expression === "string")
+          expression = obj.expression;
         if (obj && typeof obj.label === "string") label = obj.label;
       } catch {}
     }
