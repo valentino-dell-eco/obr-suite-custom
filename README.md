@@ -28,17 +28,17 @@ https://obr-suite-custom.pages.dev/suite/manifest-dev.json
 </p>
 2 - a fully translated english adaptation
  <p align="center">
-  <img src="docs/screenshots/full_adaptation.png" alt="Full adaptation" width="900" />
+  <img src="docs/screenshots/full_adaptation.PNG" alt="Full adaptation" width="900" />
 </p>
 3 - An extended expression system for dice rolling
  <p align="center">
-  <img src="docs/screenshots/extended_expressions.png" alt="Ext expressions" width="900" />
+  <img src="docs/screenshots/extended_expressions.PNG" alt="Ext expressions" width="900" />
 </p>
 
 ## Future milestones
 1 - A System to character card sync with server (WIP)
  <p align="center">
-  <img src="docs/screenshots/cc_sync_system.png" alt="Sync System" width="900" />
+  <img src="docs/screenshots/cc_sync_system.PNG" alt="Sync System" width="900" />
 </p>
 2 - a Downloadable xlsx Character sheet in english
 3 - the import of character card data from MPMB's PDF sheets
