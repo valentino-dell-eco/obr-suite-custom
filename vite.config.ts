@@ -27,7 +27,8 @@ const SUITE_BASE = normaliseBase(process.env.SUITE_BASE || "/suite/");
 const SUITE_CHANNEL = (process.env.SUITE_CHANNEL || "stable").toLowerCase();
 
 function devNamespaceIsolation() {
-  const isDevChannel = SUITE_CHANNEL === "dev" || SUITE_BASE.includes("suite-dev");
+  const isDevChannel =
+    SUITE_CHANNEL === "dev" || SUITE_BASE.includes("suite-dev");
   return {
     name: "obr-suite-dev-namespace-isolation",
     enforce: "pre" as const,
@@ -52,6 +53,17 @@ export default defineConfig(({ command }) => ({
   server: {
     cors: { origin: "*" },
     headers: { "Access-Control-Allow-Origin": "*" },
+    proxy: {
+      // Intercetta tutte le chiamate locali che partono con /api-dnd
+      "/api-dnd-center": {
+        target: "https://obr.dnd.center",
+        changeOrigin: true,
+        // Rimuove il prefisso /api-dnd prima di inoltrare la richiesta a dnd.center
+        rewrite: (path) => path.replace(/^\/api-dnd-center/, ""),
+        // Se obr.dnd.center usa WebSocket per aggiornamenti in tempo reale, abilitalo:
+        ws: true,
+      },
+    },
   },
   build: {
     rollupOptions: {
@@ -78,24 +90,18 @@ export default defineConfig(({ command }) => ({
         "initiative-panel": resolve(__dirname, "initiative-panel.html"),
         "initiative-combat-effect": resolve(
           __dirname,
-          "initiative-combat-effect.html"
+          "initiative-combat-effect.html",
         ),
-        "initiative-new-item": resolve(
-          __dirname,
-          "initiative-new-item.html"
-        ),
+        "initiative-new-item": resolve(__dirname, "initiative-new-item.html"),
         "bestiary-panel": resolve(__dirname, "bestiary-panel.html"),
         "bestiary-monster-info": resolve(
           __dirname,
-          "bestiary-monster-info.html"
+          "bestiary-monster-info.html",
         ),
-        "bestiary-group-saves": resolve(
-          __dirname,
-          "bestiary-group-saves.html"
-        ),
+        "bestiary-group-saves": resolve(__dirname, "bestiary-group-saves.html"),
         "bestiary-group-resolve": resolve(
           __dirname,
-          "bestiary-group-resolve.html"
+          "bestiary-group-resolve.html",
         ),
         "cc-panel": resolve(__dirname, "cc-panel.html"),
         "cc-info": resolve(__dirname, "cc-info.html"),
@@ -114,8 +120,8 @@ export default defineConfig(({ command }) => ({
         "portal-destination": resolve(__dirname, "portal-destination.html"),
         "portal-blink": resolve(__dirname, "portal-blink.html"),
         "trickster-edit": resolve(__dirname, "trickster-edit.html"),
-        "circleimage": resolve(__dirname, "circleimage.html"),
-        "transform": resolve(__dirname, "transform.html"),
+        circleimage: resolve(__dirname, "circleimage.html"),
+        transform: resolve(__dirname, "transform.html"),
         "resource-edit": resolve(__dirname, "resource-edit.html"),
         "resource-toast": resolve(__dirname, "resource-toast.html"),
         "resource-tracker": resolve(__dirname, "resource-tracker.html"),
@@ -123,13 +129,16 @@ export default defineConfig(({ command }) => ({
         "dm-announcement": resolve(__dirname, "dm-announcement.html"),
         "drag-preview": resolve(__dirname, "drag-preview.html"),
         "layout-editor": resolve(__dirname, "layout-editor.html"),
-        "monster-drag-preview": resolve(
-          __dirname,
-          "monster-drag-preview.html"
-        ),
+        "monster-drag-preview": resolve(__dirname, "monster-drag-preview.html"),
         "status-tracker": resolve(__dirname, "status-tracker.html"),
-        "status-tracker-capture": resolve(__dirname, "status-tracker-capture.html"),
-        "status-tracker-manage": resolve(__dirname, "status-tracker-manage.html"),
+        "status-tracker-capture": resolve(
+          __dirname,
+          "status-tracker-capture.html",
+        ),
+        "status-tracker-manage": resolve(
+          __dirname,
+          "status-tracker-manage.html",
+        ),
         "metadata-inspector": resolve(__dirname, "metadata-inspector.html"),
         "fullfog-edit": resolve(__dirname, "fullfog-edit.html"),
         "fullfog-light-edit": resolve(__dirname, "fullfog-light-edit.html"),
