@@ -51,8 +51,8 @@ const PANEL_MODAL_ID = "com.obr-suite/cc-panel";
 // synchronous localStorage write is reliable on unload; the async OBR
 // broadcast this replaced was not — the "click-twice-to-reopen" bug.
 const PANEL_OPEN_KEY = "com.obr-suite/cc-panel-open";
-// const API_BASE = "https://obr.dnd.center/api/character";
-const API_BASE = "/api-dnd-center/api/character";
+const API_BASE = "https://obr.dnd.center/api/character";
+// const API_BASE = "/api-dnd-center/api/character";
 const SCENE_META_KEY = "com.character-cards/list";
 const LS_PREFIX = "character-cards/";
 
