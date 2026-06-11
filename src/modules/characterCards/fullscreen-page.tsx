@@ -3298,13 +3298,54 @@ function App() {
     [roomId, cardId],
   );
 
+  // Helper: crea una nuova carta sul server tramite POST /create-from-json
+  // e aggiunge la voce alla scene metadata. Restituisce una stringa
+  // di esito (prefissata ✓ o ✕/⚠) pronta per il summary alert.
+  const createCardFromJson = useCallback(
+    async (parsed: any, fileName: string): Promise<string> => {
+      const text = JSON.stringify(parsed);
+      const u = encodeURIComponent("fullscreen-import");
+      try {
+        const res = await fetch(
+          `${SERVER_ORIGIN}/api/character/create-from-json?room=${encodeURIComponent(roomId)}&uploader=${u}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: text,
+          },
+        );
+        if (!res.ok) {
+          const body = await res.text();
+          return `⚠ ${fileName} ${T("ccSaveFailHttp").replace("{status}", String(res.status)).replace("{body}", body.slice(0, 120))}`;
+        }
+        const entry = await res.json();
+        // Broadcast so panel-page and other clients update their card list.
+        try {
+          const payload = {
+            cardId: entry.id,
+            url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(entry.id)}/`,
+          };
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "LOCAL" });
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "REMOTE" });
+        } catch {}
+        let msg = `✓ ${fileName} → ${T("ccNewCardArrow").replace("{name}", entry.name || parsed?.identity?.display_name || fileName)}`;
+        if (entry.render_warning) {
+          msg += "\n" + T("ccRenderWarn").replace("{warn}", entry.render_warning);
+        }
+        return msg;
+      } catch (e: any) {
+        return `⚠ ${fileName} ${T("ccSaveFail").replace("{err}", e?.message || String(e))}`;
+      }
+    },
+    [roomId],
+  );
+
   // 2026-05-10: multi-file import. Each file is dispatched by
   // extension:
-  //   .json   → PUT to /data on a card. The FIRST json updates the
-  //             current card (matches the legacy single-import flow);
-  //             subsequent jsons need a destination, so we surface
-  //             them in the summary as "skipped — already imported
-  //             current card".
+  //   .json   → FIRST json: PUT to /data on the current card (legacy
+  //             single-import flow). SUBSEQUENT jsons: POST to
+  //             /create-from-json — each becomes a new card instead
+  //             of being skipped.
   //   .xlsx   → POST to /upload (creates a new card with the room).
   //             Multiple xlsx → multiple new cards, sequentially.
   // The summary alert at the end reports per-file outcomes.
@@ -3316,13 +3357,24 @@ function App() {
       for (const f of files) {
         const lower = f.name.toLowerCase();
         if (lower.endsWith(".json")) {
-          if (currentJsonImported) {
-            summary.push(`⏭ ${f.name} ${T("ccSkipImported")}`);
-            continue;
-          }
           try {
             const text = await f.text();
             const parsed = JSON.parse(text);
+
+            // JSON successivi al primo: crea nuova carta invece di skippare.
+            if (currentJsonImported) {
+              if (
+                !parsed ||
+                typeof parsed !== "object" ||
+                !("abilities" in parsed || "identity" in parsed)
+              ) {
+                summary.push(`✕ ${f.name} ${T("ccNotCardJson")}`);
+                continue;
+              }
+              summary.push(await createCardFromJson(parsed, f.name));
+              continue;
+            }
+
             if (cardId.startsWith("imported_")) {
               localStorage.setItem(
                 `character-cards/imported/${cardId}`,

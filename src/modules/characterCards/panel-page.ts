@@ -574,7 +574,10 @@ async function exportCurrentCardAsJson(): Promise<void> {
   }
 }
 
-// Import a JSON file as a new card
+// Import a JSON file as a new card.
+// Prima tenta POST /create-from-json per creare la carta sul server;
+// se il server non è raggiungibile o risponde con errore, salva in
+// localStorage come carta "imported_" (comportamento pre-esistente).
 async function importJsonAsCard(): Promise<void> {
   const file = await pickJsonFile();
   if (!file) return;
@@ -600,6 +603,52 @@ async function importJsonAsCard(): Promise<void> {
       jsonData?.name ||
       file.name.replace(/\.json$/i, "");
 
+    // Tenta il salvataggio sul server via create-from-json.
+    const sideEl = document.getElementById("side");
+    sideEl?.classList.add("busy");
+    try {
+      const u = encodeURIComponent(playerName);
+      const r = await fetch(
+        `${API_BASE}/create-from-json?room=${roomId}&uploader=${u}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: text,
+        },
+      );
+      if (r.ok) {
+        const entry = (await r.json()) as CardEntry;
+        // Dopo il 200, recupera il data.json generato dal server per
+        // popolare l'iframe con i dati normalizzati.
+        const updated = [entry, ...cards];
+        cards = updated;
+        current = { type: "card", id: entry.id };
+        render();
+        showStatus(`${ICONS.check} Importato: ${escapeHtml(entry.name)}`);
+        if (r.status! >= 300) {
+          console.warn("[cc-panel] render_warning:", r.body ? await r.text() : "no response body");
+        }
+        // Broadcast LOCAL+REMOTE così altri client aggiornano la lista.
+        try {
+          const payload = { cardId: entry.id, url: `${entry.url}data.json` };
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "LOCAL" });
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "REMOTE" });
+        } catch {}
+        await writeCardsToScene(updated);
+        return;
+      }
+      // Risposta non-ok: logga e ricade sul fallback locale.
+      const errText = await r.text();
+      console.warn(
+        `[cc-panel] create-from-json HTTP ${r.status} — ${errText.slice(0, 120)}. Fallback a localStorage.`,
+      );
+    } catch (netErr) {
+      console.warn("[cc-panel] create-from-json non raggiungibile, fallback a localStorage:", netErr);
+    } finally {
+      sideEl?.classList.remove("busy");
+    }
+
+    // Fallback: salva in localStorage come carta "imported_".
     const importedId = `imported_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const localKey = `${LS_PREFIX}imported/${importedId}`;
     localStorage.setItem(localKey, text);
@@ -619,7 +668,7 @@ async function importJsonAsCard(): Promise<void> {
     cards = updated;
     current = { type: "card", id: newCard.id };
     render();
-    showStatus(`${ICONS.check} Importato: ${escapeHtml(cardName)}`);
+    showStatus(`${ICONS.check} Importato (locale): ${escapeHtml(cardName)}`);
     await writeCardsToScene(updated);
   } catch (e: any) {
     console.error("[cc-panel] ❌ importJsonAsCard errore:", e);
@@ -1302,26 +1351,70 @@ OBR.onReady(async () => {
                 ? jsonData.name
                 : "Imported Card";
 
-        const importedId = `imported_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-        const lsKey = `${LS_PREFIX}imported/${importedId}`;
-        localStorage.setItem(lsKey, raw);
+        // Tenta create-from-json sul server; fallback a localStorage.
+        const sideEl = document.getElementById("side");
+        sideEl?.classList.add("busy");
+        let serverOk = false;
+        try {
+          const u = encodeURIComponent(playerName);
+          const r = await fetch(
+            `${API_BASE}/create-from-json?room=${roomId}&uploader=${u}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: raw,
+            },
+          );
+          if (r.ok) {
+            const entry = (await r.json()) as CardEntry;
+            serverOk = true;
+            const updated = [entry, ...cards];
+            cards = updated;
+            current = { type: "card", id: entry.id };
+            pasteOverlay.style.display = "none";
+            render();
+            showStatus(`${ICONS.check} Imported: ${escapeHtml(entry.name)}`);
+            if (r.status! >= 300) {
+              console.warn("[cc-panel] render_warning:", r.body ? await r.text() : "no response body");
+            }
+            try {
+              const payload = { cardId: entry.id, url: `${entry.url}data.json` };
+              OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "LOCAL" });
+              OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "REMOTE" });
+            } catch {}
+            await writeCardsToScene(updated);
+          } else {
+            const errText = await r.text();
+            console.warn(`[cc-panel] create-from-json HTTP ${r.status} — ${errText.slice(0, 120)}. Fallback.`);
+          }
+        } catch (netErr) {
+          console.warn("[cc-panel] create-from-json non raggiungibile, fallback:", netErr);
+        } finally {
+          sideEl?.classList.remove("busy");
+        }
 
-        const newCard: CardEntry = {
-          id: importedId,
-          name: cardName,
-          uploader: playerName,
-          uploaded_at: new Date().toISOString(),
-          url: "",
-          visibility: "public",
-        };
-        const updated = [newCard, ...cards];
-        // Stato locale + render PRIMA di scrivere in OBR (stessa race fix di importJsonAsCard)
-        cards = updated;
-        current = { type: "card", id: newCard.id };
-        pasteOverlay.style.display = "none";
-        render();
-        showStatus(`${ICONS.check} Imported: ${escapeHtml(cardName)}`);
-        await writeCardsToScene(updated);
+        if (!serverOk) {
+          // Fallback localStorage
+          const importedId = `imported_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+          const lsKey = `${LS_PREFIX}imported/${importedId}`;
+          localStorage.setItem(lsKey, raw);
+
+          const newCard: CardEntry = {
+            id: importedId,
+            name: cardName,
+            uploader: playerName,
+            uploaded_at: new Date().toISOString(),
+            url: "",
+            visibility: "public",
+          };
+          const updated = [newCard, ...cards];
+          cards = updated;
+          current = { type: "card", id: newCard.id };
+          pasteOverlay.style.display = "none";
+          render();
+          showStatus(`${ICONS.check} Imported (locale): ${escapeHtml(cardName)}`);
+          await writeCardsToScene(updated);
+        }
       } catch {
         showError("Invalid JSON — check the text and try again.");
       }
