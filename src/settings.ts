@@ -68,7 +68,10 @@ const BUBBLES_SETTINGS_KEY = "com.obr-suite/bubbles/settings";
 const DEFAULT_BUBBLES_PLAYER_THRESHOLD = 25;
 const DEFAULT_BUBBLES_VERTICAL_OFFSET = -20;
 
-interface BilingualHtml { zh: string; en: string; }
+interface BilingualHtml {
+  zh: string;
+  en: string;
+}
 interface TabDef {
   id: string;
   zh: string;
@@ -99,8 +102,10 @@ interface Supporter {
   amount: number;
 }
 
-let sharedSupportersZh: Supporter[] = normalizeSupporterArray(bundledSupportersZh);
-let sharedSupportersEn: Supporter[] = normalizeSupporterArray(bundledSupportersEn);
+let sharedSupportersZh: Supporter[] =
+  normalizeSupporterArray(bundledSupportersZh);
+let sharedSupportersEn: Supporter[] =
+  normalizeSupporterArray(bundledSupportersEn);
 
 // Single-source-of-truth for the supporter list is `shared/supporters.zh.json`
 // (and `shared/supporters.en.json`). Each deploy script does
@@ -125,20 +130,20 @@ let sharedSupportersEn: Supporter[] = normalizeSupporterArray(bundledSupportersE
 // below. (Auto-generation from a directory listing is impractical
 // without a build step that reads /public/ at build time.)
 const SUPPORTER_AVATARS: Record<string, string> = {
-  "Dino":                       "supporter-avatars/Dino.jpg",
-  "St.Monk":                    "supporter-avatars/St_Monk.png",
-  "lingkkkkuang":               "supporter-avatars/lingkkkkuang.png",
-  "不周":                        "supporter-avatars/不周.png",
-  "凸守早苗":                    "supporter-avatars/凸守早苗.png",
-  "咖啡":                        "supporter-avatars/咖啡.png",
-  "姜川安.":                     "supporter-avatars/姜川安.jpg",
-  "折云":                        "supporter-avatars/折云.jpg",
-  "桌角剧团的囧神":              "supporter-avatars/桌角剧团的囧神.png",
-  "武御":                        "supporter-avatars/武御.png",
-  "蚀星ErosionStar":             "supporter-avatars/蚀星Erosionstar.png",
-  "跑冰风谷水群被抓的某位":      "supporter-avatars/跑冰风谷水群被抓的某位.png",
-  "鱼喵":                        "supporter-avatars/鱼喵.png",
-  "克雷锰特":                    "supporter-avatars/克雷锰特.png",
+  Dino: "supporter-avatars/Dino.jpg",
+  "St.Monk": "supporter-avatars/St_Monk.png",
+  lingkkkkuang: "supporter-avatars/lingkkkkuang.png",
+  不周: "supporter-avatars/不周.png",
+  凸守早苗: "supporter-avatars/凸守早苗.png",
+  咖啡: "supporter-avatars/咖啡.png",
+  "姜川安.": "supporter-avatars/姜川安.jpg",
+  折云: "supporter-avatars/折云.jpg",
+  桌角剧团的囧神: "supporter-avatars/桌角剧团的囧神.png",
+  武御: "supporter-avatars/武御.png",
+  蚀星ErosionStar: "supporter-avatars/蚀星Erosionstar.png",
+  跑冰风谷水群被抓的某位: "supporter-avatars/跑冰风谷水群被抓的某位.png",
+  鱼喵: "supporter-avatars/鱼喵.png",
+  克雷锰特: "supporter-avatars/克雷锰特.png",
 };
 
 function findSupporterAvatar(name: string): string | null {
@@ -160,24 +165,28 @@ function supportersHtml(lang: Language): string {
     lang === "en" && sharedSupportersEn.length > 0
       ? sharedSupportersEn
       : sharedSupportersZh;
-  const list = source.map((s) => {
-    const tier = supporterTier(s.amount);
-    const amount = Number.isInteger(s.amount) ? String(s.amount) : String(s.amount);
-    const size = supporterFontSize(s.amount);
-    // 2026-05-18 — when an avatar exists for this supporter, render
-    // a small round image BEFORE the name, sized to the text's
-    // computed font-size. `loading="lazy" + decoding="async"` keeps
-    // the settings page fast even with many avatars — the browser
-    // only fetches each pic when it scrolls into view, then caches
-    // by URL across re-renders. The supporter <span> becomes
-    // inline-flex so the img + name baseline-align cleanly without
-    // disrupting the existing wrap layout.
-    const avatarUrl = findSupporterAvatar(s.name);
-    const avatarHtml = avatarUrl
-      ? `<img class="backer-avatar" src="${escapeAttr(assetUrl(avatarUrl))}" alt="" loading="lazy" decoding="async" style="width:${size}px;height:${size}px">`
-      : "";
-    return `<span class="backer ${tier} ${avatarHtml ? "has-avatar" : ""}" data-amount="${escapeAttr(amount)}" style="font-size:${size}px">${avatarHtml}${escapeAttr(s.name)}</span>`;
-  }).join("");
+  const list = source
+    .map((s) => {
+      const tier = supporterTier(s.amount);
+      const amount = Number.isInteger(s.amount)
+        ? String(s.amount)
+        : String(s.amount);
+      const size = supporterFontSize(s.amount);
+      // 2026-05-18 — when an avatar exists for this supporter, render
+      // a small round image BEFORE the name, sized to the text's
+      // computed font-size. `loading="lazy" + decoding="async"` keeps
+      // the settings page fast even with many avatars — the browser
+      // only fetches each pic when it scrolls into view, then caches
+      // by URL across re-renders. The supporter <span> becomes
+      // inline-flex so the img + name baseline-align cleanly without
+      // disrupting the existing wrap layout.
+      const avatarUrl = findSupporterAvatar(s.name);
+      const avatarHtml = avatarUrl
+        ? `<img class="backer-avatar" src="${escapeAttr(assetUrl(avatarUrl))}" alt="" loading="lazy" decoding="async" style="width:${size}px;height:${size}px">`
+        : "";
+      return `<span class="backer ${tier} ${avatarHtml ? "has-avatar" : ""}" data-amount="${escapeAttr(amount)}" style="font-size:${size}px">${avatarHtml}${escapeAttr(s.name)}</span>`;
+    })
+    .join("");
   return lang === "zh"
     ? `<h3>${ICONS.heart} 鸣谢</h3>
        <div class="backers-box">
@@ -247,36 +256,58 @@ async function loadSupporters(): Promise<void> {
   try {
     const next = await loadSupporterFile("supporters.zh.json");
     if (next.length > 0) sharedSupportersZh = next;
-  } catch (e) { console.warn("[obr-suite/settings] supporters.zh.json refresh failed", e); }
+  } catch (e) {
+    console.warn("[obr-suite/settings] supporters.zh.json refresh failed", e);
+  }
   try {
     sharedSupportersEn = await loadSupporterFile("supporters.en.json");
-  } catch (e) { console.warn("[obr-suite/settings] supporters.en.json refresh failed", e); }
+  } catch (e) {
+    console.warn("[obr-suite/settings] supporters.en.json refresh failed", e);
+  }
 }
 
 function readBubbleThresholdFromMeta(meta: Record<string, unknown>): number {
-  const settings = meta[BUBBLES_SETTINGS_KEY] as { playerThreshold?: unknown } | undefined;
+  const settings = meta[BUBBLES_SETTINGS_KEY] as
+    | { playerThreshold?: unknown }
+    | undefined;
   const n = Number(settings?.playerThreshold);
-  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : DEFAULT_BUBBLES_PLAYER_THRESHOLD;
+  return Number.isFinite(n) && n >= 0 && n <= 100
+    ? n
+    : DEFAULT_BUBBLES_PLAYER_THRESHOLD;
 }
 
 function readBubbleAutoScaleFromMeta(meta: Record<string, unknown>): boolean {
-  const settings = meta[BUBBLES_SETTINGS_KEY] as { autoScaleText?: unknown } | undefined;
+  const settings = meta[BUBBLES_SETTINGS_KEY] as
+    | { autoScaleText?: unknown }
+    | undefined;
   return !!settings?.autoScaleText;
 }
 
 // 2026-05-14 (#4) — three more fields now live in the same scene
 // metadata object: verticalOffset / offsetByText / overheadMode.
-function readBubbleVerticalOffsetFromMeta(meta: Record<string, unknown>): number {
-  const settings = meta[BUBBLES_SETTINGS_KEY] as { verticalOffset?: unknown } | undefined;
+function readBubbleVerticalOffsetFromMeta(
+  meta: Record<string, unknown>,
+): number {
+  const settings = meta[BUBBLES_SETTINGS_KEY] as
+    | { verticalOffset?: unknown }
+    | undefined;
   const n = Number(settings?.verticalOffset);
   return Number.isFinite(n) ? n : DEFAULT_BUBBLES_VERTICAL_OFFSET;
 }
-function readBubbleOffsetByTextFromMeta(meta: Record<string, unknown>): boolean {
-  const settings = meta[BUBBLES_SETTINGS_KEY] as { offsetByText?: unknown } | undefined;
+function readBubbleOffsetByTextFromMeta(
+  meta: Record<string, unknown>,
+): boolean {
+  const settings = meta[BUBBLES_SETTINGS_KEY] as
+    | { offsetByText?: unknown }
+    | undefined;
   return !!settings?.offsetByText;
 }
-function readBubbleOverheadModeFromMeta(meta: Record<string, unknown>): boolean {
-  const settings = meta[BUBBLES_SETTINGS_KEY] as { overheadMode?: unknown } | undefined;
+function readBubbleOverheadModeFromMeta(
+  meta: Record<string, unknown>,
+): boolean {
+  const settings = meta[BUBBLES_SETTINGS_KEY] as
+    | { overheadMode?: unknown }
+    | undefined;
   return !!settings?.overheadMode;
 }
 
@@ -298,6 +329,14 @@ async function refreshBubbleSettings(): Promise<void> {
   }
 }
 
+function escapeHtml(s: string) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
 // Full-object write. OBR's setMetadata REPLACES the whole
 // `BUBBLES_SETTINGS_KEY` value, so every setter has to write all six
 // fields from the current module vars. Callers mutate the relevant
@@ -861,12 +900,31 @@ languages: Common
 //   4. Show CORS / 404 / JSON-parse errors verbatim
 
 const CATEGORY_LABEL_ZH: Record<number, string> = {
-  1: "怪物", 2: "法术", 3: "背景", 4: "物品", 6: "状态",
-  7: "专长", 8: "能力", 9: "灵能", 10: "种族", 11: "奖励",
-  12: "副规则", 13: "冒险", 14: "神祇", 15: "载具",
-  16: "陷阱", 17: "灾害", 19: "教派", 20: "恩惠",
-  21: "疾病", 24: "表格", 42: "动作", 43: "语言",
-  46: "怪物概述", 48: "食谱", 52: "牌组",
+  1: "怪物",
+  2: "法术",
+  3: "背景",
+  4: "物品",
+  6: "状态",
+  7: "专长",
+  8: "能力",
+  9: "灵能",
+  10: "种族",
+  11: "奖励",
+  12: "副规则",
+  13: "冒险",
+  14: "神祇",
+  15: "载具",
+  16: "陷阱",
+  17: "灾害",
+  19: "教派",
+  20: "恩惠",
+  21: "疾病",
+  24: "表格",
+  42: "动作",
+  43: "语言",
+  46: "怪物概述",
+  48: "食谱",
+  52: "牌组",
 };
 
 function categoryFilePathFor(c: number, source: string): string | null {
@@ -874,31 +932,74 @@ function categoryFilePathFor(c: number, source: string): string | null {
   // data path (relative to <base>/data/) or null when this category
   // doesn't have a per-source data file.
   switch (c) {
-    case 1: return `bestiary/bestiary-${source}.json`;
-    case 2: return `spells/spells-${source}.json`;
-    case 3: return `backgrounds.json`;
-    case 4: case 31: case 47: case 56: case 57: return `items.json`;
-    case 6: case 21: case 49: return `conditionsdiseases.json`;
-    case 7: return `feats.json`;
-    case 8: case 22: case 23: case 27: case 29: case 32: case 33: case 34: case 37: return `optionalfeatures.json`;
-    case 9: return `psionics.json`;
-    case 10: return `races.json`;
-    case 11: return `rewards.json`;
-    case 12: return `variantrules.json`;
-    case 13: return `adventures.json`;
-    case 14: return `deities.json`;
-    case 15: case 35: return `vehicles.json`;
-    case 16: case 17: return `trapshazards.json`;
-    case 18: case 44: return `books.json`;
-    case 19: case 20: return `cultsboons.json`;
-    case 24: return `tables.json`;
-    case 42: return `actions.json`;
-    case 43: return `languages.json`;
-    case 46: return `bestiary/fluff-bestiary-${source}.json`;
-    case 48: return `recipes.json`;
-    case 52: return `decks.json`;
-    case 54: return `items.json`;
-    default: return null;
+    case 1:
+      return `bestiary/bestiary-${source}.json`;
+    case 2:
+      return `spells/spells-${source}.json`;
+    case 3:
+      return `backgrounds.json`;
+    case 4:
+    case 31:
+    case 47:
+    case 56:
+    case 57:
+      return `items.json`;
+    case 6:
+    case 21:
+    case 49:
+      return `conditionsdiseases.json`;
+    case 7:
+      return `feats.json`;
+    case 8:
+    case 22:
+    case 23:
+    case 27:
+    case 29:
+    case 32:
+    case 33:
+    case 34:
+    case 37:
+      return `optionalfeatures.json`;
+    case 9:
+      return `psionics.json`;
+    case 10:
+      return `races.json`;
+    case 11:
+      return `rewards.json`;
+    case 12:
+      return `variantrules.json`;
+    case 13:
+      return `adventures.json`;
+    case 14:
+      return `deities.json`;
+    case 15:
+    case 35:
+      return `vehicles.json`;
+    case 16:
+    case 17:
+      return `trapshazards.json`;
+    case 18:
+    case 44:
+      return `books.json`;
+    case 19:
+    case 20:
+      return `cultsboons.json`;
+    case 24:
+      return `tables.json`;
+    case 42:
+      return `actions.json`;
+    case 43:
+      return `languages.json`;
+    case 46:
+      return `bestiary/fluff-bestiary-${source}.json`;
+    case 48:
+      return `recipes.json`;
+    case 52:
+      return `decks.json`;
+    case 54:
+      return `items.json`;
+    default:
+      return null;
   }
 }
 
@@ -920,6 +1021,7 @@ interface PreviewResult {
   entryCount: number;
   sourceMap: Array<{ code: string; id: number }>;
   entries: PreviewIndexEntry[];
+  isLocalImporter?: boolean;
   dataProbes: Array<{
     label: string;
     url: string;
@@ -929,9 +1031,122 @@ interface PreviewResult {
   }>;
 }
 
+//commented old version
+// async function probeLibrary(baseUrl: string): Promise<PreviewResult> {
+//   const cleanBase = baseUrl.replace(/\/+$/, "");
+//   const indexUrl = `${cleanBase}/search/index.json`;
+//   const result: PreviewResult = {
+//     baseUrl: cleanBase,
+//     indexUrl,
+//     state: "loading",
+//     entryCount: 0,
+//     sourceMap: [],
+//     entries: [],
+//     dataProbes: [],
+//   };
+//   try {
+//     const res = await fetch(indexUrl, { cache: "no-cache" });
+//     if (!res.ok) {
+//       result.state = "fail";
+//       result.errorMsg = `${indexUrl} → HTTP ${res.status} ${res.statusText}`;
+//       return result;
+//     }
+//     const text = await res.text();
+//     let parsed: any;
+//     try { parsed = JSON.parse(text); } catch (e: any) {
+//       result.state = "fail";
+//       result.errorMsg = `JSON Parsing failed：${e?.message || String(e)}`;
+//       return result;
+//     }
+//     if (!parsed || !Array.isArray(parsed.x)) {
+//       result.state = "fail";
+//       result.errorMsg = "search/index.json format is incorrect: missing x array";
+//       return result;
+//     }
+//     result.state = "ok";
+//     result.entryCount = parsed.x.length;
+//     if (parsed.m?.s && typeof parsed.m.s === "object") {
+//       for (const [code, id] of Object.entries(parsed.m.s)) {
+//         result.sourceMap.push({ code, id: Number(id) });
+//       }
+//     }
+//     // Show first 30 entries — usually enough to spot obvious typos.
+//     result.entries = parsed.x.slice(0, 30);
+//   } catch (e: any) {
+//     result.state = "fail";
+//     // Most common: CORS rejection (browser surfaces it as a generic
+//     // TypeError). Mention CORS in the message so the user can fix it
+//     // on their host.
+//     const msg = e?.message || String(e);
+//     result.errorMsg = `${msg}\n（如果错误形如 "TypeError: Failed to fetch"，多半是 CORS 没开放；GitHub Pages 默认就有 Access-Control-Allow-Origin: *。）`;
+//     return result;
+//   }
+
+//   // Sample data-file probes: for each unique (c, source) seen in the
+//   // first 30 entries, fetch the corresponding data file and report
+//   // status. Cap at 5 probes so a huge library doesn't fan out.
+//   const seen = new Set<string>();
+//   for (const e of result.entries) {
+//     if (typeof e.c !== "number") continue;
+//     let src = "";
+//     if (typeof e.s === "string") src = e.s;
+//     else if (typeof e.s === "number") {
+//       const found = result.sourceMap.find((m) => m.id === e.s);
+//       src = found?.code ?? "";
+//     }
+//     if (!src) continue;
+//     const key = `${e.c}:${src}`;
+//     if (seen.has(key)) continue;
+//     seen.add(key);
+//     if (result.dataProbes.length >= 5) break;
+//     const path = categoryFilePathFor(e.c, src);
+//     if (!path) continue;
+//     const url = `${cleanBase}/data/${path}`;
+//     const label = `${CATEGORY_LABEL_ZH[e.c] ?? "类别" + e.c} · ${src}`;
+//     try {
+//       const res = await fetch(url, { cache: "no-cache" });
+//       if (!res.ok) {
+//         result.dataProbes.push({
+//           label, url, ok: false,
+//           statusMsg: `HTTP ${res.status} ${res.statusText}`,
+//         });
+//         continue;
+//       }
+//       const text = await res.text();
+//       try {
+//         const data = JSON.parse(text);
+//         // The top-level array key matches the category — pick the
+//         // first array we find.
+//         let count = 0;
+//         for (const k of Object.keys(data)) {
+//           if (Array.isArray(data[k])) { count = data[k].length; break; }
+//         }
+//         result.dataProbes.push({
+//           label, url, ok: true,
+//           statusMsg: `200 OK`,
+//           arrayCount: count,
+//         });
+//       } catch (e: any) {
+//         result.dataProbes.push({
+//           label, url, ok: false,
+//           statusMsg: `JSON 解析失败：${e?.message || String(e)}`,
+//         });
+//       }
+//     } catch (e: any) {
+//       result.dataProbes.push({
+//         label, url, ok: false,
+//         statusMsg: `网络错误：${e?.message || String(e)}`,
+//       });
+//     }
+//   }
+//   return result;
+// }
+
+//new test version
 async function probeLibrary(baseUrl: string): Promise<PreviewResult> {
   const cleanBase = baseUrl.replace(/\/+$/, "");
   const indexUrl = `${cleanBase}/search/index.json`;
+
   const result: PreviewResult = {
     baseUrl: cleanBase,
     indexUrl,
@@ -940,7 +1155,9 @@ async function probeLibrary(baseUrl: string): Promise<PreviewResult> {
     sourceMap: [],
     entries: [],
     dataProbes: [],
+    isLocalImporter: false,
   };
+
   try {
     const res = await fetch(indexUrl, { cache: "no-cache" });
     if (!res.ok) {
@@ -948,95 +1165,135 @@ async function probeLibrary(baseUrl: string): Promise<PreviewResult> {
       result.errorMsg = `${indexUrl} → HTTP ${res.status} ${res.statusText}`;
       return result;
     }
+
     const text = await res.text();
     let parsed: any;
-    try { parsed = JSON.parse(text); } catch (e: any) {
+    try {
+      parsed = JSON.parse(text);
+    } catch (e: any) {
       result.state = "fail";
-      result.errorMsg = `JSON 解析失败：${e?.message || String(e)}`;
+      result.errorMsg = `JSON Parsing failed: ${e?.message || String(e)}`;
       return result;
     }
+
+    // ==================== SIMPLE MAP CHECK ====================
+    let isSimpleMap = false;
+    const keys = parsed ? Object.keys(parsed) : [];
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed.x) &&
+      keys.length > 0
+    ) {
+      if (typeof parsed[keys[0]] === "string") {
+        isSimpleMap = true;
+        result.isLocalImporter = true;
+        result.state = "ok";
+        result.entryCount = keys.length;
+        result.entries = keys.slice(0, 30).map((k, i) => ({
+          id: i,
+          n: k,
+          u: parsed[k],
+        }));
+
+        result.dataProbes.push({
+          label: "Local Data Importer",
+          url: indexUrl,
+          ok: true,
+          statusMsg: `✅ ${keys.length} file mappings trovati`,
+        });
+
+        return result;
+      }
+    }
+
+    // ==================== STANDARD 5ETOOLS ====================
     if (!parsed || !Array.isArray(parsed.x)) {
       result.state = "fail";
-      result.errorMsg = "search/index.json 格式不对：缺少 x 数组";
+      result.errorMsg =
+        "search/index.json format is incorrect: missing x[] array";
       return result;
     }
+
     result.state = "ok";
     result.entryCount = parsed.x.length;
+    result.entries = parsed.x.slice(0, 30);
+
     if (parsed.m?.s && typeof parsed.m.s === "object") {
       for (const [code, id] of Object.entries(parsed.m.s)) {
         result.sourceMap.push({ code, id: Number(id) });
       }
     }
-    // Show first 30 entries — usually enough to spot obvious typos.
-    result.entries = parsed.x.slice(0, 30);
-  } catch (e: any) {
-    result.state = "fail";
-    // Most common: CORS rejection (browser surfaces it as a generic
-    // TypeError). Mention CORS in the message so the user can fix it
-    // on their host.
-    const msg = e?.message || String(e);
-    result.errorMsg = `${msg}\n（如果错误形如 "TypeError: Failed to fetch"，多半是 CORS 没开放；GitHub Pages 默认就有 Access-Control-Allow-Origin: *。）`;
-    return result;
-  }
 
-  // Sample data-file probes: for each unique (c, source) seen in the
-  // first 30 entries, fetch the corresponding data file and report
-  // status. Cap at 5 probes so a huge library doesn't fan out.
-  const seen = new Set<string>();
-  for (const e of result.entries) {
-    if (typeof e.c !== "number") continue;
-    let src = "";
-    if (typeof e.s === "string") src = e.s;
-    else if (typeof e.s === "number") {
-      const found = result.sourceMap.find((m) => m.id === e.s);
-      src = found?.code ?? "";
-    }
-    if (!src) continue;
-    const key = `${e.c}:${src}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    if (result.dataProbes.length >= 5) break;
-    const path = categoryFilePathFor(e.c, src);
-    if (!path) continue;
-    const url = `${cleanBase}/data/${path}`;
-    const label = `${CATEGORY_LABEL_ZH[e.c] ?? "类别" + e.c} · ${src}`;
-    try {
-      const res = await fetch(url, { cache: "no-cache" });
-      if (!res.ok) {
-        result.dataProbes.push({
-          label, url, ok: false,
-          statusMsg: `HTTP ${res.status} ${res.statusText}`,
-        });
-        continue;
+    // ==================== DATA FILE PROBES (only 5etools servers) ====================
+    const seen = new Set<string>();
+    for (const e of result.entries) {
+      if (typeof e.c !== "number") continue;
+
+      let src = "";
+      if (typeof e.s === "string") src = e.s;
+      else if (typeof e.s === "number") {
+        const found = result.sourceMap.find((m) => m.id === e.s);
+        src = found?.code ?? "";
       }
-      const text = await res.text();
+      if (!src) continue;
+
+      const key = `${e.c}:${src}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (result.dataProbes.length >= 5) break;
+
+      const path = categoryFilePathFor(e.c, src);
+      if (!path) continue;
+
+      const url = `${cleanBase}/data/${path}`;
+      const label = `${CATEGORY_LABEL_ZH[e.c] ?? "Categoria " + e.c} · ${src}`;
+
       try {
-        const data = JSON.parse(text);
-        // The top-level array key matches the category — pick the
-        // first array we find.
+        const resProbe = await fetch(url, { cache: "no-cache" });
+        if (!resProbe.ok) {
+          result.dataProbes.push({
+            label,
+            url,
+            ok: false,
+            statusMsg: `HTTP ${resProbe.status} ${resProbe.statusText}`,
+          });
+          continue;
+        }
+
+        const data = await resProbe.json();
         let count = 0;
         for (const k of Object.keys(data)) {
-          if (Array.isArray(data[k])) { count = data[k].length; break; }
+          if (Array.isArray(data[k])) {
+            count = data[k].length;
+            break;
+          }
         }
         result.dataProbes.push({
-          label, url, ok: true,
+          label,
+          url,
+          ok: true,
           statusMsg: `200 OK`,
           arrayCount: count,
         });
       } catch (e: any) {
         result.dataProbes.push({
-          label, url, ok: false,
-          statusMsg: `JSON 解析失败：${e?.message || String(e)}`,
+          label,
+          url,
+          ok: false,
+          statusMsg: `JSON error: ${e?.message || String(e)}`,
         });
       }
-    } catch (e: any) {
-      result.dataProbes.push({
-        label, url, ok: false,
-        statusMsg: `网络错误：${e?.message || String(e)}`,
-      });
     }
+
+    return result;
+  } catch (e: any) {
+    result.state = "fail";
+    const msg = e?.message || String(e);
+    result.errorMsg = `${msg}\n(Controlla CORS sul server)`;
+    return result;
   }
-  return result;
 }
 
 function renderPreviewHtml(p: PreviewResult, lang: Language): string {
@@ -1051,22 +1308,55 @@ function renderPreviewHtml(p: PreviewResult, lang: Language): string {
         </div>
         <pre class="lib-preview-err">${escapeAttr(p.errorMsg ?? "未知错误")}</pre>
         <p class="lib-preview-hint">
-          ${lang === "zh"
-            ? "排查清单：1) URL 拼写正确（不带末尾斜杠）；2) 直接在浏览器打开 search/index.json 看是否能访问；3) 如果浏览器能但插件不能，多半是目标站点 CORS 没开放（响应头需 Access-Control-Allow-Origin: *）。"
-            : "Checklist: 1) Verify the URL (no trailing slash); 2) Open search/index.json directly in browser; 3) If the browser sees it but the plugin doesn't, the host probably doesn't send Access-Control-Allow-Origin: *."}
+          ${
+            lang === "zh"
+              ? "排查清单：1) URL 拼写正确（不带末尾斜杠）；2) 直接在浏览器打开 search/index.json 看是否能访问；3) 如果浏览器能但插件不能，多半是目标站点 CORS 没开放（响应头需 Access-Control-Allow-Origin: *）。"
+              : "Checklist: 1) Verify the URL (no trailing slash); 2) Open search/index.json directly in browser; 3) If the browser sees it but the plugin doesn't, the host probably doesn't send Access-Control-Allow-Origin: *."
+          }
         </p>
       </div>
     `;
   }
-  // ok
-  const sourceMap = p.sourceMap.length > 0
-    ? p.sourceMap
-        .map((m) => `<code>${escapeAttr(m.code)}=${m.id}</code>`)
-        .join(" ")
-    : `<em>${lang === "zh" ? "（空 — 没问题，但条目里如果用数字 s 就解不开）" : "(empty — fine if entries use string s, but numeric s won't resolve)"}</em>`;
-  const entryRows = p.entries.length === 0
-    ? `<p class="lib-preview-empty">${lang === "zh" ? "索引文件里没有 x 条目。" : "Index has no x entries."}</p>`
-    : `<table class="lib-preview-tbl"><thead>
+  // ====================== LOCAL DATA IMPORTER ======================
+  if (p.isLocalImporter) {
+    const entryRows =
+      p.entries.length === 0
+        ? `<p class="lib-preview-empty">Nessun entry trovato.</p>`
+        : `<table class="lib-preview-tbl"><thead>
+          <tr><th>#</th><th>Nome</th><th>Path</th></tr></thead><tbody>
+          ${p.entries
+            .map(
+              (e, i) => `
+            <tr>
+              <td>${i + 1}</td>
+              <td>${escapeAttr(e.n ?? "")}</td>
+              <td><code>${escapeAttr(e.u ?? "")}</code></td>
+            </tr>
+          `,
+            )
+            .join("")}
+        </tbody></table>`;
+
+    return `
+    <div class="lib-preview-body local-importer">
+      <div class="lib-preview-section">
+        <div class="lib-preview-h">File JSON disponibili</div>
+        ${entryRows}
+      </div>
+    </div>`;
+  }
+
+  // ====================== STANDARD 5ETOOLS FORMAT ======================
+  const sourceMap =
+    p.sourceMap.length > 0
+      ? p.sourceMap
+          .map((m) => `<code>${escapeAttr(m.code)}=${m.id}</code>`)
+          .join(" ")
+      : `<em>${lang === "zh" ? "（空 — 没问题，但条目里如果用数字 s 就解不开）" : "(empty — fine if entries use string s, but numeric s won't resolve)"}</em>`;
+  const entryRows =
+    p.entries.length === 0
+      ? `<p class="lib-preview-empty">${lang === "zh" ? "索引文件里没有 x 条目。" : "Index has no x entries."}</p>`
+      : `<table class="lib-preview-tbl"><thead>
         <tr>
           <th>#</th>
           <th>${lang === "zh" ? "类别" : "c"}</th>
@@ -1075,7 +1365,9 @@ function renderPreviewHtml(p: PreviewResult, lang: Language): string {
           <th>${lang === "zh" ? "来源" : "s"}</th>
           <th>${lang === "zh" ? "slug" : "u"}</th>
         </tr></thead><tbody>
-        ${p.entries.map((e, i) => `
+        ${p.entries
+          .map(
+            (e, i) => `
           <tr>
             <td>${e.id ?? i}</td>
             <td>${e.c ?? "?"} ${CATEGORY_LABEL_ZH[e.c ?? -1] ?? ""}</td>
@@ -1084,17 +1376,24 @@ function renderPreviewHtml(p: PreviewResult, lang: Language): string {
             <td><code>${escapeAttr(String(e.s ?? ""))}</code></td>
             <td><code>${escapeAttr(e.u ?? "")}</code></td>
           </tr>
-        `).join("")}
+        `,
+          )
+          .join("")}
       </tbody></table>`;
-  const probeRows = p.dataProbes.length === 0
-    ? `<p class="lib-preview-empty">${lang === "zh" ? "（没有可探测的数据文件，索引可能为空或没有 c 字段）" : "(no probes — empty index or missing c field)"}</p>`
-    : p.dataProbes.map((d) => `
+  const probeRows =
+    p.dataProbes.length === 0
+      ? `<p class="lib-preview-empty">${lang === "zh" ? "（没有可探测的数据文件，索引可能为空或没有 c 字段）" : "(no probes — empty index or missing c field)"}</p>`
+      : p.dataProbes
+          .map(
+            (d) => `
         <div class="lib-preview-probe ${d.ok ? "ok" : "fail"}">
           <span class="lib-preview-probe-label">${d.ok ? "✓" : "✗"} ${escapeAttr(d.label)}</span>
           <span class="lib-preview-probe-url">${escapeAttr(d.url)}</span>
           <span class="lib-preview-probe-status">${escapeAttr(d.statusMsg)}${d.arrayCount != null ? ` · ${d.arrayCount} ${lang === "zh" ? "条" : "entries"}` : ""}</span>
         </div>
-      `).join("");
+      `,
+          )
+          .join("");
 
   return `
     <div class="lib-preview-body">
@@ -1115,44 +1414,68 @@ function renderPreviewHtml(p: PreviewResult, lang: Language): string {
         ${probeRows}
       </div>
       <p class="lib-preview-hint">
-        ${lang === "zh"
-          ? "如果搜索时仍找不到这里出现的条目，请检查：1) 库已经勾选启用；2) 已清掉浏览器搜索缓存（重新打开搜索框就会刷新）；3) 数据版本设置（基础设置）有没有把它过滤掉 —— 自定义 source 都属于 \"other\"，应该不受 2014/2024 影响。"
-          : "If the search still misses entries shown here: 1) library is toggled ON; 2) search cache is cleared (just close + reopen the search bar); 3) data-version setting (Basics tab) — custom sources are always 'other' and unaffected by the 2014/2024 toggles."}
+        ${
+          lang === "zh"
+            ? '如果搜索时仍找不到这里出现的条目，请检查：1) 库已经勾选启用；2) 已清掉浏览器搜索缓存（重新打开搜索框就会刷新）；3) 数据版本设置（基础设置）有没有把它过滤掉 —— 自定义 source 都属于 "other"，应该不受 2014/2024 影响。'
+            : "If the search still misses entries shown here: 1) library is toggled ON; 2) search cache is cleared (just close + reopen the search bar); 3) data-version setting (Basics tab) — custom sources are always 'other' and unaffected by the 2014/2024 toggles."
+        }
       </p>
     </div>
   `;
 }
 
-function libraryRowHtml(lib: LibraryConfig, lang: Language, isGM: boolean): string {
+function libraryRowHtml(
+  lib: LibraryConfig,
+  lang: Language,
+  isGM: boolean,
+): string {
   const builtinLock = lib.builtin
     ? `<span class="lib-tag">${lang === "zh" ? "内置" : "BUILT-IN"}</span>`
     : "";
-  const disable = isGM ? "" : "disabled";
+
   const editable = isGM && !lib.builtin;
-  const disabledCount = (lib.disabledSources ?? []).length;
-  const sourcesLabel = lang === "zh"
-    ? `📚 来源${disabledCount > 0 ? ` (${disabledCount} 已禁)` : ""}`
-    : `📚 Sources${disabledCount > 0 ? ` (${disabledCount} off)` : ""}`;
+  const disable = isGM ? "" : "disabled";
+
+  // === NUOVA LOGICA: rileva se è Local Importer ===
+  const isLocalImporter =
+    lib.baseUrl.includes("homebrew-cwg.pages.dev") ||
+    lib.name.toLowerCase().includes("local") ||
+    lib.baseUrl.includes("raw.githubusercontent.com");
+
+  const extraClass = isLocalImporter ? "local-importer" : "";
+
+  const sourcesBtn = isLocalImporter
+    ? ""
+    : `<button class="lib-sources-btn" type="button" ${disable} title="...">📚 Sources</button>`;
+
   return `
-    <div class="lib-row" data-lib-id="${escapeAttr(lib.id)}">
+    <div class="lib-row ${extraClass}" data-lib-id="${escapeAttr(lib.id)}">
       <div class="lib-row-head">
         <input class="lib-name" data-field="name" type="text" value="${escapeAttr(lib.name)}" ${editable ? "" : "readonly"} ${disable}>
         ${builtinLock}
-        <button class="tog ${lib.enabled ? "on" : ""}" data-field="enabled" type="button" ${disable}
-          aria-pressed="${lib.enabled}" title="${lang === "zh" ? "启用 / 禁用此库" : "Enable / disable"}"></button>
-        <button class="lib-sources-btn" type="button" ${disable}
-          title="${lang === "zh" ? "管理此库内的具体来源（按来源代码禁用 / 启用，例如 BOOKOFEBONTIDES）" : "Manage individual sources within this library (e.g. disable BOOKOFEBONTIDES)"}">${sourcesLabel}</button>
-        <button class="lib-preview-btn" type="button" title="${lang === "zh" ? "预览：检测此库的索引和数据文件能否加载" : "Preview: probe this library's index + data files"}">${lang === "zh" ? "🔍 预览" : "🔍 Preview"}</button>
+        <button class="tog ${lib.enabled ? "on" : ""}" data-field="enabled" type="button" ${disable}></button>
+        
+        ${sourcesBtn}
+
         ${
-          !lib.builtin
-            ? `<button class="lib-del-btn" type="button" ${disable} title="${lang === "zh" ? "删除此库" : "Delete"}">✕</button>`
-            : ""
+          isLocalImporter
+            ? `
+          <button class="lib-preview-btn preview-local" type="button" data-action="preview-local">
+            🔍 Preview Local
+          </button>
+          <button class="lib-preview-btn update-local" type="button" data-action="update-local">
+            ⬇️ Update Local
+          </button>
+        `
+            : `
+        `
         }
+
+        ${!lib.builtin ? `<button class="lib-del-btn" type="button" ${disable}>✕</button>` : ""}
       </div>
       <div class="lib-row-url">
         <span class="lib-row-label">URL:</span>
-        <input class="lib-url" data-field="baseUrl" type="text" value="${escapeAttr(lib.baseUrl)}" ${editable ? "" : "readonly"} ${disable}
-          placeholder="https://example.com">
+        <input class="lib-url" data-field="baseUrl" type="text" value="${escapeAttr(lib.baseUrl)}" ${editable ? "" : "readonly"} ${disable}>
       </div>
       <div class="lib-preview" hidden></div>
       <div class="lib-sources" hidden></div>
@@ -1161,31 +1484,38 @@ function libraryRowHtml(lib: LibraryConfig, lang: Language, isGM: boolean): stri
 }
 
 function escapeAttr(s: string): string {
-  return s.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;");
 }
 
 function renderLocalContentBlock(lang: Language): string {
   const files = getLocalFiles();
-  const empty = lang === "zh"
-    ? "<p class=\"lib-local-empty\">还没导入任何本地文件。</p>"
-    : "<p class=\"lib-local-empty\">No local files imported yet.</p>";
+  const empty =
+    lang === "zh"
+      ? '<p class="lib-local-empty">还没导入任何本地文件。</p>'
+      : '<p class="lib-local-empty">No local files imported yet.</p>';
   const rows = files.map((f) => localFileRowHtml(f, lang)).join("");
-  const head = lang === "zh"
-    ? `
+  const head =
+    lang === "zh"
+      ? `
       <h3 class="lib-local-h">📁 本地内容（无需托管）</h3>
       <p class="lib-local-desc">把符合 5etools 规范的 JSON / MD 文件直接导入到本插件，存储在浏览器本地（不上传到任何服务器）。导入的内容会自动合并到搜索框 / 怪物图鉴里。每个客户端独立，DM 端导入的不会自动同步给玩家 —— 想全员共享请使用上面的 URL 库或自己托管。</p>
     `
-    : `
+      : `
       <h3 class="lib-local-h">📁 Local content (no hosting needed)</h3>
       <p class="lib-local-desc">Import 5etools-shaped JSON / MD files directly into the suite. Stored in your browser (never uploaded to any server). Imports merge into search + bestiary automatically. Storage is per-client — DM imports don't auto-sync to players. For shared content use the URL libraries above.</p>
     `;
-  const buttons = isGM ? `
+  const buttons = isGM
+    ? `
     <div class="lib-local-actions">
       <button class="lib-local-import-json" type="button">${lang === "zh" ? "+ 导入 JSON 文件" : "+ Import JSON"}</button>
       <button class="lib-local-import-md" type="button">${lang === "zh" ? "+ 导入 MD 文件" : "+ Import MD"}</button>
       <input class="lib-local-file-input" type="file" accept=".json,.md,application/json,text/markdown" hidden>
     </div>
-  ` : `<p class="role-notice">${lang === "zh" ? "玩家端只读 · 由 DM 设置" : "Read-only · Set by DM"}</p>`;
+  `
+    : `<p class="role-notice">${lang === "zh" ? "玩家端只读 · 由 DM 设置" : "Read-only · Set by DM"}</p>`;
   return `
     <div class="lib-local">
       ${head}
@@ -1196,21 +1526,66 @@ function renderLocalContentBlock(lang: Language): string {
 }
 
 function localFileRowHtml(f: LocalFileMeta, lang: Language): string {
-  const kindLabel: Record<string, string> = lang === "zh" ? {
-    monster: "怪物", spell: "法术", item: "物品", class: "职业", classFeature: "职业特性", feat: "专长", race: "种族",
-    background: "背景", optionalfeature: "能力", condition: "状态", vehicle: "载具",
-    deity: "神祇", language: "语言", psionic: "灵能", reward: "奖励",
-    variantrule: "副规则", trap: "陷阱", hazard: "灾害", cult: "教派",
-    boon: "恩惠", disease: "疾病", table: "表格", action: "动作",
-    recipe: "食谱", deck: "牌组", subclass: "子职业", subclassFeature: "子职业特性",
-  } : {
-    monster: "Monster", spell: "Spell", item: "Item", class: "Class", classFeature: "Class Feature", feat: "Feat", race: "Race",
-    background: "Background", optionalfeature: "Feature", condition: "Condition",
-    vehicle: "Vehicle", deity: "Deity", language: "Language", psionic: "Psionic",
-    reward: "Reward", variantrule: "Rule", trap: "Trap", hazard: "Hazard",
-    cult: "Cult", boon: "Boon", disease: "Disease", table: "Table",
-    action: "Action", recipe: "Recipe", deck: "Deck", subclass: "Subclass", subclassFeature: "Subclass Feature",
-  };
+  const kindLabel: Record<string, string> =
+    lang === "zh"
+      ? {
+          monster: "怪物",
+          spell: "法术",
+          item: "物品",
+          class: "职业",
+          classFeature: "职业特性",
+          feat: "专长",
+          race: "种族",
+          background: "背景",
+          optionalfeature: "能力",
+          condition: "状态",
+          vehicle: "载具",
+          deity: "神祇",
+          language: "语言",
+          psionic: "灵能",
+          reward: "奖励",
+          variantrule: "副规则",
+          trap: "陷阱",
+          hazard: "灾害",
+          cult: "教派",
+          boon: "恩惠",
+          disease: "疾病",
+          table: "表格",
+          action: "动作",
+          recipe: "食谱",
+          deck: "牌组",
+          subclass: "子职业",
+          subclassFeature: "子职业特性",
+        }
+      : {
+          monster: "Monster",
+          spell: "Spell",
+          item: "Item",
+          class: "Class",
+          classFeature: "Class Feature",
+          feat: "Feat",
+          race: "Race",
+          background: "Background",
+          optionalfeature: "Feature",
+          condition: "Condition",
+          vehicle: "Vehicle",
+          deity: "Deity",
+          language: "Language",
+          psionic: "Psionic",
+          reward: "Reward",
+          variantrule: "Rule",
+          trap: "Trap",
+          hazard: "Hazard",
+          cult: "Cult",
+          boon: "Boon",
+          disease: "Disease",
+          table: "Table",
+          action: "Action",
+          recipe: "Recipe",
+          deck: "Deck",
+          subclass: "Subclass",
+          subclassFeature: "Subclass Feature",
+        };
   const kindStr = kindLabel[f.kind] || f.kind;
   const disable = isGM ? "" : "disabled";
   const infoTitle = lang === "zh" ? "查看详情" : "View details";
@@ -1232,13 +1607,15 @@ function localFileRowHtml(f: LocalFileMeta, lang: Language): string {
 // library base directly. This mirror exposes the canonical 5etools layout
 // (search/index.json + data/bestiary/index.json + data/spells/... + items),
 // is pure English (no translation), and matches our fetch paths exactly.
-const EN_5ETOOLS_BASE = "https://cdn.jsdelivr.net/gh/5etools-mirror-3/5etools-src@main";
+const EN_5ETOOLS_BASE =
+  "https://cdn.jsdelivr.net/gh/5etools-mirror-3/5etools-src@main";
 
 function renderLibrariesBody(lang: Language): string {
   const s = getState();
   const libs = s.libraries ?? [];
-  const head = lang === "zh"
-    ? `
+  const head =
+    lang === "zh"
+      ? `
       <div class="lib-warn">
         ⚠ <b>数据格式按 5etools 规范适配。</b>当前内置库为 kiwee.top（5etools 中文镜像）。你可以添加自己的库（自托管 / 公开 URL）。库必须提供与 5etools 相同的 JSON 结构（<code>search/index.json</code> + <code>data/&lt;file&gt;.json</code>）。所有启用的库会在搜索/图鉴里合并显示。<br>
         <b>要英文原版？</b>点下方绿色 <b>「+ 英文原版 (5etools)」</b> 一键添加。注意：<code>5e.tools</code> 官网现已被 Cloudflare 人机验证拦截、且从不发送跨域头，<b>无法直接当库地址连接</b>；此预设走 jsDelivr 官方镜像（自带跨域，纯英文）。<br>
@@ -1249,7 +1626,7 @@ function renderLibrariesBody(lang: Language): string {
         <a class="lib-studio-btn" href="https://obr.dnd.center/studio/monster-studio/" target="_blank" rel="noopener">🐲 打开 Monster Studio ↗</a>
       </div>
     `
-    : `
+      : `
       <div class="lib-warn">
         ⚠ <b>Library data must follow the 5etools JSON schema.</b> The default built-in is kiwee.top (Chinese mirror). You can add custom libraries (self-hosted or public URLs) that expose the same shape (<code>search/index.json</code> + <code>data/&lt;file&gt;.json</code>). All enabled libraries are merged in search / bestiary results.<br>
         <b>Need the English original?</b> Click the green <b>"+ English (5etools)"</b> button below. Note: <code>5e.tools</code> itself is now behind a Cloudflare bot challenge and never sends CORS headers, so it <b>cannot be used as a library URL directly</b>; this preset uses the official jsDelivr mirror (CORS-enabled, pure English).<br>
@@ -1261,7 +1638,9 @@ function renderLibrariesBody(lang: Language): string {
       </div>
     `;
   const list = libs.map((l) => libraryRowHtml(l, lang, isGM)).join("");
-  const hasEn = libs.some((l) => l.baseUrl?.replace(/\/+$/, "") === EN_5ETOOLS_BASE);
+  const hasEn = libs.some(
+    (l) => l.baseUrl?.replace(/\/+$/, "") === EN_5ETOOLS_BASE,
+  );
   const enBtn = hasEn
     ? ""
     : `<button class="lib-add-en-btn" type="button" title="${lang === "zh" ? "一键添加 5etools 官方英文源（jsDelivr 镜像，自带跨域，纯英文）。注：5e.tools 官网已被 Cloudflare 拦截，无法直接连接。" : "One-click add the official 5etools English source (jsDelivr mirror, CORS-enabled, pure English). Note: 5e.tools itself is now Cloudflare-blocked and cannot be used directly."}">${lang === "zh" ? "+ 英文原版 (5etools)" : "+ English (5etools)"}</button>`;
@@ -1269,7 +1648,9 @@ function renderLibrariesBody(lang: Language): string {
     ? `<button class="lib-add-btn" type="button">${lang === "zh" ? "+ 添加库" : "+ Add library"}</button>${enBtn}`
     : `<p class="role-notice">${lang === "zh" ? "玩家端只读 · 由 DM 设置" : "Read-only · Set by DM"}</p>`;
 
-  const tutorial = lang === "zh" ? `
+  const tutorial =
+    lang === "zh"
+      ? `
     <details class="lib-tut">
       <summary>${ICONS.book ?? ""} 如何编写自己的内容（含 AI 提示词）</summary>
       <div class="lib-tut-body">
@@ -1353,7 +1734,8 @@ Any creature within 5 ft. takes {@damage 1d4} cold damage at the start of its tu
         <p style="color:#9ab;font-size:11px;margin-top:8px">本地导入失败时多半是 JSON 解析错（多 / 少逗号、引号没闭合）；URL 库加载失败开浏览器 DevTools 看 Network 面板，常见是 CORS / 404 / JSON 格式错误。</p>
       </div>
     </details>
-  ` : `
+  `
+      : `
     <details class="lib-tut">
       <summary>How to write your own content (with AI prompt)</summary>
       <div class="lib-tut-body">
@@ -1416,19 +1798,29 @@ function wireLibrariesBody(root: HTMLElement): void {
   // Per-row edits
   list.querySelectorAll<HTMLDivElement>(".lib-row").forEach((row) => {
     const id = row.dataset.libId ?? "";
-    const nameInp = row.querySelector<HTMLInputElement>('input[data-field="name"]');
-    const urlInp = row.querySelector<HTMLInputElement>('input[data-field="baseUrl"]');
-    const enableBtn = row.querySelector<HTMLButtonElement>('button[data-field="enabled"]');
+    const nameInp = row.querySelector<HTMLInputElement>(
+      'input[data-field="name"]',
+    );
+    const urlInp = row.querySelector<HTMLInputElement>(
+      'input[data-field="baseUrl"]',
+    );
+    const enableBtn = row.querySelector<HTMLButtonElement>(
+      'button[data-field="enabled"]',
+    );
     const delBtn = row.querySelector<HTMLButtonElement>(".lib-del-btn");
 
     const commit = async (patch: Partial<LibraryConfig>) => {
       if (!isGM) return;
-      const next = (getState().libraries ?? []).map((l) => (l.id === id ? { ...l, ...patch } : l));
+      const next = (getState().libraries ?? []).map((l) =>
+        l.id === id ? { ...l, ...patch } : l,
+      );
       await setState({ libraries: next });
     };
-    nameInp?.addEventListener("change", () => commit({ name: nameInp.value.trim() || id }));
+    nameInp?.addEventListener("change", () =>
+      commit({ name: nameInp.value.trim() || id }),
+    );
     urlInp?.addEventListener("change", () =>
-      commit({ baseUrl: urlInp.value.trim().replace(/\/+$/, "") })
+      commit({ baseUrl: urlInp.value.trim().replace(/\/+$/, "") }),
     );
     enableBtn?.addEventListener("click", async () => {
       if (!isGM) return;
@@ -1463,13 +1855,17 @@ function wireLibrariesBody(root: HTMLElement): void {
       sourcesBox.innerHTML = `<div class="lib-sources-loading">${lang === "zh" ? "⏳ 加载库索引…" : "⏳ Fetching index…"}</div>`;
       // Use the same indexPath logic as the search loader so the
       // partnered listing fetches index-partnered.json.
-      const indexPath = typeof cur.indexPath === "string" && cur.indexPath.length > 0
-        ? cur.indexPath.replace(/^\/+/, "")
-        : "search/index.json";
+      const indexPath =
+        typeof cur.indexPath === "string" && cur.indexPath.length > 0
+          ? cur.indexPath.replace(/^\/+/, "")
+          : "search/index.json";
       let codes: string[] = [];
       let entryCounts = new Map<string, number>();
       try {
-        const res = await fetch(`${cur.baseUrl.replace(/\/+$/, "")}/${indexPath}`, { cache: "no-cache" });
+        const res = await fetch(
+          `${cur.baseUrl.replace(/\/+$/, "")}/${indexPath}`,
+          { cache: "no-cache" },
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const idx = await res.json();
         // Source map: { [code]: id }. We list all codes, but rank by
@@ -1482,13 +1878,20 @@ function wireLibrariesBody(root: HTMLElement): void {
             if (typeof e?.s === "string") code = e.s;
             else if (typeof e?.s === "number") {
               for (const [k, v] of Object.entries(map)) {
-                if (v === e.s) { code = k; break; }
+                if (v === e.s) {
+                  code = k;
+                  break;
+                }
               }
             }
             if (code) entryCounts.set(code, (entryCounts.get(code) ?? 0) + 1);
           }
         }
-        codes.sort((a, b) => (entryCounts.get(b) ?? 0) - (entryCounts.get(a) ?? 0) || a.localeCompare(b));
+        codes.sort(
+          (a, b) =>
+            (entryCounts.get(b) ?? 0) - (entryCounts.get(a) ?? 0) ||
+            a.localeCompare(b),
+        );
       } catch (e: any) {
         sourcesBox.innerHTML = `<div class="lib-sources-err">${lang === "zh" ? "加载失败：" : "Failed: "}${escapeAttr(e?.message ?? String(e))}</div>`;
         return;
@@ -1500,51 +1903,62 @@ function wireLibrariesBody(root: HTMLElement): void {
       const disabledLower = new Set(
         (cur.disabledSources ?? []).map((s) => String(s).toLowerCase()),
       );
-      const head = lang === "zh"
-        ? `<div class="lib-sources-head">勾选 = 启用，去勾 = 禁用此来源在该库的全部条目（搜索 / 怪物图鉴 / 角色卡均会跳过）。</div>`
-        : `<div class="lib-sources-head">Checked = enabled, unchecked = ignore all entries from this source within this library.</div>`;
+      const head =
+        lang === "zh"
+          ? `<div class="lib-sources-head">勾选 = 启用，去勾 = 禁用此来源在该库的全部条目（搜索 / 怪物图鉴 / 角色卡均会跳过）。</div>`
+          : `<div class="lib-sources-head">Checked = enabled, unchecked = ignore all entries from this source within this library.</div>`;
       const cbDisable = isGM ? "" : "disabled";
-      const itemsHtml = codes.map((code) => {
-        const codeLower = code.toLowerCase();
-        const enabled = !disabledLower.has(codeLower);
-        const count = entryCounts.get(code) ?? 0;
-        return `
+      const itemsHtml = codes
+        .map((code) => {
+          const codeLower = code.toLowerCase();
+          const enabled = !disabledLower.has(codeLower);
+          const count = entryCounts.get(code) ?? 0;
+          return `
           <label class="lib-source-row">
             <input type="checkbox" class="lib-source-cb" data-code="${escapeAttr(code)}" ${enabled ? "checked" : ""} ${cbDisable}>
             <span class="lib-source-code">${escapeAttr(code)}</span>
             <span class="lib-source-count">${count}</span>
           </label>
         `;
-      }).join("");
+        })
+        .join("");
       sourcesBox.innerHTML = `${head}<div class="lib-sources-list">${itemsHtml}</div>`;
       // Wire each checkbox: commit the new disabledSources array.
-      sourcesBox.querySelectorAll<HTMLInputElement>(".lib-source-cb").forEach((cb) => {
-        cb.addEventListener("change", async () => {
-          if (!isGM) return;
-          const code = cb.dataset.code ?? "";
-          if (!code) return;
-          const cur2 = (getState().libraries ?? []).find((l) => l.id === id);
-          if (!cur2) return;
-          const cur2Disabled = new Set((cur2.disabledSources ?? []).map((s) => s));
-          if (cb.checked) {
-            // Re-enable — drop both exact and case-variants from list.
-            for (const s of [...cur2Disabled]) {
-              if (s.toLowerCase() === code.toLowerCase()) cur2Disabled.delete(s);
+      sourcesBox
+        .querySelectorAll<HTMLInputElement>(".lib-source-cb")
+        .forEach((cb) => {
+          cb.addEventListener("change", async () => {
+            if (!isGM) return;
+            const code = cb.dataset.code ?? "";
+            if (!code) return;
+            const cur2 = (getState().libraries ?? []).find((l) => l.id === id);
+            if (!cur2) return;
+            const cur2Disabled = new Set(
+              (cur2.disabledSources ?? []).map((s) => s),
+            );
+            if (cb.checked) {
+              // Re-enable — drop both exact and case-variants from list.
+              for (const s of [...cur2Disabled]) {
+                if (s.toLowerCase() === code.toLowerCase())
+                  cur2Disabled.delete(s);
+              }
+            } else {
+              cur2Disabled.add(code);
             }
-          } else {
-            cur2Disabled.add(code);
-          }
-          await commit({ disabledSources: [...cur2Disabled] });
-          // Re-render the row's outer button label so the count
-          // displayed next to "📚 来源" updates ("(N 已禁)").
-          const newDisabled = (getState().libraries ?? []).find((l) => l.id === id)?.disabledSources ?? [];
-          const newCount = newDisabled.length;
-          const newLabel = lang === "zh"
-            ? `📚 来源${newCount > 0 ? ` (${newCount} 已禁)` : ""}`
-            : `📚 Sources${newCount > 0 ? ` (${newCount} off)` : ""}`;
-          if (sourcesBtn) sourcesBtn.textContent = newLabel;
+            await commit({ disabledSources: [...cur2Disabled] });
+            // Re-render the row's outer button label so the count
+            // displayed next to "📚 来源" updates ("(N 已禁)").
+            const newDisabled =
+              (getState().libraries ?? []).find((l) => l.id === id)
+                ?.disabledSources ?? [];
+            const newCount = newDisabled.length;
+            const newLabel =
+              lang === "zh"
+                ? `📚 来源${newCount > 0 ? ` (${newCount} 已禁)` : ""}`
+                : `📚 Sources${newCount > 0 ? ` (${newCount} off)` : ""}`;
+            if (sourcesBtn) sourcesBtn.textContent = newLabel;
+          });
         });
-      });
     });
 
     // Preview button toggles the diagnostic panel below the row.
@@ -1556,17 +1970,27 @@ function wireLibrariesBody(root: HTMLElement): void {
       if (!previewBox.hidden) {
         previewBox.hidden = true;
         previewBox.innerHTML = "";
-        previewBtn.textContent = getLocalLang() === "zh" ? "🔍 预览" : "🔍 Preview";
+        previewBtn.textContent =
+          getLocalLang() === "zh" ? "🔍 预览" : "🔍 Preview";
         return;
       }
       const cur = (getState().libraries ?? []).find((l) => l.id === id);
       if (!cur) return;
       previewBtn.disabled = true;
-      previewBtn.textContent = getLocalLang() === "zh" ? "⏳ 加载中…" : "⏳ Loading…";
+      previewBtn.textContent =
+        getLocalLang() === "zh" ? "⏳ 加载中…" : "⏳ Loading…";
       previewBox.hidden = false;
       previewBox.innerHTML = renderPreviewHtml(
-        { baseUrl: cur.baseUrl, indexUrl: "", state: "loading", entryCount: 0, sourceMap: [], entries: [], dataProbes: [] },
-        getLocalLang()
+        {
+          baseUrl: cur.baseUrl,
+          indexUrl: "",
+          state: "loading",
+          entryCount: 0,
+          sourceMap: [],
+          entries: [],
+          dataProbes: [],
+        },
+        getLocalLang(),
       );
       try {
         const result = await probeLibrary(cur.baseUrl);
@@ -1575,52 +1999,61 @@ function wireLibrariesBody(root: HTMLElement): void {
         previewBox.innerHTML = `<div class="lib-preview-body"><pre class="lib-preview-err">${escapeAttr(e?.message || String(e))}</pre></div>`;
       } finally {
         previewBtn.disabled = false;
-        previewBtn.textContent = getLocalLang() === "zh" ? "✕ 关闭预览" : "✕ Close preview";
+        previewBtn.textContent =
+          getLocalLang() === "zh" ? "✕ 关闭预览" : "✕ Close preview";
       }
     });
   });
 
   // Add new library
-  root.querySelector<HTMLButtonElement>(".lib-add-btn")?.addEventListener("click", async () => {
-    if (!isGM) return;
-    const name = window.prompt("新库名称（任意）：", "我的自定义库");
-    if (!name) return;
-    const baseUrl = window.prompt("基础 URL（不带末尾 /）：", "https://example.com");
-    if (!baseUrl) return;
-    const id = `custom-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
-    const cur = getState().libraries ?? [];
-    const next: LibraryConfig[] = [
-      ...cur,
-      {
-        id,
-        name: name.trim(),
-        baseUrl: baseUrl.trim().replace(/\/+$/, ""),
-        enabled: true,
-        builtin: false,
-      },
-    ];
-    await setState({ libraries: next });
-  });
+  root
+    .querySelector<HTMLButtonElement>(".lib-add-btn")
+    ?.addEventListener("click", async () => {
+      if (!isGM) return;
+      const name = window.prompt("新库名称（任意）：", "我的自定义库");
+      if (!name) return;
+      const baseUrl = window.prompt(
+        "基础 URL（不带末尾 /）：",
+        "https://example.com",
+      );
+      if (!baseUrl) return;
+      const id = `custom-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
+      const cur = getState().libraries ?? [];
+      const next: LibraryConfig[] = [
+        ...cur,
+        {
+          id,
+          name: name.trim(),
+          baseUrl: baseUrl.trim().replace(/\/+$/, ""),
+          enabled: true,
+          builtin: false,
+        },
+      ];
+      await setState({ libraries: next });
+    });
 
   // One-click preset: add the official 5etools English source. Idempotent —
   // bail if a library with this exact baseUrl already exists.
-  root.querySelector<HTMLButtonElement>(".lib-add-en-btn")?.addEventListener("click", async () => {
-    if (!isGM) return;
-    const cur = getState().libraries ?? [];
-    if (cur.some((l) => l.baseUrl?.replace(/\/+$/, "") === EN_5ETOOLS_BASE)) return;
-    const lang = getLocalLang();
-    const next: LibraryConfig[] = [
-      ...cur,
-      {
-        id: `en5e-${Date.now()}`,
-        name: lang === "zh" ? "5etools 英文原版" : "5etools (English)",
-        baseUrl: EN_5ETOOLS_BASE,
-        enabled: true,
-        builtin: false,
-      },
-    ];
-    await setState({ libraries: next });
-  });
+  root
+    .querySelector<HTMLButtonElement>(".lib-add-en-btn")
+    ?.addEventListener("click", async () => {
+      if (!isGM) return;
+      const cur = getState().libraries ?? [];
+      if (cur.some((l) => l.baseUrl?.replace(/\/+$/, "") === EN_5ETOOLS_BASE))
+        return;
+      const lang = getLocalLang();
+      const next: LibraryConfig[] = [
+        ...cur,
+        {
+          id: `en5e-${Date.now()}`,
+          name: lang === "zh" ? "5etools 英文原版" : "5etools (English)",
+          baseUrl: EN_5ETOOLS_BASE,
+          enabled: true,
+          builtin: false,
+        },
+      ];
+      await setState({ libraries: next });
+    });
 
   // Copy prompt — both the JSON variant and the new MD variant share
   // the same flash-on-click affordance.
@@ -1631,21 +2064,33 @@ function wireLibrariesBody(root: HTMLElement): void {
     btn.addEventListener("click", () => {
       ta.select();
       try {
-        navigator.clipboard.writeText(ta.value).catch(() => document.execCommand("copy"));
-      } catch { document.execCommand("copy"); }
+        navigator.clipboard
+          .writeText(ta.value)
+          .catch(() => document.execCommand("copy"));
+      } catch {
+        document.execCommand("copy");
+      }
       const old = btn.textContent;
       btn.textContent = getLocalLang() === "zh" ? "已复制 ✓" : "Copied ✓";
-      setTimeout(() => { btn.textContent = old; }, 1200);
+      setTimeout(() => {
+        btn.textContent = old;
+      }, 1200);
     });
   };
   wirePromptCopy(".lib-prompt-copy", ".lib-prompt");
   wirePromptCopy(".lib-prompt-md-copy", ".lib-prompt-md");
 
   // Local content import (JSON + MD)
-  const fileInput = root.querySelector<HTMLInputElement>(".lib-local-file-input");
+  const fileInput = root.querySelector<HTMLInputElement>(
+    ".lib-local-file-input",
+  );
   let pendingMode: "json" | "md" | null = null;
-  const importBtnJson = root.querySelector<HTMLButtonElement>(".lib-local-import-json");
-  const importBtnMd = root.querySelector<HTMLButtonElement>(".lib-local-import-md");
+  const importBtnJson = root.querySelector<HTMLButtonElement>(
+    ".lib-local-import-json",
+  );
+  const importBtnMd = root.querySelector<HTMLButtonElement>(
+    ".lib-local-import-md",
+  );
   importBtnJson?.addEventListener("click", () => {
     if (!isGM || !fileInput) return;
     pendingMode = "json";
@@ -1665,20 +2110,29 @@ function wireLibrariesBody(root: HTMLElement): void {
     if (!file || !pendingMode) return;
     try {
       const text = await file.text();
-      const result = pendingMode === "json"
-        ? await importLocalJson(file.name, text)
-        : await importLocalMd(file.name, text);
+      const result =
+        pendingMode === "json"
+          ? await importLocalJson(file.name, text)
+          : await importLocalMd(file.name, text);
       if (!result.ok) {
-        window.alert(`${getLocalLang() === "zh" ? "导入失败：" : "Import failed: "}${result.error}`);
+        window.alert(
+          `${getLocalLang() === "zh" ? "导入失败：" : "Import failed: "}${result.error}`,
+        );
       } else {
         // Notify search + bestiary iframes to drop their caches.
         try {
-          await OBR.broadcast.sendMessage(BC_LOCAL_CONTENT_CHANGED, {}, { destination: "LOCAL" });
+          await OBR.broadcast.sendMessage(
+            BC_LOCAL_CONTENT_CHANGED,
+            {},
+            { destination: "LOCAL" },
+          );
         } catch {}
         renderContent();
       }
     } catch (e: any) {
-      window.alert(`${getLocalLang() === "zh" ? "导入失败：" : "Import failed: "}${e?.message || String(e)}`);
+      window.alert(
+        `${getLocalLang() === "zh" ? "导入失败：" : "Import failed: "}${e?.message || String(e)}`,
+      );
     } finally {
       pendingMode = null;
       fileInput.value = "";
@@ -1693,11 +2147,19 @@ function wireLibrariesBody(root: HTMLElement): void {
       if (!row) return;
       const id = row.dataset.localId;
       if (!id) return;
-      const ok = window.confirm(getLocalLang() === "zh" ? "删除此本地内容？" : "Remove this local file?");
+      const ok = window.confirm(
+        getLocalLang() === "zh"
+          ? "删除此本地内容？"
+          : "Remove this local file?",
+      );
       if (!ok) return;
       await removeLocalFile(id);
       try {
-        OBR.broadcast.sendMessage(BC_LOCAL_CONTENT_CHANGED, {}, { destination: "LOCAL" });
+        OBR.broadcast.sendMessage(
+          BC_LOCAL_CONTENT_CHANGED,
+          {},
+          { destination: "LOCAL" },
+        );
       } catch {}
       renderContent();
     });
@@ -1712,28 +2174,79 @@ function wireLibrariesBody(root: HTMLElement): void {
       if (!id) return;
       const details = row.nextElementSibling as HTMLDivElement | null;
       if (!details || !details.classList.contains("lib-local-details")) return;
-      
+
       if (details.style.display === "none") {
         // Expand: populate with category counts
         const counts = getLocalFileCategoryCounts(id);
         const lang = getLocalLang();
-        const kindLabel: Record<string, string> = lang === "zh" ? {
-          monster: "怪物", spell: "法术", item: "物品", class: "职业", feat: "专长", race: "种族",
-          background: "背景", optionalfeature: "能力", condition: "状态", vehicle: "载具",
-          deity: "神祇", language: "语言", psionic: "灵能", reward: "奖励",
-          variantrule: "副规则", trap: "陷阱", hazard: "灾害", cult: "教派",
-          boon: "恩惠", disease: "疾病", table: "表格", action: "动作",
-          recipe: "食谱", deck: "牌组", classFeature: "职业特性", subclass: "子职业", subclassFeature: "子职业特性",
-        } : {
-          monster: "Monster", spell: "Spell", item: "Item", class: "Class", feat: "Feat", race: "Race",
-          background: "Background", optionalfeature: "Feature", condition: "Condition",
-          vehicle: "Vehicle", deity: "Deity", language: "Language", psionic: "Psionic",
-          reward: "Reward", variantrule: "Rule", trap: "Trap", hazard: "Hazard",
-          cult: "Cult", boon: "Boon", disease: "Disease", table: "Table",
-          action: "Action", recipe: "Recipe", deck: "Deck", classFeature: "Class Feature", subclass: "Subclass", subclassFeature: "Subclass Feature",
-        };
-        const rows = counts.map((c) => `<div class="lib-detail-row">${kindLabel[c.kind] || c.kind} <span class="lib-detail-count">${c.count}</span></div>`).join("");
-        const heading = lang === "zh" ? "文件包含的内容分类：" : "File categories:";
+        const kindLabel: Record<string, string> =
+          lang === "zh"
+            ? {
+                monster: "怪物",
+                spell: "法术",
+                item: "物品",
+                class: "职业",
+                feat: "专长",
+                race: "种族",
+                background: "背景",
+                optionalfeature: "能力",
+                condition: "状态",
+                vehicle: "载具",
+                deity: "神祇",
+                language: "语言",
+                psionic: "灵能",
+                reward: "奖励",
+                variantrule: "副规则",
+                trap: "陷阱",
+                hazard: "灾害",
+                cult: "教派",
+                boon: "恩惠",
+                disease: "疾病",
+                table: "表格",
+                action: "动作",
+                recipe: "食谱",
+                deck: "牌组",
+                classFeature: "职业特性",
+                subclass: "子职业",
+                subclassFeature: "子职业特性",
+              }
+            : {
+                monster: "Monster",
+                spell: "Spell",
+                item: "Item",
+                class: "Class",
+                feat: "Feat",
+                race: "Race",
+                background: "Background",
+                optionalfeature: "Feature",
+                condition: "Condition",
+                vehicle: "Vehicle",
+                deity: "Deity",
+                language: "Language",
+                psionic: "Psionic",
+                reward: "Reward",
+                variantrule: "Rule",
+                trap: "Trap",
+                hazard: "Hazard",
+                cult: "Cult",
+                boon: "Boon",
+                disease: "Disease",
+                table: "Table",
+                action: "Action",
+                recipe: "Recipe",
+                deck: "Deck",
+                classFeature: "Class Feature",
+                subclass: "Subclass",
+                subclassFeature: "Subclass Feature",
+              };
+        const rows = counts
+          .map(
+            (c) =>
+              `<div class="lib-detail-row">${kindLabel[c.kind] || c.kind} <span class="lib-detail-count">${c.count}</span></div>`,
+          )
+          .join("");
+        const heading =
+          lang === "zh" ? "文件包含的内容分类：" : "File categories:";
         details.innerHTML = `<div class="lib-detail-box"><div class="lib-detail-heading">${heading}</div>${rows}</div>`;
         details.style.display = "block";
       } else {
@@ -1742,8 +2255,30 @@ function wireLibrariesBody(root: HTMLElement): void {
       }
     });
   });
-}
+  // Local Importer buttons
+  // Local Importer buttons
+  root.querySelectorAll(".preview-local, .update-local").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      const target = e.currentTarget as HTMLElement;
+      const libraryItem = target.closest(".lib-row") as HTMLElement | null;
+      if (!libraryItem) return;
 
+      const urlInput = libraryItem.querySelector<HTMLInputElement>(".lib-url");
+      const baseUrl = urlInput?.value.trim() || "";
+      if (!baseUrl) {
+        OBR.notification.show("URL della libreria non trovata", "ERROR");
+        return;
+      }
+
+      if (target.classList.contains("preview-local")) {
+        await handlePreviewLocal(baseUrl, libraryItem);
+      } else {
+        await handleUpdateLocalData(baseUrl, libraryItem);
+      }
+    });
+  });
+}
+//adssad
 const TABS: TabDef[] = [
   {
     id: "support",
@@ -1841,7 +2376,7 @@ const TABS: TabDef[] = [
               <div class="desc"><em>${
                 lang === "zh"
                   ? "开启后所有插件 iframe 会显示<b>黄色透明遮罩</b>+虚线边框，方便排查「那块本应透明的区域却挡住了点击」的问题。<b>仅本地</b>，不影响其他玩家。"
-                  : "When ON, every suite iframe shows a <b>yellow tint + dashed outline</b> over its real popover footprint, useful for debugging \"why is this transparent area still blocking clicks\". <b>Local only</b>, never synced."
+                  : 'When ON, every suite iframe shows a <b>yellow tint + dashed outline</b> over its real popover footprint, useful for debugging "why is this transparent area still blocking clicks". <b>Local only</b>, never synced.'
               }</em></div>
             </div>
             <button class="tog" data-key="debugOverlay" type="button" aria-pressed="false"></button>
@@ -1868,11 +2403,16 @@ const TABS: TabDef[] = [
     afterRender: (root) => {
       // Reflect current debug-overlay state on the toggle's pressed
       // attribute + .on class so the UI matches LS at first paint.
-      const debugBtn = root.querySelector<HTMLButtonElement>('.tog[data-key="debugOverlay"]');
+      const debugBtn = root.querySelector<HTMLButtonElement>(
+        '.tog[data-key="debugOverlay"]',
+      );
       if (debugBtn) {
         const isOn = (() => {
-          try { return localStorage.getItem("obr-suite/debug-overlay") === "1"; }
-          catch { return false; }
+          try {
+            return localStorage.getItem("obr-suite/debug-overlay") === "1";
+          } catch {
+            return false;
+          }
         })();
         debugBtn.classList.toggle("on", isOn);
         debugBtn.setAttribute("aria-pressed", String(isOn));
@@ -1888,11 +2428,18 @@ const TABS: TabDef[] = [
       // Perf-window toggle (per-client). Reads / writes the same LS
       // key the perfWindow module reads on setup, so the popover
       // open/close matches the toggle's pressed state across reloads.
-      const perfBtn = root.querySelector<HTMLButtonElement>('.tog[data-key="perfWindow"]');
+      const perfBtn = root.querySelector<HTMLButtonElement>(
+        '.tog[data-key="perfWindow"]',
+      );
       if (perfBtn) {
         const isOn = (() => {
-          try { return localStorage.getItem("obr-suite/perf-window/visible") === "1"; }
-          catch { return false; }
+          try {
+            return (
+              localStorage.getItem("obr-suite/perf-window/visible") === "1"
+            );
+          } catch {
+            return false;
+          }
         })();
         perfBtn.classList.toggle("on", isOn);
         perfBtn.setAttribute("aria-pressed", String(isOn));
@@ -1905,14 +2452,18 @@ const TABS: TabDef[] = [
           m.setPerfWindowVisible(next);
         });
       }
-      root.querySelectorAll<HTMLButtonElement>(".seg button[data-dv]").forEach((b) => {
-        b.addEventListener("click", async () => {
-          if (!isGM) return;
-          await setState({ dataVersion: b.dataset.dv as DataVersion });
-        });
-      });
       root
-        .querySelector<HTMLButtonElement>('.tog[data-key="crossSceneSyncSettings"]')
+        .querySelectorAll<HTMLButtonElement>(".seg button[data-dv]")
+        .forEach((b) => {
+          b.addEventListener("click", async () => {
+            if (!isGM) return;
+            await setState({ dataVersion: b.dataset.dv as DataVersion });
+          });
+        });
+      root
+        .querySelector<HTMLButtonElement>(
+          '.tog[data-key="crossSceneSyncSettings"]',
+        )
         ?.addEventListener("click", async () => {
           if (!isGM) return;
           const cur = !!getState().crossSceneSyncSettings;
@@ -1922,14 +2473,16 @@ const TABS: TabDef[] = [
             const ok = window.confirm(
               getLocalLang() === "zh"
                 ? "需要以当前场景的设置为基准，同步到本房间所有场景吗？\n\n（其他场景之前的独立设置会被覆盖。）"
-                : "Sync the current scene's settings as the source-of-truth across every scene in this room?\n\n(Other scenes' previously-independent settings will be overwritten.)"
+                : "Sync the current scene's settings as the source-of-truth across every scene in this room?\n\n(Other scenes' previously-independent settings will be overwritten.)",
             );
             if (!ok) return;
           }
           await setState({ crossSceneSyncSettings: !cur });
         });
       root
-        .querySelector<HTMLButtonElement>('.tog[data-key="crossSceneSyncCards"]')
+        .querySelector<HTMLButtonElement>(
+          '.tog[data-key="crossSceneSyncCards"]',
+        )
         ?.addEventListener("click", async () => {
           if (!isGM) return;
           const cur = !!getState().crossSceneSyncCards;
@@ -1937,7 +2490,7 @@ const TABS: TabDef[] = [
             const ok = window.confirm(
               getLocalLang() === "zh"
                 ? "需要以当前场景的角色卡列表为基准，同步到本房间所有场景吗？\n\n（其他场景之前独立的卡列表会被覆盖。）"
-                : "Sync the current scene's character-card list as the source-of-truth across every scene in this room?\n\n(Other scenes' previously-independent lists will be overwritten.)"
+                : "Sync the current scene's character-card list as the source-of-truth across every scene in this room?\n\n(Other scenes' previously-independent lists will be overwritten.)",
             );
             if (!ok) return;
             // Seed the room mirror with the current scene's cards
@@ -1946,14 +2499,18 @@ const TABS: TabDef[] = [
             try {
               const m = await import("./modules/cross-scene-cards");
               await m.seedRoomCardsFromCurrentScene();
-            } catch (e) { console.warn("[obr-suite/settings] seed cards failed", e); }
+            } catch (e) {
+              console.warn("[obr-suite/settings] seed cards failed", e);
+            }
           } else {
             // ON → off: clear the room mirror so other scenes stop
             // hydrating from a stale list.
             try {
               const m = await import("./modules/cross-scene-cards");
               await m.clearRoomCardsMirror();
-            } catch (e) { console.warn("[obr-suite/settings] clear cards mirror failed", e); }
+            } catch (e) {
+              console.warn("[obr-suite/settings] clear cards mirror failed", e);
+            }
           }
           await setState({ crossSceneSyncCards: !cur });
         });
@@ -1982,7 +2539,7 @@ const TABS: TabDef[] = [
           const ok = window.confirm(
             getLocalLang() === "zh"
               ? "重置悬浮按钮、投骰记录、先攻条、怪物图鉴、角色卡信息的位置到默认锚点？"
-              : "Reset cluster, dice history, initiative bar, bestiary panel and character-card info to their default anchors?"
+              : "Reset cluster, dice history, initiative bar, bestiary panel and character-card info to their default anchors?",
           );
           if (!ok) return;
           try {
@@ -2008,8 +2565,20 @@ const TABS: TabDef[] = [
     dynamicBody: (lang) => renderLibrariesBody(lang),
     afterRender: (root) => wireLibrariesBody(root),
   },
-  { id: "timeStop", zh: `${ICONS.clockPause} 时停模式`, en: `${ICONS.clockPause} Time Stop`, moduleId: "timeStop", body: TIMESTOP_DESC },
-  { id: "focus", zh: `${ICONS.crosshair} 同步视口`, en: `${ICONS.crosshair} Sync Viewport`, moduleId: "focus", body: FOCUS_DESC },
+  {
+    id: "timeStop",
+    zh: `${ICONS.clockPause} 时停模式`,
+    en: `${ICONS.clockPause} Time Stop`,
+    moduleId: "timeStop",
+    body: TIMESTOP_DESC,
+  },
+  {
+    id: "focus",
+    zh: `${ICONS.crosshair} 同步视口`,
+    en: `${ICONS.crosshair} Sync Viewport`,
+    moduleId: "focus",
+    body: FOCUS_DESC,
+  },
   {
     id: "bestiary",
     zh: `${ICONS.dragon} 怪物图鉴`,
@@ -2037,8 +2606,9 @@ const TABS: TabDef[] = [
       // so external links / cached docs keep resolving.
       const tpl2014 = assetUrl("DND5E人物卡_悲灵_弗人_枭熊适配版.xlsx");
       const tpl2024 = assetUrl("DND5R人物卡_悲灵_弗人_枭熊适配版.xlsx");
-      const btns = lang === "zh"
-        ? `<div class="dl-row">
+      const btns =
+        lang === "zh"
+          ? `<div class="dl-row">
              <a class="dl-btn" href="${tpl2014}"
                 download="DND5E人物卡_悲灵_弗人_枭熊适配版.xlsx" target="_blank" rel="noopener">
                ⬇ 5E2014 模板（悲灵 · 弗人 · 枭熊适配版）
@@ -2048,7 +2618,7 @@ const TABS: TabDef[] = [
                ⬇ 5E2024 模板（悲灵 · 弗人 · 枭熊适配版）
              </a>
            </div>`
-        : `<div class="dl-row">
+          : `<div class="dl-row">
              <a class="dl-btn" href="${tpl2014}"
                 download="DND5E-Character-Sheet-Belling-FullPeople-OwlbearAdapted.xlsx" target="_blank" rel="noopener">
                ⬇ 5E2014 sheet (Belling · FullPeople · Owlbear-adapted)
@@ -2077,7 +2647,9 @@ const TABS: TabDef[] = [
           if (v === "0") return false;
           if (v === "1") return true;
           return localStorage.getItem("obr-suite/sfx-on") !== "0";
-        } catch { return true; }
+        } catch {
+          return true;
+        }
       })();
       return `
         <h3>${lang === "zh" ? "选项" : "Options"}</h3>
@@ -2143,21 +2715,27 @@ const TABS: TabDef[] = [
     },
     afterRender: (root) => {
       root
-        .querySelector<HTMLButtonElement>('.tog[data-key="initiativeFocusOnTurnChange"]')
+        .querySelector<HTMLButtonElement>(
+          '.tog[data-key="initiativeFocusOnTurnChange"]',
+        )
         ?.addEventListener("click", async () => {
           if (!isGM) return;
           const cur = getState().initiativeFocusOnTurnChange !== false;
           await setState({ initiativeFocusOnTurnChange: !cur });
         });
       root
-        .querySelector<HTMLButtonElement>('.tog[data-key="initiativeAutoSnapOnPrep"]')
+        .querySelector<HTMLButtonElement>(
+          '.tog[data-key="initiativeAutoSnapOnPrep"]',
+        )
         ?.addEventListener("click", async () => {
           if (!isGM) return;
           const cur = !!getState().initiativeAutoSnapOnPrep;
           await setState({ initiativeAutoSnapOnPrep: !cur });
         });
       root
-        .querySelector<HTMLButtonElement>('.tog[data-key="initiativeHidePercentHpBar"]')
+        .querySelector<HTMLButtonElement>(
+          '.tog[data-key="initiativeHidePercentHpBar"]',
+        )
         ?.addEventListener("click", async () => {
           if (!isGM) return;
           const cur = !!getState().initiativeHidePercentHpBar;
@@ -2201,7 +2779,9 @@ const TABS: TabDef[] = [
           if (v === "0") return false;
           if (v === "1") return true;
           return localStorage.getItem("obr-suite/sfx-on") !== "0";
-        } catch { return true; }
+        } catch {
+          return true;
+        }
       })();
       return `
         <h3>${lang === "zh" ? "选项" : "Options"}</h3>
@@ -2220,7 +2800,8 @@ const TABS: TabDef[] = [
       `;
     },
     afterRender: (root) => {
-      root.querySelector<HTMLButtonElement>('.tog[data-key="sfxDice"]')
+      root
+        .querySelector<HTMLButtonElement>('.tog[data-key="sfxDice"]')
         ?.addEventListener("click", (e) => {
           const btn = e.currentTarget as HTMLButtonElement;
           const wasOn = btn.classList.contains("on");
@@ -2261,9 +2842,10 @@ const TABS: TabDef[] = [
         return true;
       })();
       const lbl = lang === "zh" ? "传送眨眼特效" : "Teleport Blink Effect";
-      const desc = lang === "zh"
-        ? "本机偏好。开启后传送瞬间播放闭眼/睁眼动画，闭眼时刻执行实际传送，因此略慢；关闭则直接平滑过场。"
-        : "Per-client preference. When on, picking a destination plays a close-eye / open-eye animation with the actual teleport happening at the closed moment — slightly slower. Off = immediate smooth pan.";
+      const desc =
+        lang === "zh"
+          ? "本机偏好。开启后传送瞬间播放闭眼/睁眼动画，闭眼时刻执行实际传送，因此略慢；关闭则直接平滑过场。"
+          : "Per-client preference. When on, picking a destination plays a close-eye / open-eye animation with the actual teleport happening at the closed moment — slightly slower. Off = immediate smooth pan.";
       return `
         <h3>${lang === "zh" ? "选项" : "Options"}</h3>
         <div class="row">
@@ -2348,8 +2930,9 @@ const TABS: TabDef[] = [
         } catch {}
         return 1;
       })();
-      const desc = lang === "zh"
-        ? `<p>每个 token 下方的<b>紧凑信息条</b>：HP 条（按比例填充）+ AC 盾牌。自动跟随<em>拖动 / 缩放 / 传送</em>，旋转时保持竖直。</p>
+      const desc =
+        lang === "zh"
+          ? `<p>每个 token 下方的<b>紧凑信息条</b>：HP 条（按比例填充）+ AC 盾牌。自动跟随<em>拖动 / 缩放 / 传送</em>，旋转时保持竖直。</p>
 <ul>
   <li><b>设置可见性</b> → 通过血条最右侧的上锁按钮决定是否对玩家可见</li>
   <li><b>绑定怪物图鉴</b> → 自动写入 HP/AC，<em>非战斗状态下默认对玩家隐藏</em>（与图鉴一致）</li>
@@ -2365,7 +2948,7 @@ const TABS: TabDef[] = [
   <li>面板可拖动，参与统一的<b>面板布局</b>系统持久化位置</li>
   <li>取消选中即关闭</li>
 </ul>`
-        : `<p><b>Compact info row</b> over every token: HP bar + AC shield. Auto-follows <em>drag / scale / teleport</em>, stays upright on rotation.</p>
+          : `<p><b>Compact info row</b> over every token: HP bar + AC shield. Auto-follows <em>drag / scale / teleport</em>, stays upright on rotation.</p>
 <ul>
   <li><b>Bestiary-bound</b> → HP/AC auto-written, <em>hidden from players by default</em> (matches bestiary)</li>
   <li><b>Card-bound</b> → syncs current / max / temp HP + AC, visible to everyone</li>
@@ -2383,36 +2966,49 @@ const TABS: TabDef[] = [
       // 2026-05-14 (#4) — DM-synced now. The non-GM clients see these
       // controls disabled (DM controls them table-wide). Descriptions
       // say "DM 同步（全场一致）" instead of "本机偏好".
-      const dmHint = lang === "zh"
-        ? (isGM ? "DM 同步（全场一致）。" : "DM 同步（全场一致），由 DM 控制。")
-        : (isGM ? "DM-synced (table-wide). " : "DM-synced (table-wide) — controlled by the DM. ");
+      const dmHint =
+        lang === "zh"
+          ? isGM
+            ? "DM 同步（全场一致）。"
+            : "DM 同步（全场一致），由 DM 控制。"
+          : isGM
+            ? "DM-synced (table-wide). "
+            : "DM-synced (table-wide) — controlled by the DM. ";
       const offsetLbl = lang === "zh" ? "上下偏移" : "Vertical offset";
-      const offsetDesc = lang === "zh"
-        ? `${dmHint}负值向上偏移（远离 token），正值向下。默认 -20 让气泡不和角色名字标签重叠。开启「按字号偏移」后此项灰掉不生效。`
-        : `${dmHint}Negative shifts up (away from token), positive shifts down. Default -20 keeps bubbles clear of the OBR name label. Greyed out when 'offset by font size' is on.`;
-      const offsetByTextLbl = lang === "zh" ? "按字号上偏移" : "Offset by font size";
-      const offsetByTextDesc = lang === "zh"
-        ? `${dmHint}开启后气泡向上偏移文字字号的像素数（即「字号随 token 自动缩放」中的字号，默认 20 px），自动随 token 缩放。开启时上方「上下偏移」灰掉。头顶模式下该开关强制关闭。`
-        : `${dmHint}When ON, bubbles offset upward by the font-size px (same number as 'auto-scale text with token', default 20). Scales naturally with token. The manual 'vertical offset' above is greyed out while this is on. Force-disabled when overhead mode is on.`;
+      const offsetDesc =
+        lang === "zh"
+          ? `${dmHint}负值向上偏移（远离 token），正值向下。默认 -20 让气泡不和角色名字标签重叠。开启「按字号偏移」后此项灰掉不生效。`
+          : `${dmHint}Negative shifts up (away from token), positive shifts down. Default -20 keeps bubbles clear of the OBR name label. Greyed out when 'offset by font size' is on.`;
+      const offsetByTextLbl =
+        lang === "zh" ? "按字号上偏移" : "Offset by font size";
+      const offsetByTextDesc =
+        lang === "zh"
+          ? `${dmHint}开启后气泡向上偏移文字字号的像素数（即「字号随 token 自动缩放」中的字号，默认 20 px），自动随 token 缩放。开启时上方「上下偏移」灰掉。头顶模式下该开关强制关闭。`
+          : `${dmHint}When ON, bubbles offset upward by the font-size px (same number as 'auto-scale text with token', default 20). Scales naturally with token. The manual 'vertical offset' above is greyed out while this is on. Force-disabled when overhead mode is on.`;
       // 2026-05-13 — overhead mode toggle. CN|EN-style two-position
       // switch instead of an ON/OFF toggle so the user reads it as a
       // pair of named modes rather than a boolean.
       const overheadLbl = lang === "zh" ? "血条显示模式" : "HP bar mode";
-      const overheadDesc = lang === "zh"
-        ? `${dmHint}标准模式：血条贴在 token 底部，气泡浮在上方。头顶模式：血条悬浮在 token 头顶一小段距离上方，取消圆角并加上边框，护盾和临时血在血条尽头（最右侧）与血条同平面显示。头顶模式下「按字号上偏移」自动失效。`
-        : `${dmHint}Standard: HP bar sits below the token with stat bubbles floating above it. Overhead: bar hovers a short gap above the token's head, sharp corners + border, AC shield (+ Temp HP) appear inline at the bar's right end on the same plane. The 'Offset by font size' toggle is force-disabled in Overhead mode.`;
+      const overheadDesc =
+        lang === "zh"
+          ? `${dmHint}标准模式：血条贴在 token 底部，气泡浮在上方。头顶模式：血条悬浮在 token 头顶一小段距离上方，取消圆角并加上边框，护盾和临时血在血条尽头（最右侧）与血条同平面显示。头顶模式下「按字号上偏移」自动失效。`
+          : `${dmHint}Standard: HP bar sits below the token with stat bubbles floating above it. Overhead: bar hovers a short gap above the token's head, sharp corners + border, AC shield (+ Temp HP) appear inline at the bar's right end on the same plane. The 'Offset by font size' toggle is force-disabled in Overhead mode.`;
       const thresholdLbl = lang === "zh" ? "玩家进度阈值" : "Player threshold";
-      const thresholdDesc = lang === "zh"
-        ? "DM 同步（全场一致）。上锁角色对玩家显示的血条进度按这个百分比量化。默认 25：玩家只在血量降至 75% / 50% / 25% / 0% 时看到血条变化。设为 0 则连续显示真实比例，100 则始终显示满血（玩家看不到任何进度）。"
-        : "DM-synced (table-wide). Locked tokens' HP ratio shown to players quantises to this percent. Default 25 → players see the bar change only at 75% / 50% / 25% / 0%. 0 = continuous, 100 = always full (progress hidden).";
+      const thresholdDesc =
+        lang === "zh"
+          ? "DM 同步（全场一致）。上锁角色对玩家显示的血条进度按这个百分比量化。默认 25：玩家只在血量降至 75% / 50% / 25% / 0% 时看到血条变化。设为 0 则连续显示真实比例，100 则始终显示满血（玩家看不到任何进度）。"
+          : "DM-synced (table-wide). Locked tokens' HP ratio shown to players quantises to this percent. Default 25 → players see the bar change only at 75% / 50% / 25% / 0%. 0 = continuous, 100 = always full (progress hidden).";
       const sizeLbl = lang === "zh" ? "气泡大小" : "Bubble size";
-      const sizeDesc = lang === "zh"
-        ? "本机偏好（每个客户端独立，不同步）。乘到 HP 条 / AC 盾 / 字号上的统一缩放。0.5 紧凑（小图小屏），2.0 放大（远观看牌或老花眼）。默认 1.0。"
-        : "Per-client preference (each client independent, not synced). Multiplier applied to the HP bar / AC shield / font size. 0.5 = compact, 2.0 = chunky. Default 1.0.";
-      const autoScaleLbl = lang === "zh" ? "字号随 token 自动缩放" : "Auto-scale text with token";
-      const autoScaleDesc = lang === "zh"
-        ? "DM 全局开关。开启后 token 名字标签的字号会跟着 token 大小缩放（小怪物小字、巨型生物大字）。关闭时字号在所有 token 上保持一致。该开关只影响字号，不影响气泡上下偏移（要用「按字号上偏移」单独控制）。"
-        : "DM-wide toggle. When ON, the OBR-native token name label font-size scales with token size (small monster small font, big monster big font). When OFF, font size is constant across tokens. This setting only affects the font; bubble vertical offset is controlled separately by 'offset by font size'.";
+      const sizeDesc =
+        lang === "zh"
+          ? "本机偏好（每个客户端独立，不同步）。乘到 HP 条 / AC 盾 / 字号上的统一缩放。0.5 紧凑（小图小屏），2.0 放大（远观看牌或老花眼）。默认 1.0。"
+          : "Per-client preference (each client independent, not synced). Multiplier applied to the HP bar / AC shield / font size. 0.5 = compact, 2.0 = chunky. Default 1.0.";
+      const autoScaleLbl =
+        lang === "zh" ? "字号随 token 自动缩放" : "Auto-scale text with token";
+      const autoScaleDesc =
+        lang === "zh"
+          ? "DM 全局开关。开启后 token 名字标签的字号会跟着 token 大小缩放（小怪物小字、巨型生物大字）。关闭时字号在所有 token 上保持一致。该开关只影响字号，不影响气泡上下偏移（要用「按字号上偏移」单独控制）。"
+          : "DM-wide toggle. When ON, the OBR-native token name label font-size scales with token size (small monster small font, big monster big font). When OFF, font size is constant across tokens. This setting only affects the font; bubble vertical offset is controlled separately by 'offset by font size'.";
       return `
         <h3>${lang === "zh" ? "选项" : "Options"}</h3>
         <div class="row">
@@ -2432,8 +3028,8 @@ const TABS: TabDef[] = [
           </div>
           <input type="number" step="1" value="${offset}"
                  data-key="bubblesVerticalOffset"
-                 ${(offsetByText || !isGM) ? "disabled" : ""}
-                 style="flex:0 0 80px;align-self:center;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:3px 6px;color:#fff;font:inherit;text-align:right${(offsetByText || !isGM) ? ";opacity:0.45" : ""}"/>
+                 ${offsetByText || !isGM ? "disabled" : ""}
+                 style="flex:0 0 80px;align-self:center;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:3px 6px;color:#fff;font:inherit;text-align:right${offsetByText || !isGM ? ";opacity:0.45" : ""}"/>
           <span style="flex:0 0 28px;text-align:right;color:#9aa0b3;font-size:11px">px</span>
         </div>
         <div class="row">
@@ -2444,10 +3040,10 @@ const TABS: TabDef[] = [
           <button type="button"
                   class="tog ${offsetByText && !overheadMode ? "on" : ""}"
                   data-key="bubblesOffsetByText"
-                  ${(overheadMode || !isGM) ? "disabled" : ""}
-                  style="${(overheadMode || !isGM) ? "opacity:0.45;cursor:not-allowed;" : ""}"
+                  ${overheadMode || !isGM ? "disabled" : ""}
+                  style="${overheadMode || !isGM ? "opacity:0.45;cursor:not-allowed;" : ""}"
                   aria-pressed="${offsetByText && !overheadMode ? "true" : "false"}"
-                  title="${overheadMode ? (lang === "zh" ? "头顶模式下不可用" : "Not available in Overhead mode") : (!isGM ? (lang === "zh" ? "由 DM 控制" : "Controlled by the DM") : "")}"></button>
+                  title="${overheadMode ? (lang === "zh" ? "头顶模式下不可用" : "Not available in Overhead mode") : !isGM ? (lang === "zh" ? "由 DM 控制" : "Controlled by the DM") : ""}"></button>
         </div>
         <div class="row">
           <div class="lbl">
@@ -2491,25 +3087,33 @@ const TABS: TabDef[] = [
                  style="flex:0 0 80px;align-self:center;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:3px 6px;color:#fff;font:inherit;text-align:right"/>
           <span style="flex:0 0 28px;text-align:right;color:#9aa0b3;font-size:11px">%</span>
         </div>
-        ${isGM ? `
+        ${
+          isGM
+            ? `
         <h3 style="margin-top:14px">${lang === "zh" ? "维护" : "Maintenance"}</h3>
         <div class="row">
           <div class="lbl">
             ${lang === "zh" ? "修复历史血条" : "Repair legacy hidden bars"}
-            <div class="desc"><em>${lang === "zh"
-              ? `因为<b>血量元数据迁移</b>，旧场景里很多 token 仍然带着 <code>hide=true</code>，导致玩家完全看不到血条。点击后会清除当前场景<b>所有 token</b> 的 hide 标志。修复后：<b>未上锁</b>的 token 血条对玩家常态可见；<b>上锁</b>的 token 仅在<b>战斗中</b>显示无数值剪影、非战斗状态隐藏。每个场景需要单独点一次。`
-              : `Due to the <b>HP metadata migration</b>, many tokens in pre-migration scenes still carry <code>hide=true</code>, hiding the bar from players entirely. Clicking will clear the flag from <b>every token</b> in the current scene. After repair: <b>unlocked</b> tokens show their bar to all players full-time; <b>locked</b> tokens show a numberless silhouette during <b>combat</b> only and stay hidden out-of-combat. Run this once per scene.`}</em></div>
+            <div class="desc"><em>${
+              lang === "zh"
+                ? `因为<b>血量元数据迁移</b>，旧场景里很多 token 仍然带着 <code>hide=true</code>，导致玩家完全看不到血条。点击后会清除当前场景<b>所有 token</b> 的 hide 标志。修复后：<b>未上锁</b>的 token 血条对玩家常态可见；<b>上锁</b>的 token 仅在<b>战斗中</b>显示无数值剪影、非战斗状态隐藏。每个场景需要单独点一次。`
+                : `Due to the <b>HP metadata migration</b>, many tokens in pre-migration scenes still carry <code>hide=true</code>, hiding the bar from players entirely. Clicking will clear the flag from <b>every token</b> in the current scene. After repair: <b>unlocked</b> tokens show their bar to all players full-time; <b>locked</b> tokens show a numberless silhouette during <b>combat</b> only and stay hidden out-of-combat. Run this once per scene.`
+            }</em></div>
           </div>
           <button data-key="bubblesRepairLegacyHide" class="reset-panels-btn" type="button">${
             lang === "zh" ? "修复当前场景" : "Repair current scene"
           }</button>
         </div>
-        ` : ""}
+        `
+            : ""
+        }
         ${desc}
       `;
     },
     afterRender: (root) => {
-      const offsetInput = root.querySelector<HTMLInputElement>('input[data-key="bubblesVerticalOffset"]');
+      const offsetInput = root.querySelector<HTMLInputElement>(
+        'input[data-key="bubblesVerticalOffset"]',
+      );
       if (offsetInput) {
         // 2026-05-14 (#4) — DM-synced. Writes to scene metadata via
         // setBubbleVerticalOffset (GM-gated inside the setter +
@@ -2537,7 +3141,9 @@ const TABS: TabDef[] = [
           }
         });
       }
-      const thrInput = root.querySelector<HTMLInputElement>('input[data-key="bubblesPlayerThreshold"]');
+      const thrInput = root.querySelector<HTMLInputElement>(
+        'input[data-key="bubblesPlayerThreshold"]',
+      );
       if (thrInput) {
         const commit = () => {
           if (!isGM) return;
@@ -2556,7 +3162,10 @@ const TABS: TabDef[] = [
         thrInput.addEventListener("change", commit);
         thrInput.addEventListener("blur", commit);
         thrInput.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") { e.preventDefault(); thrInput.blur(); }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            thrInput.blur();
+          }
         });
       }
       // Bubble size slider — live-update on input so the user sees
@@ -2564,15 +3173,24 @@ const TABS: TabDef[] = [
       // storage-event listener kicks off a clearAll + syncBubbles).
       // We persist on every move; the storage event fires per-write
       // anyway, and the user expects WYSIWYG drag behaviour.
-      const sizeInput = root.querySelector<HTMLInputElement>('input[data-key="bubblesScale"]');
-      const sizeVal = root.querySelector<HTMLElement>('[data-key="bubblesScaleVal"]');
+      const sizeInput = root.querySelector<HTMLInputElement>(
+        'input[data-key="bubblesScale"]',
+      );
+      const sizeVal = root.querySelector<HTMLElement>(
+        '[data-key="bubblesScaleVal"]',
+      );
       if (sizeInput) {
         const commit = () => {
           const n = Number(sizeInput.value);
           if (!Number.isFinite(n)) return;
           const clamped = Math.max(0.5, Math.min(2, Math.round(n * 20) / 20));
           if (sizeVal) sizeVal.textContent = `${clamped.toFixed(2)}×`;
-          try { localStorage.setItem("com.obr-suite/bubbles/scale", String(clamped)); } catch {}
+          try {
+            localStorage.setItem(
+              "com.obr-suite/bubbles/scale",
+              String(clamped),
+            );
+          } catch {}
         };
         sizeInput.addEventListener("input", commit);
         sizeInput.addEventListener("change", commit);
@@ -2581,7 +3199,9 @@ const TABS: TabDef[] = [
       // controls ONLY the OBR-native plainText label font scaling —
       // bubble offset is handled separately by bubblesOffsetByText
       // (per-client, see below).
-      const autoScaleBtn = root.querySelector<HTMLButtonElement>('button[data-key="bubblesAutoScaleText"]');
+      const autoScaleBtn = root.querySelector<HTMLButtonElement>(
+        'button[data-key="bubblesAutoScaleText"]',
+      );
       if (autoScaleBtn && isGM) {
         autoScaleBtn.addEventListener("click", async () => {
           if (autoScaleBtn.disabled) return;
@@ -2593,7 +3213,9 @@ const TABS: TabDef[] = [
       // Writes to scene metadata via setBubbleOffsetByText; the
       // bubbles module's onMetadataChange handler re-syncs every
       // client.
-      const offsetByTextBtn = root.querySelector<HTMLButtonElement>('button[data-key="bubblesOffsetByText"]');
+      const offsetByTextBtn = root.querySelector<HTMLButtonElement>(
+        'button[data-key="bubblesOffsetByText"]',
+      );
       if (offsetByTextBtn) {
         offsetByTextBtn.addEventListener("click", async () => {
           if (offsetByTextBtn.disabled || !isGM) return;
@@ -2605,41 +3227,60 @@ const TABS: TabDef[] = [
       // 2026-05-14 (#4) — now DM-synced via setBubbleOverheadMode;
       // re-renders the settings panel so the offsetByText toggle's
       // disabled state updates.
-      const modeSwitch = root.querySelector<HTMLElement>('.mode-switch[data-key="bubblesOverheadMode"]');
+      const modeSwitch = root.querySelector<HTMLElement>(
+        '.mode-switch[data-key="bubblesOverheadMode"]',
+      );
       if (modeSwitch) {
-        modeSwitch.querySelectorAll<HTMLButtonElement>("button[data-mode]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            if (!isGM) return;
-            const overhead = btn.dataset.mode === "overhead";
-            await setBubbleOverheadMode(overhead);
-            if (activeTab === "bubbles") renderContent();
+        modeSwitch
+          .querySelectorAll<HTMLButtonElement>("button[data-mode]")
+          .forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              if (!isGM) return;
+              const overhead = btn.dataset.mode === "overhead";
+              await setBubbleOverheadMode(overhead);
+              if (activeTab === "bubbles") renderContent();
+            });
           });
-        });
       }
       // DM-only one-shot repair: clears legacy `hide=true` from every
       // bubble metadata blob in the current scene.
-      const repairBtn = root.querySelector<HTMLButtonElement>('button[data-key="bubblesRepairLegacyHide"]');
+      const repairBtn = root.querySelector<HTMLButtonElement>(
+        'button[data-key="bubblesRepairLegacyHide"]',
+      );
       if (repairBtn && isGM) {
         repairBtn.addEventListener("click", async () => {
           if (repairBtn.disabled) return;
           const lang = getLocalLang();
-          const confirmMsg = lang === "zh"
-            ? "确认修复当前场景的所有血条？\n\n这会清除每个 token 的 hide=true 标志。修复后：\n• 未上锁的 token 血条对玩家常态可见\n• 上锁的 token 仅在战斗中显示无数值剪影"
-            : "Repair all HP bars in the current scene?\n\nThis clears the hide=true flag from every token. After repair:\n• Unlocked tokens show the bar to players full-time\n• Locked tokens show a numberless silhouette only during combat";
+          const confirmMsg =
+            lang === "zh"
+              ? "确认修复当前场景的所有血条？\n\n这会清除每个 token 的 hide=true 标志。修复后：\n• 未上锁的 token 血条对玩家常态可见\n• 上锁的 token 仅在战斗中显示无数值剪影"
+              : "Repair all HP bars in the current scene?\n\nThis clears the hide=true flag from every token. After repair:\n• Unlocked tokens show the bar to players full-time\n• Locked tokens show a numberless silhouette only during combat";
           if (!window.confirm(confirmMsg)) return;
           const origText = repairBtn.textContent ?? "";
           repairBtn.disabled = true;
           repairBtn.textContent = lang === "zh" ? "修复中…" : "Repairing…";
           try {
             const { touched, total } = await repairLegacyHiddenBubbles();
-            const ok = lang === "zh"
-              ? `已修复 ${touched} 个 token（共扫描 ${total}）。`
-              : `Repaired ${touched} token${touched === 1 ? "" : "s"} (scanned ${total}).`;
-            try { await OBR.notification.show(ok, "SUCCESS"); } catch { window.alert(ok); }
+            const ok =
+              lang === "zh"
+                ? `已修复 ${touched} 个 token（共扫描 ${total}）。`
+                : `Repaired ${touched} token${touched === 1 ? "" : "s"} (scanned ${total}).`;
+            try {
+              await OBR.notification.show(ok, "SUCCESS");
+            } catch {
+              window.alert(ok);
+            }
           } catch (e) {
             console.warn("[obr-suite/settings] repair failed", e);
-            const fail = lang === "zh" ? "修复失败，请查看 DevTools 控制台。" : "Repair failed — see DevTools console.";
-            try { await OBR.notification.show(fail, "ERROR"); } catch { window.alert(fail); }
+            const fail =
+              lang === "zh"
+                ? "修复失败，请查看 DevTools 控制台。"
+                : "Repair failed — see DevTools console.";
+            try {
+              await OBR.notification.show(fail, "ERROR");
+            } catch {
+              window.alert(fail);
+            }
           } finally {
             repairBtn.disabled = false;
             repairBtn.textContent = origText;
@@ -2708,8 +3349,8 @@ const TABS: TabDef[] = [
           <button class="tog ${
             s.allowPlayerMonsters ? "on" : ""
           }" data-key="allowPlayerMonsters" type="button" ${isGM ? "" : "disabled"} aria-pressed="${
-        s.allowPlayerMonsters
-      }"></button>
+            s.allowPlayerMonsters
+          }"></button>
         </div>
         ${!isGM ? `<p class="role-notice">${lang === "zh" ? "玩家端只读 · 由 DM 设置" : "Read-only · Set by DM"}</p>` : ""}
         ${SEARCH_DESC[lang]}
@@ -2717,10 +3358,14 @@ const TABS: TabDef[] = [
     },
     afterRender: (root) => {
       root
-        .querySelector<HTMLButtonElement>('.tog[data-key="allowPlayerMonsters"]')
+        .querySelector<HTMLButtonElement>(
+          '.tog[data-key="allowPlayerMonsters"]',
+        )
         ?.addEventListener("click", async () => {
           if (!isGM) return;
-          await setState({ allowPlayerMonsters: !getState().allowPlayerMonsters });
+          await setState({
+            allowPlayerMonsters: !getState().allowPlayerMonsters,
+          });
         });
     },
   },
@@ -2893,8 +3538,9 @@ const TABS: TabDef[] = [
                     background:linear-gradient(180deg, rgba(231,76,60,0.14), rgba(245,166,35,0.10));
                     border:1px solid rgba(231,76,60,0.55);
                     font-size:12.5px;line-height:1.7">
-          ${isZh
-            ? `<div style="color:#e74c3c;font-weight:700;font-size:13px;margin-bottom:4px">⚠️ 关键提示：图片为<u>直接引用</u>，不复制</div>
+          ${
+            isZh
+              ? `<div style="color:#e74c3c;font-weight:700;font-size:13px;margin-bottom:4px">⚠️ 关键提示：图片为<u>直接引用</u>，不复制</div>
                <div style="color:var(--text)">
                  .fobr 里所有图片（地图 / token / 立绘）都是 <b style="color:#f5a623">直接引用世界包制作者的 OBR 图床 URL</b>，<b style="color:#f5a623">不会复制图片本身</b>。这意味着：
                  <ul style="margin:6px 0 0 22px">
@@ -2904,7 +3550,7 @@ const TABS: TabDef[] = [
                    <li><b style="color:#f5a623">建议</b>：作为玩家，请<b>先确认从可信来源拿到的 .fobr</b>，再导入。</li>
                  </ul>
                </div>`
-            : `<div style="color:#e74c3c;font-weight:700;font-size:13px;margin-bottom:4px">⚠️ Critical: images are <u>referenced</u>, not copied</div>
+              : `<div style="color:#e74c3c;font-weight:700;font-size:13px;margin-bottom:4px">⚠️ Critical: images are <u>referenced</u>, not copied</div>
                <div style="color:var(--text)">
                  Every image in a .fobr (maps / tokens / portraits) is a <b style="color:#f5a623">direct URL reference into the creator's OBR asset library</b>; the bytes are <b style="color:#f5a623">never copied</b>. This means:
                  <ul style="margin:6px 0 0 22px">
@@ -2913,7 +3559,8 @@ const TABS: TabDef[] = [
                    <li><b style="color:#f5a623">For creators</b>: keep an "untouchable" copy of every asset used by your .fobr in your OBR library.</li>
                    <li><b style="color:#f5a623">For players</b>: only import .fobr files from sources you trust.</li>
                  </ul>
-               </div>`}
+               </div>`
+          }
         </div>`;
 
       return `
@@ -2929,9 +3576,11 @@ const TABS: TabDef[] = [
         <div class="row" style="margin-top:6px">
           <div class="lbl">
             ${isZh ? "包含房间元数据（人物卡 / 套件设置等）" : "Include room metadata (character cards / suite settings…)"}
-            <div class="desc">${isZh
-              ? "默认关闭。开启后 .fobr 还会带上<b>跨 scene 的房间数据</b> —— 整个房间的人物卡列表、套件设置、贡献名单等。适合「整体交接给另一个 DM」；普通分享单张地图保持关闭。"
-              : "Off by default. When ON, the .fobr also carries the <b>room-scoped data</b> — full character-cards list, suite settings, contributor list, etc. Use for handing off a whole room to another DM; keep OFF for sharing a single map."}</div>
+            <div class="desc">${
+              isZh
+                ? "默认关闭。开启后 .fobr 还会带上<b>跨 scene 的房间数据</b> —— 整个房间的人物卡列表、套件设置、贡献名单等。适合「整体交接给另一个 DM」；普通分享单张地图保持关闭。"
+                : "Off by default. When ON, the .fobr also carries the <b>room-scoped data</b> — full character-cards list, suite settings, contributor list, etc. Use for handing off a whole room to another DM; keep OFF for sharing a single map."
+            }</div>
           </div>
           <button class="tog" id="wp-include-room" type="button" aria-pressed="false"></button>
         </div>
@@ -2958,9 +3607,11 @@ const TABS: TabDef[] = [
           <div class="row" style="margin-top:8px">
             <div class="lbl">
               ${isZh ? "同时应用房间元数据" : "Also apply room metadata"}
-              <div class="desc">${isZh
-                ? "仅当 .fobr 含房间元数据时有效。开启会写回<b>跨 scene 的房间数据</b>（人物卡列表、套件设置等），<b style=\"color:#f5a623\">可能覆盖你当前房间的偏好</b>，不确定就别开。"
-                : "Only effective when the .fobr contains room metadata. When ON, writes the <b>cross-scene room data</b> back (character-card list, suite settings…); <b style=\"color:#f5a623\">may overwrite your current room preferences</b>, keep OFF if unsure."}</div>
+              <div class="desc">${
+                isZh
+                  ? '仅当 .fobr 含房间元数据时有效。开启会写回<b>跨 scene 的房间数据</b>（人物卡列表、套件设置等），<b style="color:#f5a623">可能覆盖你当前房间的偏好</b>，不确定就别开。'
+                  : 'Only effective when the .fobr contains room metadata. When ON, writes the <b>cross-scene room data</b> back (character-card list, suite settings…); <b style="color:#f5a623">may overwrite your current room preferences</b>, keep OFF if unsure.'
+              }</div>
             </div>
             <button class="tog" id="wp-import-room" type="button" aria-pressed="false"></button>
           </div>
@@ -2982,27 +3633,47 @@ const TABS: TabDef[] = [
       let applyRoomMeta = false;
       const setMode = (m: "replace" | "merge") => {
         importMode = m;
-        root.querySelector("#wp-mode-replace")?.classList.toggle("on", m === "replace");
-        root.querySelector("#wp-mode-merge")?.classList.toggle("on", m === "merge");
+        root
+          .querySelector("#wp-mode-replace")
+          ?.classList.toggle("on", m === "replace");
+        root
+          .querySelector("#wp-mode-merge")
+          ?.classList.toggle("on", m === "merge");
       };
-      root.querySelector("#wp-mode-replace")?.addEventListener("click", () => setMode("replace"));
-      root.querySelector("#wp-mode-merge")?.addEventListener("click", () => setMode("merge"));
+      root
+        .querySelector("#wp-mode-replace")
+        ?.addEventListener("click", () => setMode("replace"));
+      root
+        .querySelector("#wp-mode-merge")
+        ?.addEventListener("click", () => setMode("merge"));
 
-      const includeRoomBtn = root.querySelector<HTMLButtonElement>("#wp-include-room");
+      const includeRoomBtn =
+        root.querySelector<HTMLButtonElement>("#wp-include-room");
       includeRoomBtn?.addEventListener("click", () => {
         includeRoomMeta = !includeRoomMeta;
         includeRoomBtn.classList.toggle("on", includeRoomMeta);
-        includeRoomBtn.setAttribute("aria-pressed", includeRoomMeta ? "true" : "false");
+        includeRoomBtn.setAttribute(
+          "aria-pressed",
+          includeRoomMeta ? "true" : "false",
+        );
       });
-      const applyRoomBtn = root.querySelector<HTMLButtonElement>("#wp-import-room");
+      const applyRoomBtn =
+        root.querySelector<HTMLButtonElement>("#wp-import-room");
       applyRoomBtn?.addEventListener("click", () => {
         applyRoomMeta = !applyRoomMeta;
         applyRoomBtn.classList.toggle("on", applyRoomMeta);
-        applyRoomBtn.setAttribute("aria-pressed", applyRoomMeta ? "true" : "false");
+        applyRoomBtn.setAttribute(
+          "aria-pressed",
+          applyRoomMeta ? "true" : "false",
+        );
       });
 
-      const progEl = root.querySelector("#wp-progress") as HTMLDivElement | null;
-      const writeProg = (msg: string) => { if (progEl) progEl.textContent = msg; };
+      const progEl = root.querySelector(
+        "#wp-progress",
+      ) as HTMLDivElement | null;
+      const writeProg = (msg: string) => {
+        if (progEl) progEl.textContent = msg;
+      };
 
       const exportBtn = root.querySelector<HTMLButtonElement>("#wp-btn-export");
       exportBtn?.addEventListener("click", async () => {
@@ -3041,8 +3712,12 @@ const TABS: TabDef[] = [
         }
       });
 
-      const impProgEl = root.querySelector("#wp-import-progress") as HTMLDivElement | null;
-      const writeImpProg = (msg: string) => { if (impProgEl) impProgEl.textContent = msg; };
+      const impProgEl = root.querySelector(
+        "#wp-import-progress",
+      ) as HTMLDivElement | null;
+      const writeImpProg = (msg: string) => {
+        if (impProgEl) impProgEl.textContent = msg;
+      };
 
       const fileInput = root.querySelector<HTMLInputElement>("#wp-file");
       const importBtn = root.querySelector<HTMLButtonElement>("#wp-btn-import");
@@ -3064,8 +3739,10 @@ const TABS: TabDef[] = [
             applyRoomMetadata: applyRoomMeta,
             onProgress: (p: ImportProgress) => {
               if (p.phase === "rewriting") writeImpProg("展开嵌入图片…");
-              else if (p.phase === "applying-metadata") writeImpProg("应用场景元数据…");
-              else if (p.phase === "applying-items") writeImpProg(`导入 item  ${p.doneItems} / ${p.totalItems}`);
+              else if (p.phase === "applying-metadata")
+                writeImpProg("应用场景元数据…");
+              else if (p.phase === "applying-items")
+                writeImpProg(`导入 item  ${p.doneItems} / ${p.totalItems}`);
               else if (p.phase === "done") writeImpProg(p.message ?? "完成");
             },
           });
@@ -3109,24 +3786,60 @@ function findTab(id: string): TabDef {
 function moduleLabelKey(id: ModuleId): string {
   let label = "";
   switch (id) {
-    case "timeStop": label = lang === "zh" ? "时停模式" : "Time Stop"; break;
-    case "focus": label = lang === "zh" ? "同步视口" : "Sync Viewport"; break;
-    case "bestiary": label = lang === "zh" ? "怪物图鉴" : "Bestiary"; break;
-    case "characterCards": label = lang === "zh" ? "角色卡" : "Character Cards"; break;
-    case "initiative": label = lang === "zh" ? "先攻追踪" : "Initiative Tracker"; break;
-    case "search": label = lang === "zh" ? "全局搜索" : "Global Search"; break;
-    case "dice": label = lang === "zh" ? "定位骰子" : "Tactical Dice"; break;
-    case "portals": label = lang === "zh" ? "传送门" : "Portals"; break;
-    case "bubbles": label = lang === "zh" ? "血量气泡" : "HP Bubbles"; break;
-    case "statusTracker": label = lang === "zh" ? "状态追踪" : "Status Tracker"; break;
-    case "resourceTracker": label = lang === "zh" ? "资源追踪" : "Resource Tracker"; break;
-    case "hpBar": label = lang === "zh" ? "小血条组件" : "HP Bar"; break;
-    case "metadataInspector": label = lang === "zh" ? "元数据检查" : "Metadata Inspector"; break;
-    case "fullFog": label = lang === "zh" ? "迷雾编辑" : "Fog Editor"; break;
-    case "trickster": label = lang === "zh" ? "捣蛋鬼在哪？" : "Trickster Marker"; break;
-    case "circleImage": label = lang === "zh" ? "圆形图片" : "Circle Image"; break;
-    case "follow": label = lang === "zh" ? "跟随" : "Follow"; break;
-    case "musicBoard": label = lang === "zh" ? "音乐板" : "Music Board"; break;
+    case "timeStop":
+      label = lang === "zh" ? "时停模式" : "Time Stop";
+      break;
+    case "focus":
+      label = lang === "zh" ? "同步视口" : "Sync Viewport";
+      break;
+    case "bestiary":
+      label = lang === "zh" ? "怪物图鉴" : "Bestiary";
+      break;
+    case "characterCards":
+      label = lang === "zh" ? "角色卡" : "Character Cards";
+      break;
+    case "initiative":
+      label = lang === "zh" ? "先攻追踪" : "Initiative Tracker";
+      break;
+    case "search":
+      label = lang === "zh" ? "全局搜索" : "Global Search";
+      break;
+    case "dice":
+      label = lang === "zh" ? "定位骰子" : "Tactical Dice";
+      break;
+    case "portals":
+      label = lang === "zh" ? "传送门" : "Portals";
+      break;
+    case "bubbles":
+      label = lang === "zh" ? "血量气泡" : "HP Bubbles";
+      break;
+    case "statusTracker":
+      label = lang === "zh" ? "状态追踪" : "Status Tracker";
+      break;
+    case "resourceTracker":
+      label = lang === "zh" ? "资源追踪" : "Resource Tracker";
+      break;
+    case "hpBar":
+      label = lang === "zh" ? "小血条组件" : "HP Bar";
+      break;
+    case "metadataInspector":
+      label = lang === "zh" ? "元数据检查" : "Metadata Inspector";
+      break;
+    case "fullFog":
+      label = lang === "zh" ? "迷雾编辑" : "Fog Editor";
+      break;
+    case "trickster":
+      label = lang === "zh" ? "捣蛋鬼在哪？" : "Trickster Marker";
+      break;
+    case "circleImage":
+      label = lang === "zh" ? "圆形图片" : "Circle Image";
+      break;
+    case "follow":
+      label = lang === "zh" ? "跟随" : "Follow";
+      break;
+    case "musicBoard":
+      label = lang === "zh" ? "音乐板" : "Music Board";
+      break;
   }
   return label;
 }
@@ -3136,7 +3849,8 @@ function moduleLabelKey(id: ModuleId): string {
 // cluster-row.ts when settings popover opens) shows floating
 // supporter names around this popover. Settings broadcasts
 // SHOW / HIDE so the overlay iframe toggles its visibility.
-const BC_SUPPORTER_OVERLAY_VISIBILITY = "com.obr-suite/supporter-overlay/visibility";
+const BC_SUPPORTER_OVERLAY_VISIBILITY =
+  "com.obr-suite/supporter-overlay/visibility";
 
 function broadcastOverlayVisibility(visible: boolean): void {
   try {
@@ -3179,9 +3893,7 @@ function renderContent() {
       isGM ? "" : "disabled"
     } title="${lang === "zh" ? "启用 / 关闭此功能" : "Enable / disable this module"}"></button>`;
   } else {
-    topBar += `<span class="meta">${
-      lang === "zh" ? "" : ""
-    }</span>`;
+    topBar += `<span class="meta">${lang === "zh" ? "" : ""}</span>`;
   }
   topBarEl.innerHTML = topBar;
   topBarEl
@@ -3228,8 +3940,165 @@ langEnEl.addEventListener("click", () => {
   setLang("en");
 });
 
+// ====================== LOCAL DATA IMPORTER HELPERS ======================
+const LOCAL_DB_NAME = "obr-suite-local-libraries";
+const LOCAL_STORE = "jsonFiles";
+
+async function openLocalDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(LOCAL_DB_NAME, 1);
+    req.onupgradeneeded = (e: IDBVersionChangeEvent) => {
+      const db = (e.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(LOCAL_STORE)) {
+        db.createObjectStore(LOCAL_STORE, { keyPath: "key" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ====================== PREVIEW LOCAL ======================
+async function handlePreviewLocal(
+  baseUrl: string,
+  libraryItem: HTMLElement,
+): Promise<void> {
+  const cleanBase = baseUrl.replace(/\/+$/, "");
+  const indexUrl = `${cleanBase}/search/index.json`;
+
+  try {
+    const res = await fetch(indexUrl, { cache: "no-cache" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const indexData: Record<string, string> = await res.json();
+
+    const entriesHtml = Object.entries(indexData)
+      .slice(0, 80)
+      .map(
+        ([name, path]) => `
+        <tr>
+          <td>${escapeHtml(name)}</td>
+          <td><code>${escapeHtml(path)}</code></td>
+        </tr>
+      `,
+      )
+      .join("");
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; background: #1e1e1e; color: #eee; margin:0; }
+          h3 { margin: 0 0 12px 0; color: #f5c876; }
+          table { width: 100%; border-collapse: collapse; font-size: 13px; }
+          th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #444; }
+          th { background: #2a2a2a; }
+          code { background: #333; padding: 2px 6px; border-radius: 3px; font-family: ui-monospace, monospace; }
+          .count { color: #9aa0b3; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <h3>📦 Local Data Importer — Preview</h3>
+        <p class="count"><strong>${Object.keys(indexData).length}</strong> file mappings trovati</p>
+        <table>
+          <thead><tr><th>Nome</th><th>Path relativo</th></tr></thead>
+          <tbody>${entriesHtml}</tbody>
+        </table>
+        ${
+          Object.keys(indexData).length > 80
+            ? `<p style="margin-top:12px;opacity:0.7">... e altri ${Object.keys(indexData).length - 80} file</p>`
+            : ""
+        }
+      </body>
+      </html>`;
+
+    await OBR.popover.open({
+      id: "local-importer-preview",
+      url: `data:text/html,${encodeURIComponent(htmlContent)}`,
+      width: 760,
+      height: 580,
+      anchorReference: "POSITION", // o "ELEMENT" se preferisci ancorarlo
+      anchorPosition: { left: 0, top: 0 }, // verrà centrato dal popover system
+      hidePaper: false,
+      disableClickAway: false,
+    });
+  } catch (err: any) {
+    console.error(err);
+    OBR.notification.show(`Errore durante la preview: ${err.message}`, "ERROR");
+  }
+}
+
+// ====================== UPDATE LOCAL DATA FILES ======================
+async function handleUpdateLocalData(
+  baseUrl: string,
+  libraryItem: HTMLElement,
+) {
+  const btn = libraryItem.querySelector(".update-local") as HTMLButtonElement;
+  if (!btn) return;
+
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = "⬇️ Downloading...";
+
+  try {
+    const cleanBase = baseUrl.replace(/\/+$/, "");
+    const indexUrl = `${cleanBase}/search/index.json`;
+    const res = await fetch(indexUrl, { cache: "no-cache" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const indexData: Record<string, string> = await res.json();
+    let success = 0;
+
+    for (const [displayName, relPath] of Object.entries(indexData)) {
+      try {
+        const fullUrl = `${cleanBase}/${relPath.replace(/^\//, "")}`;
+        const fileRes = await fetch(fullUrl, { cache: "no-cache" });
+        if (!fileRes.ok) continue;
+
+        const jsonText = await fileRes.text(); // ← importante: come stringa
+
+        // Usa la funzione ufficiale
+        const result = await importLocalJson(
+          relPath.split("/").pop() || displayName + ".json",
+          jsonText,
+        );
+
+        if (result.ok) success++;
+      } catch (e) {
+        console.warn(`Failed ${displayName}`, e);
+      }
+    }
+
+    btn.innerHTML = `✅ ${success} importati`;
+    setTimeout(() => {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    }, 2500);
+
+    // Ricarica la sezione Local Content
+    renderContent();
+
+    OBR.notification.show(
+      `Importati ${success} file nella Local Content`,
+      "SUCCESS",
+    );
+  } catch (err: any) {
+    console.error(err);
+    btn.innerHTML = "❌ Errore";
+    setTimeout(() => {
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    }, 4000);
+    OBR.notification.show("Import fallito", "ERROR");
+  }
+}
+
 OBR.onReady(async () => {
-  try { isGM = (await OBR.player.getRole()) === "GM"; } catch {}
+  try {
+    isGM = (await OBR.player.getRole()) === "GM";
+  } catch {}
   // 2026-05-10 — warm the IDB-backed local-content cache before the
   // first render so the "📁 本地内容" list isn't empty for ~50 ms
   // after open. Idempotent: subsequent calls share the same promise.
@@ -3289,7 +4158,11 @@ OBR.onReady(async () => {
   const handleUnload = () => {
     broadcastOverlayVisibility(false);
     try {
-      OBR.broadcast.sendMessage("com.obr-suite/settings-closed", {}, { destination: "LOCAL" });
+      OBR.broadcast.sendMessage(
+        "com.obr-suite/settings-closed",
+        {},
+        { destination: "LOCAL" },
+      );
     } catch {}
   };
   const handleVisibilityChange = () => {
