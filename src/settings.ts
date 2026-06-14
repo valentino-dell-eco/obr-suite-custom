@@ -3968,7 +3968,7 @@ async function handlePreviewLocal(
 
   try {
     const res = await fetch(indexUrl, { cache: "no-cache" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok && res.status !==304) throw new Error(`HTTP ${res.status}`);
 
     const indexData: Record<string, string> = await res.json();
 
