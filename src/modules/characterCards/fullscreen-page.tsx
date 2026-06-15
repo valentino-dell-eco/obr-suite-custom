@@ -53,6 +53,58 @@ const ICON_PASTE =
   '<rect x="8" y="2" width="8" height="4" rx="1"/>' +
   "</svg>";
 
+const LS_MEASURE_KEY = "obr-suite/measure-system";
+
+type MeasureSystem = "imperial" | "metric";
+
+function getMeasureSystem(): MeasureSystem {
+  try {
+    const v = localStorage.getItem(LS_MEASURE_KEY);
+    return v === "metric" ? "metric" : "imperial"; // default imperial
+  } catch {
+    return "imperial";
+  }
+}
+
+function setMeasureSystem(s: MeasureSystem): void {
+  try {
+    localStorage.setItem(LS_MEASURE_KEY, s);
+  } catch {}
+}
+
+// Converte un peso in lb verso l'unità corrente.
+function fmtWeight(lbs: number | null | undefined, qty: number = 1): string {
+  if (lbs == null || lbs === 0) return "";
+  const totalLbs = lbs * qty;
+  const sys = getMeasureSystem();
+
+  if (sys === "metric") {
+    const kg = totalLbs * 0.453592;
+    return kg < 1 ? kg.toFixed(2) : kg.toFixed(1);
+  }
+  return totalLbs.toFixed(1); // mostra anche i decimali in imperial se necessario
+}
+
+// Converte una distanza in ft verso l'unità corrente.
+function fmtDistance(ft: number | null | undefined): string {
+  if (ft == null) return "?";
+  if (ft <= 0) return "0";
+
+  const sys = getMeasureSystem();
+
+  if (sys === "metric") {
+    const meters = ft * 0.3048;
+    // Arrotonda per difetto al multiplo più vicino di 1.5 m
+    const rounded = Math.floor(meters / 1.5) * 1.5;
+    return rounded % 1 === 0
+      ? rounded.toFixed(0) // es: 6
+      : rounded.toFixed(1); // es: 4.5
+  } else {
+    // Imperial: arrotonda per difetto al multiplo di 5 feet
+    const rounded = Math.floor(ft / 5) * 5;
+    return rounded.toString();
+  }
+}
 // Click a spell / feature / feat name → fire BC_SEARCH_QUERY so the
 // global-search popover opens with that name pre-filled and auto-pins
 // the first hit. LOCAL only — sending REMOTE causes every receiving
@@ -354,6 +406,7 @@ function Header({
   onToggleEditing,
   onSaveEdits,
   savingEdits,
+  canEdit,
 }: {
   data: CharacterData;
   onExport: () => void;
@@ -365,6 +418,7 @@ function Header({
   onToggleEditing: () => void;
   onSaveEdits: () => void;
   savingEdits: boolean;
+  canEdit: boolean;
 }) {
   const id = data.identity || {};
   const cs = data.core_stats || {};
@@ -388,6 +442,14 @@ function Header({
   const race =
     [id.race?.name, id.race?.subrace].filter(Boolean).join("·") || "—";
   const totalLv = data.total_level != null ? data.total_level : "?";
+  const [measureSys, setMeasureSys] = useState<MeasureSystem>(getMeasureSystem);
+
+  function toggleMeasure() {
+    const next: MeasureSystem =
+      measureSys === "imperial" ? "metric" : "imperial";
+    setMeasureSystem(next);
+    setMeasureSys(next);
+  }
 
   return (
     <div class="cc-head">
@@ -425,14 +487,27 @@ function Header({
       </div>
       <div class="cc-head-right">
         <button
-          class={`cc-btn ${editing ? "primary" : ""}`}
-          onClick={onToggleEditing}
-          title={editing ? T("ccEditTitleOn") : T("ccEditTitleOff")}
+          class="cc-btn"
+          onClick={toggleMeasure}
+          title={
+            measureSys === "imperial"
+              ? "Switch to Metric"
+              : "Switch to Imperial"
+          }
         >
-          <span class="ic">{editing ? "✎" : "🔧"}</span>
-          {editing ? T("ccEditingLabel") : T("ccEditLabel")}
+          {measureSys === "imperial" ? "🇺🇸 lbs / ft" : "🌍 kg / m"}
         </button>
-        {editing && (
+        {canEdit && (
+          <button
+            class={`cc-btn ${editing ? "primary" : ""}`}
+            onClick={onToggleEditing}
+            title={editing ? T("ccEditTitleOn") : T("ccEditTitleOff")}
+          >
+            <span class="ic">{editing ? "✎" : "🔧"}</span>
+            {editing ? T("ccEditingLabel") : T("ccEditLabel")}
+          </button>
+        )}
+        {canEdit && editing && (
           <button
             class="cc-btn primary"
             onClick={onSaveEdits}
@@ -447,16 +522,27 @@ function Header({
           {T("ccRefresh")}
         </button>
         <div class="cc-btn-group">
-          <button class="cc-btn" onClick={onExport} title={T("ccExportTitle")}>
-            {T("ccExportJson")}
-          </button>
-          <button
-            class="cc-btn cc-btn-sub"
-            onClick={onCopyJson}
-            title={T("ccCopyTitle")}
-          >
-            <span class="ic" dangerouslySetInnerHTML={{ __html: ICON_COPY }} />
-          </button>
+          {canEdit && (
+            <button
+              class="cc-btn"
+              onClick={onExport}
+              title={T("ccExportTitle")}
+            >
+              {T("ccExportJson")}
+            </button>
+          )}
+          {canEdit && (
+            <button
+              class="cc-btn cc-btn-sub"
+              onClick={onCopyJson}
+              title={T("ccCopyTitle")}
+            >
+              <span
+                class="ic"
+                dangerouslySetInnerHTML={{ __html: ICON_COPY }}
+              />
+            </button>
+          )}
         </div>
         <div class="cc-btn-group">
           <button class="cc-btn" onClick={onImport} title={T("ccImportTitle")}>
@@ -865,9 +951,12 @@ function StatsBanner({
               }}
             />
           ) : (
-            <span class="big">{cs.speed ?? "?"}</span>
+            <span>{fmtDistance(cs.speed)}</span>
           )}
-          <span class="unit">{T("ccFtUnit")}</span>
+          <span class="unit">
+            {" "}
+            {getMeasureSystem() === "metric" ? T("ccMUnit") : T("ccFtUnit")}
+          </span>
         </div>
       </div>
       <div class="stat-cell">
@@ -2523,84 +2612,419 @@ function BackgroundSection({ data }: { data: CharacterData }) {
     </div>
   );
 }
+//old inventory section
+// function InventorySection({ data }: { data: CharacterData }) {
+//   const { editing, onPatch } = useEdit();
+//   const inv = data.inventory || {};
+//   const w = inv.currency?.wallet || {};
+//   const enc = inv.encumbrance || {};
+//   // 2026-05-16 — the parser puts the 4 "背包 1-4" + 2 "次元袋 1-2"
+//   // backpack regions into `inv.containers`, NOT `inv.items` (the latter
+//   // is always hardcoded to []). User reported "导入时并没有真的识别到
+//   // 背包工作表的内容" — the panel was rendering the empty items list,
+//   // ignoring the real container data. Flatten containers into a single
+//   // displayable list, tagging each entry with its container label so
+//   // the source 背包 1 / 次元袋 2 / etc. is visible.
+//   const rawItems: any[] = Array.isArray(inv.items) ? inv.items : [];
+//   const containers: any[] = Array.isArray(inv.containers) ? inv.containers : [];
+//   const containerItems: any[] = containers.flatMap((c: any) => {
+//     const label = String(c?.label ?? T("ccBackpack"));
+//     return Array.isArray(c?.items)
+//       ? c.items.map((it: any) => ({
+//           name: it?.name ?? "",
+//           weight: it?.weight ?? null,
+//           location: label,
+//           description: it?.description ?? "",
+//           quantity: it?.quantity ?? null,
+//         }))
+//       : [];
+//   });
+//   // Merge: rawItems first (legacy / hand-edited extras), then container
+//   // items. In EDIT mode only show rawItems so the index-based update /
+//   // remove handlers stay consistent — container items are sourced
+//   // from the xlsx and treated as read-only here (the user re-imports
+//   // the spreadsheet to change them). In VIEW mode merge both so the
+//   // user can actually see what's in their pack.
+//   const items: any[] = editing ? rawItems : [...rawItems, ...containerItems];
+//   // Wondrous items (奇物) — new schema field, ships when present.
+//   const wondrous: any[] = Array.isArray(inv.wondrous_items)
+//     ? inv.wondrous_items
+//     : [];
 
+//   // 2026-05-14 (#14) — inventory edit helpers.
+//   const setWallet = (k: "pp" | "gp" | "ep" | "sp" | "cp", v: number) => {
+//     const currency = inv.currency || {};
+//     const wallet = { ...(currency.wallet || {}), [k]: v };
+//     onPatch({ inventory: { ...inv, currency: { ...currency, wallet } } });
+//   };
+//   const updateItem = (idx: number, patch: Record<string, any>) => {
+//     const next = [...items];
+//     next[idx] = { ...next[idx], ...patch };
+//     onPatch({ inventory: { ...inv, items: next } });
+//   };
+//   const removeItem = (idx: number) => {
+//     if (
+//       !window.confirm(
+//         T("ccConfirmDelItem").replace(
+//           "{name}",
+//           items[idx]?.name || T("ccUnnamed"),
+//         ),
+//       )
+//     )
+//       return;
+//     const next = items.filter((_, i) => i !== idx);
+//     onPatch({ inventory: { ...inv, items: next } });
+//   };
+//   const addItem = (ev?: Event) => {
+//     const next = [
+//       ...items,
+//       { name: T("ccNewItem"), weight: null, location: "", description: "" },
+//     ];
+//     onPatch({ inventory: { ...inv, items: next } });
+//     smoothScrollToNewRow(ev, ".weap");
+//   };
+//   // Wondrous items reuse the FeatureBlock add/remove pattern via the
+//   // same data shape (name + description). Slot is on inv directly.
+//   const addWondrous = (_slot?: string, ev?: Event) => {
+//     const next = [...wondrous, { name: T("ccNewWondrous"), description: "" }];
+//     onPatch({ inventory: { ...inv, wondrous_items: next } });
+//     smoothScrollToNewRow(ev, ".feat");
+//   };
+//   const removeWondrous = (_slot: string, idx: number) => {
+//     if (
+//       !window.confirm(
+//         T("ccConfirmDelItem").replace(
+//           "{name}",
+//           wondrous[idx]?.name || T("ccUnnamed"),
+//         ),
+//       )
+//     )
+//       return;
+//     const next = wondrous.filter((_, i) => i !== idx);
+//     onPatch({ inventory: { ...inv, wondrous_items: next } });
+//   };
+//   const patchWondrous = (
+//     _slot: string,
+//     idx: number,
+//     patch: Record<string, any>,
+//   ) => {
+//     const next = [...wondrous];
+//     next[idx] = { ...next[idx], ...patch };
+//     onPatch({ inventory: { ...inv, wondrous_items: next } });
+//   };
+
+//   const editNum = (
+//     label: string,
+//     key: "pp" | "gp" | "ep" | "sp" | "cp",
+//     cls: string,
+//   ) => (
+//     <div class={`coin ${cls}`}>
+//       <div class="coin-name">{label}</div>
+//       <div class="coin-val">
+//         {editing ? (
+//           <input
+//             class="cc-edit-num"
+//             type="number"
+//             style={{ width: "60px", textAlign: "center" }}
+//             value={(w as any)[key] ?? 0}
+//             onInput={(e: any) => {
+//               const n = parseInt(e.target.value, 10);
+//               if (Number.isFinite(n)) setWallet(key, n);
+//             }}
+//           />
+//         ) : (
+//           ((w as any)[key] ?? 0)
+//         )}
+//       </div>
+//     </div>
+//   );
+
+//   return (
+//     <div class="sec">
+//       <div class="sec-h">
+//         <span class="sec-h-title">{T("ccSecInventory")}</span>
+//         {!editing && inv.currency?.total_gp_raw && (
+//           <span class="sec-h-meta">
+//             {T("ccTotalValue")} {inv.currency.total_gp_raw}
+//           </span>
+//         )}
+//         {editing && (
+//           <button
+//             class="cc-add-tag"
+//             style={{ marginLeft: "auto" }}
+//             onClick={(e: any) => addItem(e)}
+//             title={T("ccAddItemTitle")}
+//           >
+//             {T("ccAddItemBtn")}
+//           </button>
+//         )}
+//       </div>
+//       <div class="sec-body">
+//         <div class="coin-row">
+//           {editNum(T("ccCoinPP"), "pp", "pp")}
+//           {editNum(T("ccCoinGP"), "gp", "gp")}
+//           {editNum(T("ccCoinEP"), "ep", "ep")}
+//           {editNum(T("ccCoinSP"), "sp", "sp")}
+//           {editNum(T("ccCoinCP"), "cp", "cp")}
+//         </div>
+
+//         {(enc.equipment_weight != null || enc.total_weight != null) && (
+//           <div style={{ marginBottom: "10px" }}>
+//             <div class="bio-block-h" style={{ marginBottom: "5px" }}>
+//               {T("ccEncumbrance")}
+//             </div>
+//             <div class="enc-bar">
+//               <div class="enc-cell">
+//                 {T("ccEquipmentWt")}{" "}
+//                 <div class="v">{enc.equipment_weight ?? 0}</div>
+//               </div>
+//               <div class="enc-cell">
+//                 {T("ccBackpack")}{" "}
+//                 <div class="v">
+//                   {(enc.pack1_weight ?? 0) + (enc.pack2_weight ?? 0)}
+//                 </div>
+//               </div>
+//               <div class="enc-cell">
+//                 {T("ccTotal")} <div class="v">{enc.total_weight ?? 0}</div>
+//               </div>
+//               <div class="enc-cell">
+//                 {T("ccCapacity")} <div class="v">{enc.max_capacity ?? "?"}</div>
+//               </div>
+//             </div>
+//           </div>
+//         )}
+
+//         {(editing || !!wondrous.length) && (
+//           <FeatureBlock
+//             title={T("ccWondrousTitle")}
+//             items={wondrous}
+//             slot={editing ? "wondrous_items" : undefined}
+//             onAdd={editing ? addWondrous : undefined}
+//             onRemove={editing ? removeWondrous : undefined}
+//             onPatchItem={editing ? patchWondrous : undefined}
+//           />
+//         )}
+
+//         {!editing && items.length === 0 && !wondrous.length && (
+//           <div
+//             style={{
+//               color: "var(--ink-mute)",
+//               fontStyle: "italic",
+//               padding: "6px 0",
+//             }}
+//           >
+//             {T("ccNoPackDetail")}
+//           </div>
+//         )}
+//         {(editing || !!items.length) && (
+//           <div style={{ marginTop: "8px" }}>
+//             <div class="bio-block-h" style={{ marginBottom: "5px" }}>
+//               {T("ccBackpack")}
+//             </div>
+//             {items.map((it: any, idx: number) => {
+//               if (editing) {
+//                 return (
+//                   <div
+//                     class="weap"
+//                     style={{
+//                       display: "grid",
+//                       gridTemplateColumns: "1.4fr 0.6fr 0.8fr auto",
+//                       gap: "6px",
+//                       alignItems: "center",
+//                     }}
+//                   >
+//                     <input
+//                       class="cc-edit-text"
+//                       type="text"
+//                       value={it.name ?? ""}
+//                       placeholder={T("ccItemNamePh")}
+//                       onInput={(e: any) =>
+//                         updateItem(idx, { name: e.target.value })
+//                       }
+//                     />
+//                     <input
+//                       class="cc-edit-text"
+//                       type="text"
+//                       value={it.weight ?? ""}
+//                       placeholder={T("ccWeightPh")}
+//                       onInput={(e: any) => {
+//                         const v = e.target.value;
+//                         updateItem(idx, {
+//                           weight: v === "" ? null : parseFloat(v),
+//                         });
+//                       }}
+//                     />
+//                     <input
+//                       class="cc-edit-text"
+//                       type="text"
+//                       value={it.location ?? ""}
+//                       placeholder={T("ccLocationPh")}
+//                       onInput={(e: any) =>
+//                         updateItem(idx, { location: e.target.value })
+//                       }
+//                     />
+//                     <button
+//                       class="cc-tag-x"
+//                       onClick={() => removeItem(idx)}
+//                       title={T("ccDelete")}
+//                     >
+//                       ×
+//                     </button>
+//                   </div>
+//                 );
+//               }
+//               // 2026-05-16 — show quantity (from container schema) +
+//               // weight + container label. The quantity is the xlsx
+//               // 容器 schema's qty cell; we render it inline with the
+//               // name as "× N" so each row's count is immediately
+//               // visible.
+//               const qty =
+//                 it.quantity != null && it.quantity !== 1
+//                   ? ` × ${it.quantity}`
+//                   : "";
+//               const weightStr = fmtWeight(it.weight);
+//               const loc = it.location ? `· ${it.location}` : "";
+//               const meta = [weightStr, loc].filter(Boolean).join(" ");
+//               return (
+//                 <div class="weap">
+//                   <div class="weap-name">{(it.name || "?") + qty}</div>
+//                   <div class="weap-atk" style={{ visibility: "hidden" }}>
+//                     —
+//                   </div>
+//                   <div
+//                     class="weap-dmg"
+//                     style={{
+//                       background: "transparent",
+//                       border: "0",
+//                       color: "var(--ink-dim)",
+//                     }}
+//                   >
+//                     {meta}
+//                   </div>
+//                   {it.description && (
+//                     <div class="weap-props">{it.description}</div>
+//                   )}
+//                 </div>
+//               );
+//             })}
+//           </div>
+//         )}
+//       </div>
+//     </div>
+//   );
+// }
+//new inventory section
 function InventorySection({ data }: { data: CharacterData }) {
   const { editing, onPatch } = useEdit();
   const inv = data.inventory || {};
   const w = inv.currency?.wallet || {};
   const enc = inv.encumbrance || {};
-  // 2026-05-16 — the parser puts the 4 "背包 1-4" + 2 "次元袋 1-2"
-  // backpack regions into `inv.containers`, NOT `inv.items` (the latter
-  // is always hardcoded to []). User reported "导入时并没有真的识别到
-  // 背包工作表的内容" — the panel was rendering the empty items list,
-  // ignoring the real container data. Flatten containers into a single
-  // displayable list, tagging each entry with its container label so
-  // the source 背包 1 / 次元袋 2 / etc. is visible.
+
   const rawItems: any[] = Array.isArray(inv.items) ? inv.items : [];
   const containers: any[] = Array.isArray(inv.containers) ? inv.containers : [];
+
   const containerItems: any[] = containers.flatMap((c: any) => {
     const label = String(c?.label ?? T("ccBackpack"));
     return Array.isArray(c?.items)
       ? c.items.map((it: any) => ({
-          name: it?.name ?? "",
-          weight: it?.weight ?? null,
+          ...it,
           location: label,
-          description: it?.description ?? "",
-          quantity: it?.quantity ?? null,
+          quantity: typeof it?.quantity === "number" ? it.quantity : 1,
         }))
       : [];
   });
-  // Merge: rawItems first (legacy / hand-edited extras), then container
-  // items. In EDIT mode only show rawItems so the index-based update /
-  // remove handlers stay consistent — container items are sourced
-  // from the xlsx and treated as read-only here (the user re-imports
-  // the spreadsheet to change them). In VIEW mode merge both so the
-  // user can actually see what's in their pack.
+
   const items: any[] = editing ? rawItems : [...rawItems, ...containerItems];
-  // Wondrous items (奇物) — new schema field, ships when present.
   const wondrous: any[] = Array.isArray(inv.wondrous_items)
     ? inv.wondrous_items
     : [];
 
-  // 2026-05-14 (#14) — inventory edit helpers.
+  const totalCarriedWeight = items.reduce((sum, it) => {
+    const wt = typeof it.weight === "number" ? it.weight : 0;
+    const qty = typeof it.quantity === "number" ? it.quantity : 1;
+    return sum + wt * qty;
+  }, 0);
+
+  // Stato per modifica quantità in modalità visualizzazione
+  const [editingQtyIndex, setEditingQtyIndex] = useState<number | null>(null);
+  const [tempQty, setTempQty] = useState<string>("");
+
   const setWallet = (k: "pp" | "gp" | "ep" | "sp" | "cp", v: number) => {
     const currency = inv.currency || {};
     const wallet = { ...(currency.wallet || {}), [k]: v };
     onPatch({ inventory: { ...inv, currency: { ...currency, wallet } } });
   };
+
   const updateItem = (idx: number, patch: Record<string, any>) => {
     const next = [...items];
     next[idx] = { ...next[idx], ...patch };
     onPatch({ inventory: { ...inv, items: next } });
   };
+
   const removeItem = (idx: number) => {
-    if (
-      !window.confirm(
-        T("ccConfirmDelItem").replace(
-          "{name}",
-          items[idx]?.name || T("ccUnnamed"),
-        ),
-      )
-    )
-      return;
     const next = items.filter((_, i) => i !== idx);
     onPatch({ inventory: { ...inv, items: next } });
   };
+
+  const handleQuantityChange = (idx: number) => {
+    const currentQty =
+      typeof items[idx]?.quantity === "number" ? items[idx].quantity : 1;
+    setTempQty(currentQty.toString());
+    setEditingQtyIndex(idx);
+  };
+
+  const confirmQuantityChange = () => {
+    if (editingQtyIndex === null) return;
+
+    let newQty = parseFloat(tempQty);
+    if (isNaN(newQty)) newQty = 1;
+
+    if (tempQty.startsWith("+") || tempQty.startsWith("-")) {
+      const delta = parseFloat(tempQty);
+      const current =
+        typeof items[editingQtyIndex].quantity === "number"
+          ? items[editingQtyIndex].quantity
+          : 1;
+      newQty = current + delta;
+    }
+
+    if (newQty <= 0) {
+      if (
+        window.confirm(
+          "La quantità è diventata 0 o negativa.\nEliminare definitivamente l'oggetto?",
+        )
+      ) {
+        removeItem(editingQtyIndex);
+      }
+    } else {
+      updateItem(editingQtyIndex, { quantity: Math.floor(newQty) });
+    }
+
+    setEditingQtyIndex(null);
+    setTempQty("");
+  };
+
   const addItem = (ev?: Event) => {
     const next = [
       ...items,
-      { name: T("ccNewItem"), weight: null, location: "", description: "" },
+      {
+        name: T("ccNewItem"),
+        weight: null,
+        quantity: 1,
+        location: "",
+        description: "",
+      },
     ];
     onPatch({ inventory: { ...inv, items: next } });
     smoothScrollToNewRow(ev, ".weap");
   };
-  // Wondrous items reuse the FeatureBlock add/remove pattern via the
-  // same data shape (name + description). Slot is on inv directly.
+
   const addWondrous = (_slot?: string, ev?: Event) => {
     const next = [...wondrous, { name: T("ccNewWondrous"), description: "" }];
     onPatch({ inventory: { ...inv, wondrous_items: next } });
     smoothScrollToNewRow(ev, ".feat");
   };
+
   const removeWondrous = (_slot: string, idx: number) => {
     if (
       !window.confirm(
@@ -2614,6 +3038,7 @@ function InventorySection({ data }: { data: CharacterData }) {
     const next = wondrous.filter((_, i) => i !== idx);
     onPatch({ inventory: { ...inv, wondrous_items: next } });
   };
+
   const patchWondrous = (
     _slot: string,
     idx: number,
@@ -2679,31 +3104,29 @@ function InventorySection({ data }: { data: CharacterData }) {
           {editNum(T("ccCoinCP"), "cp", "cp")}
         </div>
 
-        {(enc.equipment_weight != null || enc.total_weight != null) && (
-          <div style={{ marginBottom: "10px" }}>
-            <div class="bio-block-h" style={{ marginBottom: "5px" }}>
-              {T("ccEncumbrance")}
+        <div style={{ marginBottom: "10px" }}>
+          <div class="bio-block-h" style={{ marginBottom: "5px" }}>
+            {T("ccEncumbrance")}
+          </div>
+          <div class="enc-bar">
+            <div class="enc-cell">
+              {T("ccEquipmentWt")}{" "}
+              <div class="v">{totalCarriedWeight.toFixed(1)}</div>
             </div>
-            <div class="enc-bar">
-              <div class="enc-cell">
-                {T("ccEquipmentWt")}{" "}
-                <div class="v">{enc.equipment_weight ?? 0}</div>
+            <div class="enc-cell">
+              {T("ccBackpack")}{" "}
+              <div class="v">
+                {(enc.pack1_weight ?? 0) + (enc.pack2_weight ?? 0)}
               </div>
-              <div class="enc-cell">
-                {T("ccBackpack")}{" "}
-                <div class="v">
-                  {(enc.pack1_weight ?? 0) + (enc.pack2_weight ?? 0)}
-                </div>
-              </div>
-              <div class="enc-cell">
-                {T("ccTotal")} <div class="v">{enc.total_weight ?? 0}</div>
-              </div>
-              <div class="enc-cell">
-                {T("ccCapacity")} <div class="v">{enc.max_capacity ?? "?"}</div>
-              </div>
+            </div>
+            <div class="enc-cell">
+              {T("ccTotal")} <div class="v">{enc.total_weight ?? 0}</div>
+            </div>
+            <div class="enc-cell">
+              {T("ccCapacity")} <div class="v">{enc.max_capacity ?? "?"}</div>
             </div>
           </div>
-        )}
+        </div>
 
         {(editing || !!wondrous.length) && (
           <FeatureBlock
@@ -2716,30 +3139,48 @@ function InventorySection({ data }: { data: CharacterData }) {
           />
         )}
 
-        {!editing && items.length === 0 && !wondrous.length && (
-          <div
-            style={{
-              color: "var(--ink-mute)",
-              fontStyle: "italic",
-              padding: "6px 0",
-            }}
-          >
-            {T("ccNoPackDetail")}
-          </div>
-        )}
         {(editing || !!items.length) && (
-          <div style={{ marginTop: "8px" }}>
-            <div class="bio-block-h" style={{ marginBottom: "5px" }}>
+          <div style={{ marginTop: "12px" }}>
+            <div class="bio-block-h" style={{ marginBottom: "8px" }}>
               {T("ccBackpack")}
             </div>
+
+            {/* Header solo in edit mode */}
+            {editing && (
+              <div
+                class="weap"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1.35fr 0.55fr 0.45fr 0.75fr auto",
+                  gap: "6px",
+                  fontWeight: "bold",
+                  color: "var(--gold)",
+                  borderBottom: "1px solid var(--border)",
+                  paddingBottom: "6px",
+                  marginBottom: "8px",
+                }}
+              >
+                <div>Nome Oggetto</div>
+                <div>Peso</div>
+                <div>Qtà</div>
+                <div>Posizione</div>
+                <div></div>
+              </div>
+            )}
+
             {items.map((it: any, idx: number) => {
+              const qty = typeof it.quantity === "number" ? it.quantity : 1;
+              const weight = typeof it.weight === "number" ? it.weight : 0;
+              const weightStr = fmtWeight(weight, qty);
+              const loc = it.location ? ` · ${it.location}` : "";
+
               if (editing) {
                 return (
                   <div
                     class="weap"
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1.4fr 0.6fr 0.8fr auto",
+                      gridTemplateColumns: "1.35fr 0.55fr 0.45fr 0.75fr auto",
                       gap: "6px",
                       alignItems: "center",
                     }}
@@ -2748,16 +3189,17 @@ function InventorySection({ data }: { data: CharacterData }) {
                       class="cc-edit-text"
                       type="text"
                       value={it.name ?? ""}
-                      placeholder={T("ccItemNamePh")}
+                      placeholder="Nome oggetto"
                       onInput={(e: any) =>
                         updateItem(idx, { name: e.target.value })
                       }
                     />
                     <input
-                      class="cc-edit-text"
-                      type="text"
+                      class="cc-edit-num"
+                      type="number"
+                      step="0.1"
                       value={it.weight ?? ""}
-                      placeholder={T("ccWeightPh")}
+                      placeholder="0.0"
                       onInput={(e: any) => {
                         const v = e.target.value;
                         updateItem(idx, {
@@ -2766,10 +3208,21 @@ function InventorySection({ data }: { data: CharacterData }) {
                       }}
                     />
                     <input
+                      class="cc-edit-num"
+                      type="number"
+                      min="1"
+                      value={it.quantity ?? 1}
+                      onInput={(e: any) => {
+                        const n = parseInt(e.target.value, 10);
+                        if (Number.isFinite(n))
+                          updateItem(idx, { quantity: Math.max(1, n) });
+                      }}
+                    />
+                    <input
                       class="cc-edit-text"
                       type="text"
                       value={it.location ?? ""}
-                      placeholder={T("ccLocationPh")}
+                      placeholder="Posizione"
                       onInput={(e: any) =>
                         updateItem(idx, { location: e.target.value })
                       }
@@ -2777,46 +3230,89 @@ function InventorySection({ data }: { data: CharacterData }) {
                     <button
                       class="cc-tag-x"
                       onClick={() => removeItem(idx)}
-                      title={T("ccDelete")}
+                      title="Elimina"
                     >
                       ×
                     </button>
                   </div>
                 );
               }
-              // 2026-05-16 — show quantity (from container schema) +
-              // weight + container label. The quantity is the xlsx
-              // 容器 schema's qty cell; we render it inline with the
-              // name as "× N" so each row's count is immediately
-              // visible.
-              const qty =
-                it.quantity != null && it.quantity !== 1
-                  ? ` × ${it.quantity}`
-                  : "";
-              const weightStr =
-                it.weight != null && it.weight !== ""
-                  ? `${it.weight} ${T("ccLbUnit")}`
-                  : "";
-              const loc = it.location ? `· ${it.location}` : "";
-              const meta = [weightStr, loc].filter(Boolean).join(" ");
+
+              // ===================== MODALITÀ VISUALIZZAZIONE =====================
+              const isEditingThisQty = editingQtyIndex === idx;
+
               return (
-                <div class="weap">
-                  <div class="weap-name">{(it.name || "?") + qty}</div>
-                  <div class="weap-atk" style={{ visibility: "hidden" }}>
-                    —
+                <div
+                  class="weap"
+                  style={{ display: "flex", alignItems: "center", gap: "10px" }}
+                >
+                  {/* Quadratino Quantità a sinistra */}
+                  <div
+                    class="qty-box"
+                    onClick={() => handleQuantityChange(idx)}
+                    style={{
+                      width: "35px",
+                      textAlign: "center",
+                      background: "var(--surface-3)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "4px",
+                      padding: isEditingThisQty? "3px" :"4px 8px",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                      userSelect: "none",
+                    }}
+                  >
+                    {isEditingThisQty ? (
+                      <input
+                        class="cc-edit-num"
+                        type="text"
+                        value={tempQty}
+                        autoFocus
+                        onChange={(e) =>
+                          setTempQty(
+                            (e.target as HTMLInputElement)?.value || "",
+                          )
+                        }
+                        onBlur={confirmQuantityChange}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") confirmQuantityChange();
+                          if (e.key === "Escape") {
+                            setEditingQtyIndex(null);
+                            setTempQty("");
+                          }
+                        }}
+                        style={{
+                          width: "30px",
+                          textAlign: "center",
+                        }}
+                      />
+                    ) : (
+                      qty
+                    )}
                   </div>
+
+                  {/* Nome Oggetto */}
+                  <div class="weap-name" style={{ flex: 1 }}>
+                    {it.name || "?"}
+                  </div>
+
+                  {/* Peso */}
                   <div
                     class="weap-dmg"
                     style={{
-                      background: "transparent",
-                      border: "0",
                       color: "var(--ink-dim)",
+                      minWidth: "110px",
+                      textAlign: "right",
                     }}
                   >
-                    {meta}
+                    {weightStr} {getMeasureSystem() === "metric" ? "kg" : "lbs"}
+                    {loc}
                   </div>
+
                   {it.description && (
-                    <div class="weap-props">{it.description}</div>
+                    <div class="weap-props" style={{ marginLeft: "auto" }}>
+                      {it.description}
+                    </div>
                   )}
                 </div>
               );
@@ -2850,6 +3346,8 @@ function App() {
   // 2026-05-14 (#14) — edit-mode flag, toggled from the header.
   const [editing, setEditing] = useState(false);
   const [savingEdits, setSavingEdits] = useState(false);
+  const [isGM, setIsGM] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
   // i18n — mirror `lang` state into the module-level `_lang` at the top
   // of each render (parent renders before children, so T() reads the
   // live value everywhere) and re-render on a language flip.
@@ -2861,6 +3359,47 @@ function App() {
   useEffect(() => onLangChange((l) => setLang((l as Language) ?? "zh")), []);
   const roomId = getQS("room") || "";
   const cardId = getQS("card") || "";
+
+  useEffect(() => {
+    let mounted = true;
+
+    const checkRole = async () => {
+      try {
+        const [role, myId] = await Promise.all([
+          OBR.player.getRole(),
+          OBR.player.getId(),
+        ]);
+
+        const gm = role === "GM";
+        console.log("🔍 IS ROLE →", role, "| GM =", gm, "| myId =", myId);
+
+        if (!mounted) return;
+
+        setIsGM(gm);
+
+        if (gm) {
+          setCanEdit(true);
+        } else {
+          const meta = await OBR.scene.getMetadata();
+          const list = (meta["com.character-cards/list"] as any[]) ?? [];
+          const entry = list.find((c: any) => c.id === cardId);
+          const isOwner =
+            Array.isArray(entry?.owners_id) && entry.owners_id.includes(myId);
+          setCanEdit(isOwner);
+        }
+      } catch (err) {
+        console.error("Failed to get GM/role status", err);
+        // Fallback: prova comunque a dare accesso GM se fallisce
+        setCanEdit(true);
+      }
+    };
+
+    checkRole();
+
+    return () => {
+      mounted = false;
+    };
+  }, [cardId]);
 
   const commitLoadedData = useCallback(
     (normalized: CharacterData, gen: number) => {
@@ -3043,44 +3582,50 @@ function App() {
   // this card's id and calls `patchBubbles` for each, which writes
   // through the upstream-compat key (`health` / `max health` / etc.)
   // that the bubbles renderer already listens to.
-  const onPatch = useCallback(
-    (patch: Partial<CharacterData>) => {
-      setData((prev) => (prev ? safeNormalize({ ...prev, ...patch }) : prev));
-      // Translate `core_stats.hp.* / .ac` deltas into the bubbles patch
-      // shape and push to OBR. Nothing to do if the patch doesn't touch
-      // core_stats — saves a scene-items query on every keystroke that
-      // edits unrelated fields.
-      const cs = (patch as any)?.core_stats;
-      if (!cs || typeof cs !== "object") return;
-      const bubblesPatch: Record<string, unknown> = {};
-      if (cs.hp && typeof cs.hp === "object") {
-        if (typeof cs.hp.current === "number")
-          bubblesPatch["health"] = cs.hp.current;
-        if (typeof cs.hp.max === "number")
-          bubblesPatch["max health"] = cs.hp.max;
-        if (typeof cs.hp.temp === "number")
-          bubblesPatch["temporary health"] = cs.hp.temp;
-      }
-      if (typeof cs.ac === "number") bubblesPatch["armor class"] = cs.ac;
-      if (Object.keys(bubblesPatch).length === 0) return;
-      void (async () => {
-        try {
-          const items = await OBR.scene.items.getItems(
-            (it: any) =>
-              (it.metadata as Record<string, unknown> | undefined)?.[
-                BIND_META_KEY
-              ] === cardId,
-          );
-          await Promise.all(
-            items.map((it) => patchBubbles(it.id, bubblesPatch)),
-          );
-        } catch (e) {
-          console.warn("[cc-fullscreen] bubbles propagate failed", e);
-        }
-      })();
-    },
-    [cardId],
-  );
+  //old on Patch
+  // const onPatch = useCallback(
+  //   (patch: Partial<CharacterData>) => {
+  //     setData((prev) => (prev ? safeNormalize({ ...prev, ...patch }) : prev));
+  //     // Translate `core_stats.hp.* / .ac` deltas into the bubbles patch
+  //     // shape and push to OBR. Nothing to do if the patch doesn't touch
+  //     // core_stats — saves a scene-items query on every keystroke that
+  //     // edits unrelated fields.
+  //     const cs = (patch as any)?.core_stats;
+  //     if (!cs || typeof cs !== "object") return;
+  //     const bubblesPatch: Record<string, unknown> = {};
+  //     if (cs.hp && typeof cs.hp === "object") {
+  //       if (typeof cs.hp.current === "number")
+  //         bubblesPatch["health"] = cs.hp.current;
+  //       if (typeof cs.hp.max === "number")
+  //         bubblesPatch["max health"] = cs.hp.max;
+  //       if (typeof cs.hp.temp === "number")
+  //         bubblesPatch["temporary health"] = cs.hp.temp;
+  //     }
+  //     if (typeof cs.ac === "number") bubblesPatch["armor class"] = cs.ac;
+  //     if (Object.keys(bubblesPatch).length === 0) return;
+  //     void (async () => {
+  //       try {
+  //         const items = await OBR.scene.items.getItems(
+  //           (it: any) =>
+  //             (it.metadata as Record<string, unknown> | undefined)?.[
+  //               BIND_META_KEY
+  //             ] === cardId,
+  //         );
+  //         await Promise.all(
+  //           items.map((it) => patchBubbles(it.id, bubblesPatch)),
+  //         );
+  //       } catch (e) {
+  //         console.warn("[cc-fullscreen] bubbles propagate failed", e);
+  //       }
+  //     })();
+  //   },
+  //   [cardId],
+  // );
+  const onPatch = useCallback((patch: Partial<CharacterData>) => {
+    // Aggiorna solo lo stato locale dell'iframe — nessuna scrittura OBR.
+    setData((prev) => (prev ? safeNormalize({ ...prev, ...patch }) : prev));
+    // Non chiamare patchBubbles qui — lo faremo solo al salvataggio.
+  }, []);
 
   const onExport = useCallback(() => {
     if (!data) return;
@@ -3325,12 +3870,17 @@ function App() {
             cardId: entry.id,
             url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(entry.id)}/`,
           };
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "LOCAL" });
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "REMOTE" });
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+            destination: "LOCAL",
+          });
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+            destination: "REMOTE",
+          });
         } catch {}
         let msg = `✓ ${fileName} → ${T("ccNewCardArrow").replace("{name}", entry.name || parsed?.identity?.display_name || fileName)}`;
         if (entry.render_warning) {
-          msg += "\n" + T("ccRenderWarn").replace("{warn}", entry.render_warning);
+          msg +=
+            "\n" + T("ccRenderWarn").replace("{warn}", entry.render_warning);
         }
         return msg;
       } catch (e: any) {
@@ -3563,8 +4113,11 @@ function App() {
         onImport={onImport}
         onPasteJson={onPasteJson}
         onRefresh={onRefresh}
-        editing={editing}
-        onToggleEditing={() => setEditing((v) => !v)}
+        canEdit={canEdit || isGM}
+        editing={editing && (canEdit || isGM)}
+        onToggleEditing={() => {
+          if (canEdit || isGM) setEditing((v) => !v);
+        }}
         savingEdits={savingEdits}
         onSaveEdits={async () => {
           if (savingEdits || !data) return;
@@ -3574,8 +4127,37 @@ function App() {
             if (!result.startsWith("✓")) {
               window.alert(result);
             }
+            const cs = data.core_stats;
+            if (cs) {
+              const bubblesPatch: Record<string, unknown> = {};
+              const hp = cs.hp || {};
+              if (typeof hp.current === "number")
+                bubblesPatch["health"] = hp.current;
+              if (typeof hp.max === "number")
+                bubblesPatch["max health"] = hp.max;
+              if (typeof hp.temp === "number")
+                bubblesPatch["temporary health"] = hp.temp;
+              if (typeof cs.ac === "number")
+                bubblesPatch["armor class"] = cs.ac;
+              if (Object.keys(bubblesPatch).length > 0) {
+                try {
+                  const items = await OBR.scene.items.getItems(
+                    (it: any) => it.metadata?.[BIND_META_KEY] === cardId,
+                  );
+                  await Promise.all(
+                    items.map((it) => patchBubbles(it.id, bubblesPatch)),
+                  );
+                } catch (e) {
+                  console.warn(
+                    "[cc-fullscreen] bubbles propagate on save failed",
+                    e,
+                  );
+                }
+              }
+            }
           } finally {
             setSavingEdits(false);
+            setEditing(false);
           }
         }}
       />

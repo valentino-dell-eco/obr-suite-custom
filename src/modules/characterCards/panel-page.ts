@@ -90,6 +90,17 @@ function canSeeCard(card: CardEntry, isGM: boolean, playerId: string): boolean {
   return false; // "dm" or unknown
 }
 
+function canEditCard(
+  card: CardEntry,
+  isGM: boolean,
+  playerId: string,
+): boolean {
+  if (isGM) return true;
+  // Il giocatore può modificare solo la propria scheda (confronta per ID se disponibile,
+  // altrimenti non concede accesso — sicuro per default).
+  return Array.isArray(card.owner_ids) && card.owner_ids.includes(playerId);
+}
+
 function nextVisibilityLevel(
   v: CardEntry["visibility"],
 ): CardEntry["visibility"] {
@@ -284,8 +295,12 @@ async function writeCardsToScene(list: CardEntry[]) {
 
 async function refreshFromScene() {
   const fromScene = await readCardsFromScene();
-  const importedInScene = new Set(fromScene.map((c) => c.id).filter((id) => id.startsWith("imported_")));
-  const localImported = cards.filter((c) => c.id.startsWith("imported_") && !importedInScene.has(c.id));
+  const importedInScene = new Set(
+    fromScene.map((c) => c.id).filter((id) => id.startsWith("imported_")),
+  );
+  const localImported = cards.filter(
+    (c) => c.id.startsWith("imported_") && !importedInScene.has(c.id),
+  );
   cards = [...fromScene, ...localImported];
 
   // Con la policy "distruggi e ricrea", non serve pulizia manuale degli
@@ -373,7 +388,9 @@ async function uploadImportedCardToServer(card: CardEntry): Promise<void> {
   }
 
   // Find the cloud button to show spinner feedback
-  const row = document.querySelector<HTMLElement>(`.card[data-id="${card.id}"]`);
+  const row = document.querySelector<HTMLElement>(
+    `.card[data-id="${card.id}"]`,
+  );
   const cloudBtn = row?.querySelector<HTMLButtonElement>(".card-cloud");
   if (cloudBtn) {
     cloudBtn.innerHTML = CLOUD_SPINNER_SVG;
@@ -423,18 +440,26 @@ async function uploadImportedCardToServer(card: CardEntry): Promise<void> {
     }
 
     // Clean up localStorage — data now lives on the server.
-    try { localStorage.removeItem(localKey); } catch {}
+    try {
+      localStorage.removeItem(localKey);
+    } catch {}
 
     await writeCardsToScene(updated);
 
     // Broadcast so other clients refresh their panel list.
     try {
       const payload = { cardId: newEntry.id, url: `${newEntry.url}data.json` };
-      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "LOCAL" });
-      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "REMOTE" });
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+        destination: "LOCAL",
+      });
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+        destination: "REMOTE",
+      });
     } catch {}
 
-    showStatus(`${ICONS.check} Caricata sul server: ${escapeHtml(newEntry.name)}`);
+    showStatus(
+      `${ICONS.check} Caricata sul server: ${escapeHtml(newEntry.name)}`,
+    );
     render();
   } catch (e: any) {
     showError(`Upload fallito: ${e?.message || e}`);
@@ -626,13 +651,20 @@ async function importJsonAsCard(): Promise<void> {
         render();
         showStatus(`${ICONS.check} Importato: ${escapeHtml(entry.name)}`);
         if (r.status! >= 300) {
-          console.warn("[cc-panel] render_warning:", r.body ? await r.text() : "no response body");
+          console.warn(
+            "[cc-panel] render_warning:",
+            r.body ? await r.text() : "no response body",
+          );
         }
         // Broadcast LOCAL+REMOTE così altri client aggiornano la lista.
         try {
           const payload = { cardId: entry.id, url: `${entry.url}data.json` };
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "LOCAL" });
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "REMOTE" });
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+            destination: "LOCAL",
+          });
+          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+            destination: "REMOTE",
+          });
         } catch {}
         await writeCardsToScene(updated);
         return;
@@ -643,7 +675,10 @@ async function importJsonAsCard(): Promise<void> {
         `[cc-panel] create-from-json HTTP ${r.status} — ${errText.slice(0, 120)}. Fallback a localStorage.`,
       );
     } catch (netErr) {
-      console.warn("[cc-panel] create-from-json non raggiungibile, fallback a localStorage:", netErr);
+      console.warn(
+        "[cc-panel] create-from-json non raggiungibile, fallback a localStorage:",
+        netErr,
+      );
     } finally {
       sideEl?.classList.remove("busy");
     }
@@ -904,7 +939,9 @@ async function uploadDirtyCardToServer(card: CardEntry): Promise<void> {
   const stored = localStorage.getItem(dirtyKey);
   if (!stored) return;
 
-  const row = document.querySelector<HTMLElement>(`.card[data-id="${card.id}"]`);
+  const row = document.querySelector<HTMLElement>(
+    `.card[data-id="${card.id}"]`,
+  );
   const cloudBtn = row?.querySelector<HTMLButtonElement>(".card-cloud");
   if (cloudBtn) {
     cloudBtn.innerHTML = CLOUD_SPINNER_SVG;
@@ -932,7 +969,9 @@ async function uploadDirtyCardToServer(card: CardEntry): Promise<void> {
 
     // Successo — rimuovi dirty e aggiorna nuvola a verde
     localStorage.removeItem(dirtyKey);
-    try { localStorage.removeItem(`cc-dirty-ts/${card.id}`); } catch {}
+    try {
+      localStorage.removeItem(`cc-dirty-ts/${card.id}`);
+    } catch {}
     if (cloudBtn) {
       cloudBtn.innerHTML = CLOUD_SYNCED_SVG;
       cloudBtn.className = "card-cloud is-synced";
@@ -944,11 +983,17 @@ async function uploadDirtyCardToServer(card: CardEntry): Promise<void> {
     // Broadcast per aggiornare altri client
     try {
       const payload = { cardId: card.id, url: `${card.url}data.json` };
-      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "LOCAL" });
-      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "REMOTE" });
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+        destination: "LOCAL",
+      });
+      OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+        destination: "REMOTE",
+      });
     } catch {}
 
-    showStatus(`${ICONS.check} ${tt("ccPanelSyncedSuccess")}: ${escapeHtml(card.name)}`);
+    showStatus(
+      `${ICONS.check} ${tt("ccPanelSyncedSuccess")}: ${escapeHtml(card.name)}`,
+    );
   } catch (e: any) {
     showError(`${tt("ccSaveFailSync")}: ${e?.message || e}`);
     // Ripristina nuvola gialla
@@ -957,7 +1002,10 @@ async function uploadDirtyCardToServer(card: CardEntry): Promise<void> {
       cloudBtn.className = "card-cloud is-dirty";
       cloudBtn.style.pointerEvents = "";
       cloudBtn.title = tt("ccPanelDirtyRetry");
-      cloudBtn.onclick = (ev) => { ev.stopPropagation(); void uploadDirtyCardToServer(card); };
+      cloudBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        void uploadDirtyCardToServer(card);
+      };
     }
   }
 }
@@ -1032,12 +1080,12 @@ function render() {
       const isImported = c.id.startsWith("imported_");
       const isDirty = !isImported && !!localStorage.getItem(`cc-dirty/${c.id}`);
       const isSyncedTitle = tt("ccPanelSyncedTitle");
-      const  isDirtyTitle = tt("ccPanelDirtyTitle");
+      const isDirtyTitle = tt("ccPanelDirtyTitle");
       const isImportedTitle = tt("ccPanelLocalOnlyTitle");
       const cloudBtn = document.createElement("button");
-      cloudBtn.className = "card-cloud " + (
-        isImported ? "is-local" : isDirty ? "is-dirty" : "is-synced"
-      );
+      cloudBtn.className =
+        "card-cloud " +
+        (isImported ? "is-local" : isDirty ? "is-dirty" : "is-synced");
       cloudBtn.title = isImported
         ? isImportedTitle
         : isDirty
@@ -1059,7 +1107,10 @@ function render() {
           void uploadDirtyCardToServer(c);
         });
       }
-      card.appendChild(cloudBtn);
+      const canEdit = canEditCard(c, isGM, myPlayerId);
+      if (canEdit) {
+        card.appendChild(cloudBtn);
+      }
       const refresh = document.createElement("button");
       refresh.className = "card-refresh";
       refresh.textContent = "↻";
@@ -1068,7 +1119,9 @@ function render() {
         e.stopPropagation();
         await refreshCardFromPicker(c);
       });
-      card.appendChild(refresh);
+      if (canEdit || isGM) {
+        card.appendChild(refresh);
+      }
 
       const del = document.createElement("button");
       del.className = "card-del";
@@ -1083,7 +1136,9 @@ function render() {
 
       card.appendChild(name);
       card.appendChild(sub);
-      card.appendChild(del);
+      if (canEdit || isGM) {
+        card.appendChild(del);
+      }
       listEl.appendChild(card);
     }
   }
@@ -1165,9 +1220,20 @@ function timeAgo(isoZ: string): string {
     const diff = (Date.now() - ts) / 1000;
     if (diff < 60) return tt("ccPanelJustNow");
     if (lang === "zh") {
-      if (diff < 3600) return tt("ccPanelTimestampMin").replace("{n}", String(Math.floor(diff / 60)));
-      if (diff < 86400) return tt("ccPanelTimestampHour").replace("{n}", String(Math.floor(diff / 3600)));
-      return tt("ccPanelTimestampDay").replace("{n}", String(Math.floor(diff / 86400)));
+      if (diff < 3600)
+        return tt("ccPanelTimestampMin").replace(
+          "{n}",
+          String(Math.floor(diff / 60)),
+        );
+      if (diff < 86400)
+        return tt("ccPanelTimestampHour").replace(
+          "{n}",
+          String(Math.floor(diff / 3600)),
+        );
+      return tt("ccPanelTimestampDay").replace(
+        "{n}",
+        String(Math.floor(diff / 86400)),
+      );
     }
     if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
     if (diff < 86400) return `${Math.floor(diff / 3600)} h ago`;
@@ -1343,9 +1409,11 @@ OBR.onReady(async () => {
         }
 
         const cardName =
-          typeof jsonData?.identity?.display_name === "string" && jsonData.identity.display_name
+          typeof jsonData?.identity?.display_name === "string" &&
+          jsonData.identity.display_name
             ? jsonData.identity.display_name
-            : typeof jsonData?.identity?.character_name === "string" && jsonData.identity.character_name
+            : typeof jsonData?.identity?.character_name === "string" &&
+                jsonData.identity.character_name
               ? jsonData.identity.character_name
               : typeof jsonData.name === "string" && jsonData.name
                 ? jsonData.name
@@ -1375,20 +1443,35 @@ OBR.onReady(async () => {
             render();
             showStatus(`${ICONS.check} Imported: ${escapeHtml(entry.name)}`);
             if (r.status! >= 300) {
-              console.warn("[cc-panel] render_warning:", r.body ? await r.text() : "no response body");
+              console.warn(
+                "[cc-panel] render_warning:",
+                r.body ? await r.text() : "no response body",
+              );
             }
             try {
-              const payload = { cardId: entry.id, url: `${entry.url}data.json` };
-              OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "LOCAL" });
-              OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, { destination: "REMOTE" });
+              const payload = {
+                cardId: entry.id,
+                url: `${entry.url}data.json`,
+              };
+              OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+                destination: "LOCAL",
+              });
+              OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
+                destination: "REMOTE",
+              });
             } catch {}
             await writeCardsToScene(updated);
           } else {
             const errText = await r.text();
-            console.warn(`[cc-panel] create-from-json HTTP ${r.status} — ${errText.slice(0, 120)}. Fallback.`);
+            console.warn(
+              `[cc-panel] create-from-json HTTP ${r.status} — ${errText.slice(0, 120)}. Fallback.`,
+            );
           }
         } catch (netErr) {
-          console.warn("[cc-panel] create-from-json non raggiungibile, fallback:", netErr);
+          console.warn(
+            "[cc-panel] create-from-json non raggiungibile, fallback:",
+            netErr,
+          );
         } finally {
           sideEl?.classList.remove("busy");
         }
@@ -1412,7 +1495,9 @@ OBR.onReady(async () => {
           current = { type: "card", id: newCard.id };
           pasteOverlay.style.display = "none";
           render();
-          showStatus(`${ICONS.check} Imported (locale): ${escapeHtml(cardName)}`);
+          showStatus(
+            `${ICONS.check} Imported (locale): ${escapeHtml(cardName)}`,
+          );
           await writeCardsToScene(updated);
         }
       } catch {
@@ -1425,7 +1510,7 @@ OBR.onReady(async () => {
   // iframe's src with a cache-buster so the new index.html is fetched.
   // Smart versioning: if local dirty version is newer, don't reload yet,
   // and attempt to re-upload instead.
-  OBR.broadcast.onMessage(BC_CARD_UPDATED, (event) => {
+  OBR.broadcast.onMessage(BC_CARD_UPDATED, async (event) => {
     const data = event.data as { cardId?: string; url?: string } | undefined;
     if (!data?.cardId) return;
     // Non ricaricare mai le carte importate — vivono in localStorage
@@ -1434,9 +1519,11 @@ OBR.onReady(async () => {
     // solo per aggiornare il pannello info, non per ricaricare l'iframe.
     if (data.cardId.startsWith("imported_")) return;
     
+    await refreshFromScene();
+
     const card = cards.find((c) => c.id === data.cardId);
     if (!card) return;
-    
+
     // Check smart versioning: compare local dirty timestamp with server
     const dirtyTs = localStorage.getItem(`cc-dirty-ts/${data.cardId}`);
     const isDirty = !!localStorage.getItem(`cc-dirty/${data.cardId}`);
@@ -1449,7 +1536,7 @@ OBR.onReady(async () => {
         return;
       }
     }
-    
+
     const iframe = cardIframes.get(data.cardId);
     if (iframe && card) {
       iframe.src = buildCardIframeSrc(card, true);
@@ -1459,7 +1546,9 @@ OBR.onReady(async () => {
   // Ascolta cc-dirty-changed — quando fullscreen salva localmente per
   // fallback, aggiorna la nuvola nella sidebar senza refreshare tutta la lista.
   OBR.broadcast.onMessage("com.obr-suite/cc-dirty-changed", (event) => {
-    const data = event.data as { cardId?: string; render?: boolean; ts?: string } | undefined;
+    const data = event.data as
+      | { cardId?: string; render?: boolean; ts?: string }
+      | undefined;
     if (!data?.cardId) return;
     const cardId = data.cardId;
     // Se richiesto un re-render completo (es. dopo save fallito dalla
@@ -1470,7 +1559,9 @@ OBR.onReady(async () => {
       return;
     }
     // Altrimenti aggiorna solo il bottone della carta interessata.
-    const row = document.querySelector<HTMLElement>(`.card[data-id="${cardId}"]`);
+    const row = document.querySelector<HTMLElement>(
+      `.card[data-id="${cardId}"]`,
+    );
     if (!row) return;
     const cloudBtn = row.querySelector<HTMLButtonElement>(".card-cloud");
     if (!cloudBtn) return;
@@ -1481,7 +1572,10 @@ OBR.onReady(async () => {
       : tt("ccPanelSyncedSuccess");
     cloudBtn.innerHTML = isDirty ? CLOUD_DIRTY_SVG : CLOUD_SYNCED_SVG;
     cloudBtn.onclick = isDirty
-      ? (e) => { e.stopPropagation(); void uploadDirtyCardToServer(cards.find(c => c.id === cardId)!); }
+      ? (e) => {
+          e.stopPropagation();
+          void uploadDirtyCardToServer(cards.find((c) => c.id === cardId)!);
+        }
       : null;
   });
 
