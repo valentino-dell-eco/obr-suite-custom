@@ -16,6 +16,19 @@ import { reconcileUploadedCardShieldState } from "./xlsx-shield-state";
 import { t } from "../../i18n";
 import { getLocalLang, onLangChange, type Language } from "../../state";
 
+// [CC-FLOW] Module-evaluation marker for the fullscreen iframe document.
+// Compare the timestamp of this log against "[CC-FLOW] index.ts module
+// EVALUATED" in the main extension document's console (open BOTH
+// consoles — they're separate documents/contexts). If this fires but
+// you never see "[CC-FLOW] setupCharacterCards() CALLED" anywhere,
+// the module is loaded but its setup function was never invoked —
+// that's the actual bug, not a timing race.
+console.log(
+  "%c[CC-FLOW] fullscreen-page.tsx module EVALUATED",
+  "color: #fa0; font-weight: bold",
+  { href: location.href, time: new Date().toISOString() },
+);
+
 // i18n — this is a deeply nested Preact tree, so rather than thread a
 // `lang` prop through every section we keep a module-level `_lang` that
 // `T()` reads fresh. The root <App/> mirrors its `lang` state into
@@ -112,13 +125,21 @@ function fmtDistance(ft: number | null | undefined): string {
 function fireNameSearch(q: string): void {
   const trimmed = (q || "").trim();
   if (!trimmed) return;
+
+  if (!OBR.isReady) {
+    console.warn("[fireNameSearch] OBR not ready");
+    return;
+  }
+
   try {
     OBR.broadcast.sendMessage(
       "com.obr-suite/search-query",
       { q: trimmed, autoPin: true },
       { destination: "LOCAL" },
     );
-  } catch {}
+  } catch (e) {
+    console.warn("[fireNameSearch] failed", e);
+  }
 }
 
 // ============================================================
@@ -155,6 +176,12 @@ const SERVER_ORIGIN = "https://obr.dnd.center";
 // every other client viewing the same cardId can re-fetch and stay in
 // sync without a manual refresh.
 const BC_CARD_UPDATED = "com.obr-suite/cc-card-updated";
+
+// 2026-06 — mirrored from panel-page.ts's FULLSCREEN_MODAL_ID. This
+// document is now opened as its own OBR.modal (selectCard in
+// panel-page.ts) rather than a nested <iframe>; the "back to list"
+// button below closes this exact modal id to return to cc-panel.html.
+const FULLSCREEN_MODAL_ID = "com.obr-suite/cc-fullscreen";
 
 // ===== Types ================================================
 interface CharacterData {
@@ -402,8 +429,15 @@ function Header({
   onImport,
   onPasteJson,
   onRefresh,
+  onBackToList,
   editing,
   onToggleEditing,
+  showOwnersDropdown,
+  toggleOwnersDropdown,
+  checkCoreData,
+  setShowOwnersModal,
+  ownersLoading,
+  isGM,
   onSaveEdits,
   savingEdits,
   canEdit,
@@ -414,11 +448,18 @@ function Header({
   onImport: () => void;
   onPasteJson: () => void;
   onRefresh: () => void;
+  onBackToList: () => void;
   editing: boolean;
   onToggleEditing: () => void;
   onSaveEdits: () => void;
   savingEdits: boolean;
   canEdit: boolean;
+  isGM: boolean;
+  showOwnersDropdown: boolean;
+  toggleOwnersDropdown: () => void;
+  checkCoreData: () => Promise<boolean>;
+  setShowOwnersModal: (boolean: any) => void;
+  ownersLoading: boolean;
 }) {
   const id = data.identity || {};
   const cs = data.core_stats || {};
@@ -438,6 +479,26 @@ function Header({
           `${c.name}${c.subclass ? `（${c.subclass}）` : ""}${c.level ? ` Lv${c.level}` : ""}`,
       )
       .join(" / ") || "—";
+
+  // 2026-06 — "back to list" button labels. T("ccBackToList"...) is
+  // the long-term home for these once the central i18n dictionary
+  // (../../i18n, not part of this file) gets the two new keys added.
+  // Until then, this safe fallback avoids ever rendering a raw
+  // "ccBackToList" key string or throwing if t() doesn't recognize it.
+  const backToListLabel = (() => {
+    try {
+      const v = T("ccBackToList" as any);
+      if (v && v !== "ccBackToList") return v;
+    } catch {}
+    return _lang === "zh" ? "返回列表" : "Back to list";
+  })();
+  const backToListTitle = (() => {
+    try {
+      const v = T("ccBackToListTitle" as any);
+      if (v && v !== "ccBackToListTitle") return v;
+    } catch {}
+    return _lang === "zh" ? "返回角色卡列表" : "Return to the card list";
+  })();
 
   const race =
     [id.race?.name, id.race?.subrace].filter(Boolean).join("·") || "—";
@@ -486,6 +547,15 @@ function Header({
         </div>
       </div>
       <div class="cc-head-right">
+        {/* <button
+          class="cc-btn"
+          onClick={onBackToList}
+          title={backToListTitle}
+          style={{ marginRight: "4px" }}
+        >
+          <span class="ic">←</span>
+          {backToListLabel}
+        </button> */}
         <button
           class="cc-btn"
           onClick={toggleMeasure}
@@ -497,6 +567,27 @@ function Header({
         >
           {measureSys === "imperial" ? "🇺🇸 lbs / ft" : "🌍 kg / m"}
         </button>
+        {isGM && (
+          <button
+            onClick={async () => {
+              const success = await checkCoreData();
+              setShowOwnersModal(true); // apri comunque (anche se fallisce)
+            }}
+            class="cc-btn"
+            style={{
+              backgroundColor: "#5c4dff",
+              color: "white",
+              fontWeight: "bold",
+              marginLeft: "8px",
+              marginRight: "8px",
+              border: "2px solid #7c6eff",
+            }}
+            disabled={ownersLoading}
+          >
+            👥 {ownersLoading ? "CARICAMENTO..." : "MANAGE OWNERS"}
+            {showOwnersDropdown ? "▲" : "▼"}
+          </button>
+        )}
         {canEdit && (
           <button
             class={`cc-btn ${editing ? "primary" : ""}`}
@@ -544,18 +635,27 @@ function Header({
             </button>
           )}
         </div>
-        <div class="cc-btn-group">
-          <button class="cc-btn" onClick={onImport} title={T("ccImportTitle")}>
-            {T("ccImportJson")}
-          </button>
-          <button
-            class="cc-btn cc-btn-sub"
-            onClick={onPasteJson}
-            title={T("ccPasteTitle")}
-          >
-            <span class="ic" dangerouslySetInnerHTML={{ __html: ICON_PASTE }} />
-          </button>
-        </div>
+        {canEdit && (
+          <div class="cc-btn-group">
+            <button
+              class="cc-btn"
+              onClick={onImport}
+              title={T("ccImportTitle")}
+            >
+              {T("ccImportJson")}
+            </button>
+            <button
+              class="cc-btn cc-btn-sub"
+              onClick={onPasteJson}
+              title={T("ccPasteTitle")}
+            >
+              <span
+                class="ic"
+                dangerouslySetInnerHTML={{ __html: ICON_PASTE }}
+              />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3256,7 +3356,7 @@ function InventorySection({ data }: { data: CharacterData }) {
                       background: "var(--surface-3)",
                       border: "1px solid var(--border)",
                       borderRadius: "4px",
-                      padding: isEditingThisQty? "3px" :"4px 8px",
+                      padding: isEditingThisQty ? "3px" : "4px 8px",
                       fontWeight: "bold",
                       cursor: "pointer",
                       userSelect: "none",
@@ -3340,90 +3440,177 @@ function safeNormalize(data: any): CharacterData {
 
 // ===== Main app ==============================================
 function App() {
+  const roomId = getQS("room") || "";
+  const cardId = getQS("card") || "";
+
+  const qsMyId = getQS("myId") || "";
+  const qsRole = getQS("role") || "";
+  const qsPlayerName = getQS("playerName") || "";
+  const qsIsGM = qsRole === "GM";
+
   const [data, setData] = useState<CharacterData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("overview");
-  // 2026-05-14 (#14) — edit-mode flag, toggled from the header.
   const [editing, setEditing] = useState(false);
   const [savingEdits, setSavingEdits] = useState(false);
-  const [isGM, setIsGM] = useState(false);
-  const [canEdit, setCanEdit] = useState(false);
-  // i18n — mirror `lang` state into the module-level `_lang` at the top
-  // of each render (parent renders before children, so T() reads the
-  // live value everywhere) and re-render on a language flip.
+  const [isGM, setIsGM] = useState(qsIsGM);
+  const [canEdit, setCanEdit] = useState(qsIsGM);
+
   const [lang, setLang] = useState<Language>(_lang);
   const [, forceRender] = useState(0);
   const loadGenRef = useRef(0);
   const fetchAbortRef = useRef<AbortController | null>(null);
   _lang = lang;
+
   useEffect(() => onLangChange((l) => setLang((l as Language) ?? "zh")), []);
-  const roomId = getQS("room") || "";
-  const cardId = getQS("card") || "";
 
+  const [showOwnersModal, setShowOwnersModal] = useState(false);
+  const [currentOwners, setCurrentOwners] = useState<string[]>([]);
+  const [obrReady, setObrReady] = useState(false);
+  const [showOwnersDropdown, setShowOwnersDropdown] = useState(false);
+
+  const [myId, setMyId] = useState(qsMyId);
+  const [allPlayers, setAllPlayers] = useState<any[]>([]);
+  const [ownersLoading, setOwnersLoading] = useState(false);
+
+  // 2026-06 — receive allPlayers from parent (cc-panel.html) via plain
+  // window.postMessage. OBR broadcast is unusable here (this document
+  // is a nested iframe whose OBR SDK never completes its handshake),
+  // but plain DOM postMessage works fine from any nesting depth.
+  // panel-page.ts calls postPlayersToFullscreenIframe() after its own
+  // OBR.party.getPlayers() resolves (panel-page has a working SDK),
+  // and again whenever OBR.party.onChange fires.
   useEffect(() => {
-    let mounted = true;
-
-    const checkRole = async () => {
-      try {
-        const [role, myId] = await Promise.all([
-          OBR.player.getRole(),
-          OBR.player.getId(),
-        ]);
-
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type !== "cc-players") return;
+      const {
+        players,
+        myId: newMyId,
+        role,
+      } = e.data as {
+        type: string;
+        players: any[];
+        myId: string;
+        role: string;
+      };
+      console.log("[CC-FLOW] ✅ Received cc-players via postMessage:", {
+        count: players?.length,
+        myId: newMyId,
+        role,
+      });
+      if (Array.isArray(players)) setAllPlayers(players);
+      if (newMyId) setMyId(newMyId);
+      if (role) {
         const gm = role === "GM";
-        console.log("🔍 IS ROLE →", role, "| GM =", gm, "| myId =", myId);
-
-        if (!mounted) return;
-
         setIsGM(gm);
+        if (gm) setCanEdit(true);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
 
-        if (gm) {
-          setCanEdit(true);
-        } else {
-          const meta = await OBR.scene.getMetadata();
-          const list = (meta["com.character-cards/list"] as any[]) ?? [];
-          const entry = list.find((c: any) => c.id === cardId);
-          const isOwner =
-            Array.isArray(entry?.owners_id) && entry.owners_id.includes(myId);
-          setCanEdit(isOwner);
+  console.log(
+    "%c[CC-FLOW] App render — current state snapshot",
+    "color: #888",
+    {
+      roomId,
+      cardId,
+      obrReady,
+      myId,
+      isGM,
+      canEdit,
+      allPlayersLength: allPlayers.length,
+    },
+  );
+
+  const toggleOwnersDropdown = () => {
+    setShowOwnersDropdown((v) => !v);
+  };
+
+  // Listener per ricevere core-data dal panel via postMessage
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "cc-core-data-response") {
+        const payload = event.data.payload;
+        console.log(
+          "[cc-fullscreen DEBUG] ✅ Ricevuto core-data via postMessage!",
+          payload,
+        );
+
+        if (payload?.myId) {
+          setMyId(payload.myId);
+          setIsGM(payload.role === "GM");
+          setAllPlayers(Array.isArray(payload.players) ? payload.players : []);
+
+          if (payload.role === "GM") {
+            setCanEdit(true);
+          }
         }
-      } catch (err) {
-        console.error("Failed to get GM/role status", err);
-        // Fallback: prova comunque a dare accesso GM se fallisce
-        setCanEdit(true);
       }
     };
 
-    checkRole();
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
 
-    return () => {
-      mounted = false;
-    };
-  }, [cardId]);
+  // CORE DATA LISTENER — OBR.broadcast is unusable in this nested-iframe
+  // context (OBR.isReady never becomes true here), so this whole mechanism
+  // is now a no-op placeholder. allPlayers/myId/role arrive instead via the
+  // window.addEventListener("message") handler for "cc-players" added above,
+  // forwarded by panel-page.ts's postPlayersToFullscreenIframe(). Keeping
+  // the empty effect avoids larger refactors to effects that depend on obrReady.
+  useEffect(() => {
+    // intentionally empty — data arrives via postMessage, not OBR broadcast
+  }, [obrReady, cardId]);
+
+  const checkOwnership = async (playerId: string) => {
+    // ownership is already resolved from qsIsGM (GM) or will come via
+    // a future cc-players message. Nothing to do here without OBR.scene.
+  };
 
   const commitLoadedData = useCallback(
     (normalized: CharacterData, gen: number) => {
-      if (gen !== loadGenRef.current) {
-        console.log(
-          `[cc-fullscreen] Ignored old commit gen ${gen} (current is ${loadGenRef.current})`,
-        );
-        return;
-      }
-
-      console.log(
-        `[cc-fullscreen] ✅ Committing data to state for card ${cardId} | data exists: ${!!normalized && Object.keys(normalized).length > 0}`,
-      );
-
+      if (gen !== loadGenRef.current) return;
+      console.log(`[cc-fullscreen] Committing data for card ${cardId}`);
       setError(null);
-      setData(normalized); // Forza aggiornamento stato
-
-      // Forza repaint multiplo (a volte Preact è pigro negli iframe)
+      setData(normalized);
       forceRender((x) => x + 1);
-      setTimeout(() => forceRender((x) => x + 1), 10);
-      setTimeout(() => forceRender((x) => x + 1), 50);
     },
     [cardId],
   );
+
+  // checkCoreData: no longer triggers OBR.broadcast (throws "not ready"
+  // in a nested iframe). allPlayers are already populated via postMessage
+  // from panel-page.ts on iframe load. This stub exists only so the
+  // MANAGE OWNERS button's prop signature still compiles.
+  const checkCoreData = async (): Promise<boolean> => {
+    setOwnersLoading(true);
+    console.log(
+      "[cc-fullscreen DEBUG] checkCoreData → usando postMessage verso parent",
+    );
+
+    try {
+      // Richiedi i dati al parent (il panel)
+      window.parent.postMessage(
+        {
+          type: "cc-request-core-data",
+          cardId,
+        },
+        "*",
+      );
+
+      // Aspetta risposta
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      return true;
+    } catch (e) {
+      console.error("[cc-fullscreen] postMessage failed", e);
+      return false;
+    } finally {
+      setOwnersLoading(false);
+    }
+  };
 
   const readLocalCardJson = useCallback((): any | null => {
     if (cardId.startsWith("imported_")) {
@@ -3441,6 +3628,37 @@ function App() {
       return null;
     }
   }, [cardId]);
+
+  const toggleOwner = async (card: any, playerId: string) => {
+    if (!isGM || playerId === myId) return;
+
+    // const meta = await OBR.scene.getMetadata();
+    // let list: any[] = (meta["com.character-cards/list"] as any[]) ?? [];
+    // const cardIndex = list.findIndex((c: any) => c.id === cardId);
+    // if (cardIndex === -1) return;
+
+    if (!Array.isArray(card.owners_id)) card.owners_id = [];
+
+    if (card.owners_id.includes(playerId)) {
+      card.owners_id = card.owners_id.filter((id: string) => id !== playerId);
+    } else {
+      card.owners_id.push(playerId);
+    }
+    console.log("OWNER ADDED", card);
+    
+
+    // list[cardIndex] = card;
+
+    // await OBR.scene.setMetadata({
+    //   ...meta,
+    //   "com.character-cards/list": list,
+    // });
+
+    setCurrentOwners(card.owners_id);
+    // await OBR.broadcast.sendMessage("com.character-cards/owners-updated", {
+    //   cardId,
+    // });
+  };
 
   const loadData = useCallback(async () => {
     const gen = ++loadGenRef.current;
@@ -3461,9 +3679,7 @@ function App() {
       if (json) source = cardId.startsWith("imported_") ? "imported" : "dirty";
 
       if (!json && !cardId.startsWith("imported_")) {
-        console.log(
-          `[cc-fullscreen] No local data → fetching from server for ${cardId}`,
-        );
+        console.log(`[cc-fullscreen] Fetching from server for ${cardId}`);
         const url = `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
         const res = await fetch(url, {
           cache: "no-store",
@@ -3475,13 +3691,9 @@ function App() {
       }
 
       if (gen !== loadGenRef.current) return;
-
       if (!json) throw new Error("No data found");
 
-      console.log(
-        `[cc-fullscreen] Successfully loaded from ${source} for card ${cardId}`,
-      );
-
+      console.log(`[cc-fullscreen] Loaded from ${source} for ${cardId}`);
       const normalized = safeNormalize(json);
       commitLoadedData(normalized || json, gen);
     } catch (e: any) {
@@ -3490,11 +3702,10 @@ function App() {
 
       console.error("[cc-fullscreen] loadData failed", e);
 
-      // Emergency fallback
       try {
         const fallback = readLocalCardJson();
         if (fallback) {
-          console.warn(`[cc-fullscreen] EMERGENCY FALLBACK used for ${cardId}`);
+          console.warn(`[cc-fullscreen] EMERGENCY FALLBACK for ${cardId}`);
           commitLoadedData(safeNormalize(fallback), gen);
           return;
         }
@@ -3508,19 +3719,14 @@ function App() {
     void loadData();
   }, [loadData]);
 
-  // L'iframe delle schede vive nascosto finché non viene selezionata:
-  // visibilitychange / messaggio dal pannello + focus riallineano UI e dati.
   useEffect(() => {
+    if (!obrReady) return;
     const repaint = () => forceRender((x) => x + 1);
     const onVis = () => {
-      if (document.visibilityState === "visible") {
-        forceRender((x) => x + 1);
-      }
+      if (document.visibilityState === "visible") forceRender((x) => x + 1);
     };
     const onMsg = (e: MessageEvent) => {
       if (e.data?.type === "cc-fullscreen-show") {
-        // Se i dati sono già caricati basta un repaint.
-        // Se data è null (es. fetch fallito mentre era nascosto) ricarica.
         forceRender((x) => x + 1);
         void loadData();
       }
@@ -3530,10 +3736,6 @@ function App() {
       (event) => {
         const payload = event.data as { cardId?: string } | undefined;
         if (payload?.cardId && payload.cardId !== cardId) return;
-        // Non ricaricare — applyJsonObject ha già chiamato setData()
-        // con i dati aggiornati. Un reload qui resetterebbe data=null
-        // causando lo spinner infinito.
-        // Forziamo solo un repaint per aggiornare eventuale UI stale.
         forceRender((x) => x + 1);
       },
     );
@@ -3547,84 +3749,23 @@ function App() {
       window.removeEventListener("message", onMsg);
       onDirty();
     };
-  }, [cardId, loadData]);
+  }, [cardId, loadData, obrReady]);
 
-  // Multi-client sync — when another client imports / refreshes this
-  // same card, BC_CARD_UPDATED arrives on REMOTE; we re-fetch
-  // data.json so the open fullscreen panel reflects the change live
-  // (no manual refresh button click).
   useEffect(() => {
-    if (!cardId) return;
-    // Carte importate: non fare mai reload da broadcast — i dati vivono
-    // in localStorage e vengono già aggiornati da applyJsonObject in place.
-    // Un reload via BC_CARD_UPDATED su imported_ causerebbe un re-mount
-    // inutile che resetta data=null e manda lo spinner per sempre.
-    if (cardId.startsWith("imported_")) return;
+    if (!cardId || !obrReady || cardId.startsWith("imported_")) return;
+
     const unsub = OBR.broadcast.onMessage(BC_CARD_UPDATED, (event) => {
       const payload = event.data as { cardId?: string } | undefined;
       if (payload?.cardId !== cardId) return;
-      // cc-dirty locale ha priorità sul server — come info-page.
       if (localStorage.getItem(`cc-dirty/${cardId}`)) return;
       void loadData();
     });
-    return unsub;
-  }, [cardId, loadData]);
 
-  // Patch handler — updates local state AND propagates HP / AC edits
-  // to the bound token(s)' bubbles metadata so the HP-bar overlay on
-  // canvas reflects the change in real time.
-  //
-  // 2026-05-10 fix: previously the fullscreen edit path only updated
-  // local in-iframe state, so the bubbles plugin (which reads OBR
-  // scene metadata) showed stale data — user reported "血条数据错了，
-  // 还在使用 Stat Bubbles 的元数据". The propagation step finds every
-  // token in the scene whose `com.character-cards/boundCardId` equals
-  // this card's id and calls `patchBubbles` for each, which writes
-  // through the upstream-compat key (`health` / `max health` / etc.)
-  // that the bubbles renderer already listens to.
-  //old on Patch
-  // const onPatch = useCallback(
-  //   (patch: Partial<CharacterData>) => {
-  //     setData((prev) => (prev ? safeNormalize({ ...prev, ...patch }) : prev));
-  //     // Translate `core_stats.hp.* / .ac` deltas into the bubbles patch
-  //     // shape and push to OBR. Nothing to do if the patch doesn't touch
-  //     // core_stats — saves a scene-items query on every keystroke that
-  //     // edits unrelated fields.
-  //     const cs = (patch as any)?.core_stats;
-  //     if (!cs || typeof cs !== "object") return;
-  //     const bubblesPatch: Record<string, unknown> = {};
-  //     if (cs.hp && typeof cs.hp === "object") {
-  //       if (typeof cs.hp.current === "number")
-  //         bubblesPatch["health"] = cs.hp.current;
-  //       if (typeof cs.hp.max === "number")
-  //         bubblesPatch["max health"] = cs.hp.max;
-  //       if (typeof cs.hp.temp === "number")
-  //         bubblesPatch["temporary health"] = cs.hp.temp;
-  //     }
-  //     if (typeof cs.ac === "number") bubblesPatch["armor class"] = cs.ac;
-  //     if (Object.keys(bubblesPatch).length === 0) return;
-  //     void (async () => {
-  //       try {
-  //         const items = await OBR.scene.items.getItems(
-  //           (it: any) =>
-  //             (it.metadata as Record<string, unknown> | undefined)?.[
-  //               BIND_META_KEY
-  //             ] === cardId,
-  //         );
-  //         await Promise.all(
-  //           items.map((it) => patchBubbles(it.id, bubblesPatch)),
-  //         );
-  //       } catch (e) {
-  //         console.warn("[cc-fullscreen] bubbles propagate failed", e);
-  //       }
-  //     })();
-  //   },
-  //   [cardId],
-  // );
+    return unsub;
+  }, [cardId, loadData, obrReady]);
+
   const onPatch = useCallback((patch: Partial<CharacterData>) => {
-    // Aggiorna solo lo stato locale dell'iframe — nessuna scrittura OBR.
     setData((prev) => (prev ? safeNormalize({ ...prev, ...patch }) : prev));
-    // Non chiamare patchBubbles qui — lo faremo solo al salvataggio.
   }, []);
 
   const onExport = useCallback(() => {
@@ -3634,14 +3775,8 @@ function App() {
     downloadJson(`${name}-${cardId.slice(0, 6)}.json`, data);
   }, [data, cardId]);
 
-  // 2026-05-15 — refresh handler. ALSO broadcasts BC_CARD_UPDATED so
-  // the small cc-info popover (on this client AND every other client
-  // in the room) drops its cache and re-fetches. Without the
-  // broadcast, the user reported "刷新只刷新大面板，小面板还是旧数据"
-  // — the small panel doesn't know fresh data.json is available.
   const onRefresh = useCallback(async () => {
     await loadData();
-    // Carte importate non hanno server URL — niente broadcast.
     if (cardId.startsWith("imported_")) return;
     try {
       const updatedPayload = {
@@ -3659,12 +3794,18 @@ function App() {
     }
   }, [loadData, roomId, cardId]);
 
-  // 2026-05-14 — copy-to-clipboard variant of export. Same JSON shape
-  // as the file download, just lands in the clipboard so the user can
-  // paste it directly into the paste-import modal on another card /
-  // session / xlsx 主要!AV1 formula etc. Falls back to a
-  // hidden-textarea + document.execCommand path on browsers that
-  // don't expose navigator.clipboard inside an iframe.
+  // const onBackToList = useCallback(async () => {
+  //   try {
+  //     await OBR.modal.close(FULLSCREEN_MODAL_ID);
+  //   } catch (e) {
+  //     console.warn("[cc-fullscreen] onBackToList: modal close failed", e);
+  //   }
+  // }, []);
+  const onBackToList = useCallback(() => {
+    window.parent.postMessage({ type: "cc-back-to-list" }, "*");
+    // Opzionale: chiudi anche il modal se necessario
+  }, []);
+
   const onCopyJson = useCallback(async () => {
     if (!data) return;
     const text = JSON.stringify(data, null, 2);
@@ -3676,8 +3817,6 @@ function App() {
       }
     } catch {}
     if (!ok) {
-      // Fallback: legacy execCommand. Requires a focused element so we
-      // attach a textarea to the DOM briefly.
       const ta = document.createElement("textarea");
       ta.value = text;
       ta.style.position = "fixed";
@@ -3690,8 +3829,6 @@ function App() {
       } catch {}
       document.body.removeChild(ta);
     }
-    // Lightweight toast — reuses the existing alert pattern from
-    // processImportFiles. Could be upgraded to an inline banner.
     if (ok) {
       window.alert(T("ccCopiedAlert").replace("{n}", String(text.length)));
     } else {
@@ -3713,22 +3850,9 @@ function App() {
     inp.click();
   }, [roomId, cardId]);
 
-  // 2026-05-14 — paste-import dialog state. The header's 粘贴 JSON
-  // button toggles `pasteOpen`; the modal contains a textarea and an
-  // Apply button. Apply parses the text, validates the shape, and
-  // routes through the SAME server PUT / broadcast pipeline that
-  // file-import uses (so bound tokens get the new stats propagated
-  // automatically via BC_CARD_UPDATED).
   const [pasteOpen, setPasteOpen] = useState(false);
-  const onPasteJson = useCallback(() => {
-    setPasteOpen(true);
-  }, []);
+  const onPasteJson = useCallback(() => setPasteOpen(true), []);
 
-  // Shared apply path — called by both the file import and the
-  // paste-text modal. `source` is for the result alert message.
-  // Se il PUT al server fallisce, salva in localStorage con chiave
-  // "cc-dirty/<cardId>" e manda un broadcast CC_DIRTY_CHANGED così
-  // panel-page può mostrare la nuvola gialla nella sidebar.
   const applyJsonObject = useCallback(
     async (parsed: any, source: string): Promise<string> => {
       if (
@@ -3740,7 +3864,6 @@ function App() {
       }
       setData(safeNormalize(parsed));
 
-      // Carte importate: persisti solo in localStorage, niente server.
       if (cardId.startsWith("imported_")) {
         try {
           localStorage.setItem(
@@ -3764,8 +3887,6 @@ function App() {
         }
       }
 
-      // Carte server: tenta PUT. Se fallisce, salva localmente come
-      // "dirty" e notifica panel-page tramite broadcast.
       const dirtyKey = `cc-dirty/${cardId}`;
       try {
         const url = `${SERVER_ORIGIN}/api/character/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data`;
@@ -3780,7 +3901,6 @@ function App() {
         clearTimeout(timeout);
         if (!res.ok) {
           const body = await res.text();
-          // Salva localmente come fallback con timestamp
           localStorage.setItem(dirtyKey, JSON.stringify(parsed));
           localStorage.setItem(
             `cc-dirty-ts/${cardId}`,
@@ -3796,7 +3916,6 @@ function App() {
           return `⚠ ${source} ${T("ccSaveFailHttp").replace("{status}", String(res.status)).replace("{body}", body.slice(0, 120))}\n💾 ${T("ccDirtySave")}`;
         }
         const result = await res.json();
-        // Successo: rimuovi eventuale dirty locale
         try {
           localStorage.removeItem(dirtyKey);
         } catch {}
@@ -3827,7 +3946,6 @@ function App() {
           msg += T("ccRenderWarn").replace("{warn}", result.render_warning);
         return msg;
       } catch (e: any) {
-        // Errore di rete (Failed to fetch, timeout, ecc.)
         localStorage.setItem(dirtyKey, JSON.stringify(parsed));
         localStorage.setItem(`cc-dirty-ts/${cardId}`, new Date().toISOString());
         try {
@@ -3843,9 +3961,6 @@ function App() {
     [roomId, cardId],
   );
 
-  // Helper: crea una nuova carta sul server tramite POST /create-from-json
-  // e aggiunge la voce alla scene metadata. Restituisce una stringa
-  // di esito (prefissata ✓ o ✕/⚠) pronta per il summary alert.
   const createCardFromJson = useCallback(
     async (parsed: any, fileName: string): Promise<string> => {
       const text = JSON.stringify(parsed);
@@ -3864,7 +3979,6 @@ function App() {
           return `⚠ ${fileName} ${T("ccSaveFailHttp").replace("{status}", String(res.status)).replace("{body}", body.slice(0, 120))}`;
         }
         const entry = await res.json();
-        // Broadcast so panel-page and other clients update their card list.
         try {
           const payload = {
             cardId: entry.id,
@@ -3878,10 +3992,9 @@ function App() {
           });
         } catch {}
         let msg = `✓ ${fileName} → ${T("ccNewCardArrow").replace("{name}", entry.name || parsed?.identity?.display_name || fileName)}`;
-        if (entry.render_warning) {
+        if (entry.render_warning)
           msg +=
             "\n" + T("ccRenderWarn").replace("{warn}", entry.render_warning);
-        }
         return msg;
       } catch (e: any) {
         return `⚠ ${fileName} ${T("ccSaveFail").replace("{err}", e?.message || String(e))}`;
@@ -3890,15 +4003,6 @@ function App() {
     [roomId],
   );
 
-  // 2026-05-10: multi-file import. Each file is dispatched by
-  // extension:
-  //   .json   → FIRST json: PUT to /data on the current card (legacy
-  //             single-import flow). SUBSEQUENT jsons: POST to
-  //             /create-from-json — each becomes a new card instead
-  //             of being skipped.
-  //   .xlsx   → POST to /upload (creates a new card with the room).
-  //             Multiple xlsx → multiple new cards, sequentially.
-  // The summary alert at the end reports per-file outcomes.
   const processImportFiles = useCallback(
     async (files: File[]) => {
       const summary: string[] = [];
@@ -3911,7 +4015,6 @@ function App() {
             const text = await f.text();
             const parsed = JSON.parse(text);
 
-            // JSON successivi al primo: crea nuova carta invece di skippare.
             if (currentJsonImported) {
               if (
                 !parsed ||
@@ -3960,11 +4063,6 @@ function App() {
               } else {
                 const result = await res.json();
                 try {
-                  // 2026-05-14 — also broadcast LOCAL so the SAME client's
-                  // background module catches this and propagates to bound
-                  // tokens (max HP / AC / dex-mod). Without LOCAL, only
-                  // remote clients see the stat propagation; the importing
-                  // user would still need to re-bind to apply.
                   const updatedPayload = {
                     cardId,
                     url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`,
@@ -3977,11 +4075,10 @@ function App() {
                   });
                 } catch {}
                 summary.push(`✓ ${f.name} → ${result.name || "current card"}`);
-                if (result.render_warning) {
+                if (result.render_warning)
                   summary.push(
                     T("ccRenderWarn").replace("{warn}", result.render_warning),
                   );
-                }
               }
             } catch (e: any) {
               summary.push(
@@ -3995,10 +4092,6 @@ function App() {
             );
           }
         } else if (lower.endsWith(".xlsx")) {
-          // POST /upload — same endpoint as cc-panel's xlsx upload
-          // path. Creates a new card. We don't have the player name
-          // here (it lives in cc-panel state), so use "fullscreen-import"
-          // as the uploader label.
           try {
             const fd = new FormData();
             fd.append("file", f);
@@ -4022,22 +4115,16 @@ function App() {
                   xlsx: f,
                 });
                 if (corrected) {
-                  try {
-                    const reconcilePayload = {
-                      cardId: entry.id,
-                      url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(entry.id)}/`,
-                    };
-                    OBR.broadcast.sendMessage(
-                      BC_CARD_UPDATED,
-                      reconcilePayload,
-                      { destination: "LOCAL" },
-                    );
-                    OBR.broadcast.sendMessage(
-                      BC_CARD_UPDATED,
-                      reconcilePayload,
-                      { destination: "REMOTE" },
-                    );
-                  } catch {}
+                  const reconcilePayload = {
+                    cardId: entry.id,
+                    url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(entry.id)}/`,
+                  };
+                  OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, {
+                    destination: "LOCAL",
+                  });
+                  OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, {
+                    destination: "REMOTE",
+                  });
                 }
               } catch (e: any) {
                 summary.push(
@@ -4059,21 +4146,15 @@ function App() {
       }
 
       window.alert(
-        `${T("ccImportResultHead").replace("{n}", String(files.length))}\n\n${summary.join("\n")}` +
-          `\n\n${T("ccImportResultNote")}`,
+        `${T("ccImportResultHead").replace("{n}", String(files.length))}\n\n${summary.join("\n")}\n\n${T("ccImportResultNote")}`,
       );
     },
     [roomId, cardId],
   );
 
-  // 2026-05-10: drag-drop multi-file import. Drop anywhere on the
-  // fullscreen view to trigger processImportFiles. dragOver suppresses
-  // the default "open file in browser" behaviour.
   useEffect(() => {
     const onDragOver = (e: DragEvent) => {
-      if (e.dataTransfer?.types.includes("Files")) {
-        e.preventDefault();
-      }
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
     };
     const onDrop = async (e: DragEvent) => {
       const files = e.dataTransfer?.files
@@ -4091,12 +4172,48 @@ function App() {
     };
   }, [processImportFiles]);
 
-  // 2026-05-14 (#14 f2) — the no-card states (error / loading) render
-  // a translucent navy panel instead of the solid one, so the OBR
-  // canvas reads through behind it. `cc-translucent` on the surface
-  // div + the body staying transparent (see CSS) achieves the
-  // "same blue, more see-through" look the user asked for. The
-  // loaded panel keeps its solid background for sheet legibility.
+  // === STRONG FIX FOR EMBEDDED IFRAME ===
+  useEffect(() => {
+    const isEmbedded = window.self !== window.top;
+
+    if (isEmbedded) {
+      const handleMessage = (event: MessageEvent) => {
+        if (event.data?.type === "cc-roll-dice") {
+          // Inoltra il roll al parent (il panel o la suite principale)
+          window.parent.postMessage(
+            {
+              type: "cc-roll-dice",
+              payload: event.data.payload,
+              cardId: cardId,
+            },
+            "*",
+          );
+        }
+      };
+
+      window.addEventListener("message", handleMessage);
+      return () => window.removeEventListener("message", handleMessage);
+    }
+  }, [cardId]);
+
+  // Invece di fare direttamente OBR.dice.roll(...) o simile
+  const rollDice = async (diceExpression: string, label: string) => {
+    if (window.self !== window.top) {
+      // Siamo nell'iframe embedded → mandiamo messaggio al parent
+      window.parent.postMessage(
+        {
+          type: "cc-roll-dice",
+          payload: { expression: diceExpression, label },
+        },
+        "*",
+      );
+      return;
+    }
+
+    // Modalità normale (fullscreen)
+    // ... tuo codice originale OBR.dice.roll ...
+  };
+
   if (error) {
     return <div class="cc-error cc-translucent">{error}</div>;
   }
@@ -4113,7 +4230,14 @@ function App() {
         onImport={onImport}
         onPasteJson={onPasteJson}
         onRefresh={onRefresh}
+        onBackToList={onBackToList}
+        showOwnersDropdown={showOwnersDropdown}
+        toggleOwnersDropdown={toggleOwnersDropdown}
+        checkCoreData={checkCoreData}
+        ownersLoading={ownersLoading}
+        setShowOwnersModal={setShowOwnersModal}
         canEdit={canEdit || isGM}
+        isGM={isGM}
         editing={editing && (canEdit || isGM)}
         onToggleEditing={() => {
           if (canEdit || isGM) setEditing((v) => !v);
@@ -4124,9 +4248,7 @@ function App() {
           setSavingEdits(true);
           try {
             const result = await applyJsonObject(data, T("ccSavedEdit"));
-            if (!result.startsWith("✓")) {
-              window.alert(result);
-            }
+            if (!result.startsWith("✓")) window.alert(result);
             const cs = data.core_stats;
             if (cs) {
               const bubblesPatch: Record<string, unknown> = {};
@@ -4165,8 +4287,6 @@ function App() {
         <PasteJsonModal
           onCancel={() => setPasteOpen(false)}
           onApply={async (text) => {
-            // Try parse first; abort the modal close on parse failure so
-            // the user can fix without retyping.
             let parsed: any;
             try {
               parsed = JSON.parse(text);
@@ -4177,7 +4297,6 @@ function App() {
               );
             }
             const result = await applyJsonObject(parsed, T("ccPasteSource"));
-            // Close on success, keep open on warning/error so user sees msg.
             if (result.startsWith("✓")) {
               setPasteOpen(false);
               window.alert(result);
@@ -4188,10 +4307,6 @@ function App() {
         />
       )}
       <StatsBanner data={data} onPatch={onPatch} />
-      {/* 2026-05-15 — top horizontal tab strip for narrow viewports.
-          Hidden via CSS (.cc-tabs-top { display:none }) above the
-          1100 px breakpoint, where the right-sidebar tab list takes
-          over. Both renderers share the same setTab handler. */}
       <div class="cc-tabs cc-tabs-top">
         {TABS.map((tb) => (
           <button
@@ -4203,15 +4318,8 @@ function App() {
           </button>
         ))}
       </div>
-      {/* 2026-05-15 — left main + right vertical-tabs sidebar. The
-          outer cc-body switches to flex-row + overflow:hidden in wide
-          mode so neither the page nor cc-body scroll; only the inner
-          .cc-main and .cc-tabs-side scroll independently. In narrow
-          mode (< 1100 px) the sidebar is hidden via @media and
-          cc-body falls back to its legacy single-column overflow-y
-          behavior so phones / small windows stay usable. */}
       <div class="cc-body">
-        <div class="cc-main">{renderTabSection(tab, data)}</div>
+        <div class="cc-main">{renderTabSection(tab as TabKey, data)}</div>
         <nav class="cc-tabs-side" aria-label={T("ccTabsAria")}>
           {TABS.map((tb) => (
             <button
@@ -4224,6 +4332,98 @@ function App() {
           ))}
         </nav>
       </div>
+      {showOwnersModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.92)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 99999,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "#1e1e1e",
+              padding: "24px",
+              borderRadius: "10px",
+              width: "460px",
+              maxHeight: "85vh",
+              overflowY: "auto",
+              color: "#fff",
+              boxShadow: "0 15px 40px rgba(0,0,0,0.6)",
+            }}
+          >
+            <h3 style={{ margin: "0 0 8px 0" }}>Manage Owners</h3>
+            <p style={{ fontSize: "14px", opacity: 0.8, marginBottom: "20px" }}>
+              Chi può modificare questa Character Card
+            </p>
+
+            <div style={{ marginTop: "12px" }}>
+              {allPlayers.length === 0 ? (
+                <p>
+                  Nessun giocatore trovato. Riprova a chiudere e riaprire la
+                  scheda.
+                </p>
+              ) : (
+                allPlayers.map((player: any) => {
+                  const isCurrentGM = player.id === myId && isGM;
+                  const isChecked =
+                    currentOwners.includes(player.id) || isCurrentGM;
+
+                  return (
+                    <div
+                      key={player.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        padding: "10px 0",
+                        borderBottom: "1px solid #333",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={isCurrentGM}
+                        onChange={() => toggleOwner( data, player.id)}
+                        style={{ marginRight: "12px", transform: "scale(1.3)" }}
+                      />
+                      <span style={{ flex: 1 , color: player.color}}>
+                        {player.name || player.id}
+                        {isCurrentGM && (
+                          <span style={{ opacity: 0.6 }}> (GM)</span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowOwnersModal(false)}
+              style={{
+                marginTop: "24px",
+                width: "100%",
+                padding: "12px",
+                backgroundColor: "#555",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "16px",
+              }}
+            >
+              Chiudi
+            </button>
+          </div>
+        </div>
+      )}
     </EditCtx.Provider>
   );
 }

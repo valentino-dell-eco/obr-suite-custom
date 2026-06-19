@@ -90,17 +90,6 @@ function canSeeCard(card: CardEntry, isGM: boolean, playerId: string): boolean {
   return false; // "dm" or unknown
 }
 
-function canEditCard(
-  card: CardEntry,
-  isGM: boolean,
-  playerId: string,
-): boolean {
-  if (isGM) return true;
-  // Il giocatore può modificare solo la propria scheda (confronta per ID se disponibile,
-  // altrimenti non concede accesso — sicuro per default).
-  return Array.isArray(card.owner_ids) && card.owner_ids.includes(playerId);
-}
-
 function nextVisibilityLevel(
   v: CardEntry["visibility"],
 ): CardEntry["visibility"] {
@@ -138,8 +127,39 @@ let isGM = false;
 let cards: CardEntry[] = [];
 let current: View = { type: "empty" };
 let maximized = false;
-const cardIframes = new Map<string, HTMLIFrameElement>();
+// 2026-06 — party list fetched here (this document's OBR SDK works;
+// cc-fullscreen.html's doesn't, since it's a nested iframe). Forwarded
+// to the active card iframe via plain window.postMessage — see
+// postPlayersToFullscreenIframe below and the matching listener added
+// in fullscreen-page.tsx.
+let allPlayers: any[] = [];
 const resourceIframes = new Map<string, HTMLIFrameElement>();
+
+/** Forward the current allPlayers snapshot to whichever cc-fullscreen
+ *  iframe is currently mounted in .viewer, if any. Safe to call even
+ *  when no card is selected (no-op) or before the iframe has finished
+ *  loading (fullscreen-page.tsx's own listener buffers/ignores until
+ *  it's mounted — see its useEffect for the "cc-players" message). */
+function postPlayersToFullscreenIframe() {
+  if (current.type !== "card") return;
+  const f = viewer?.querySelector<HTMLIFrameElement>(
+    'iframe[data-kind="card"]',
+  );
+  if (!f?.contentWindow) return;
+  try {
+    f.contentWindow.postMessage(
+      {
+        type: "cc-players",
+        myId: myPlayerId,
+        role: isGM ? "GM" : "PLAYER",
+        players: allPlayers,
+      },
+      "*",
+    );
+  } catch (e) {
+    console.warn("[cc-panel] postPlayersToFullscreenIframe failed", e);
+  }
+}
 
 const viewer = document.getElementById("viewer") as HTMLDivElement;
 const listEl = document.getElementById("list") as HTMLDivElement;
@@ -163,21 +183,19 @@ function stateKey(): string {
 
 function saveState() {
   try {
-    let scrollY = 0;
     let activeCardId: string | null = null;
     let activeResource: string | null = null;
     if (current.type === "card") {
       activeCardId = current.id;
-      const f = cardIframes.get(current.id);
-      try {
-        scrollY = f?.contentWindow?.scrollY || 0;
-      } catch {}
+      // scrollY tracking removed — cards no longer live in a nested
+      // iframe inside this document (they're their own OBR.modal now),
+      // so there's nothing here to read scroll position from.
     } else if (current.type === "resource") {
       activeResource = current.slug;
     }
     localStorage.setItem(
       stateKey(),
-      JSON.stringify({ activeCardId, activeResource, scrollY, maximized }),
+      JSON.stringify({ activeCardId, activeResource, maximized }),
     );
   } catch {}
 }
@@ -303,9 +321,10 @@ async function refreshFromScene() {
   );
   cards = [...fromScene, ...localImported];
 
-  // Con la policy "distruggi e ricrea", non serve pulizia manuale degli
-  // iframe — ensureCardIframe li gestisce da solo ad ogni selezione.
-  // Dobbiamo solo controllare se la carta corrente è stata eliminata.
+  // 2026-06 — cards no longer have an iframe in this document (they
+  // open as their own OBR.modal via selectCard), so there's nothing
+  // to clean up here either way. Just check if the current card was
+  // deleted server-side.
   if (current.type === "card") {
     const curId = current.id;
     if (!curId.startsWith("imported_") && !cards.find((c) => c.id === curId)) {
@@ -430,13 +449,6 @@ async function uploadImportedCardToServer(card: CardEntry): Promise<void> {
     cards = updated;
     if (current.type === "card" && current.id === card.id) {
       current = { type: "card", id: newEntry.id };
-    }
-
-    // Move the iframe: create new one for server id, remove old.
-    const oldIframe = cardIframes.get(card.id);
-    if (oldIframe) {
-      oldIframe.remove();
-      cardIframes.delete(card.id);
     }
 
     // Clean up localStorage — data now lives on the server.
@@ -766,10 +778,11 @@ async function refreshCardFromPicker(card: CardEntry): Promise<void> {
     }
     cards = cards.map((c) => (c.id === updated.id ? { ...c, ...updated } : c));
     await writeCardsToScene(cards);
-    const iframe = cardIframes.get(card.id);
-    if (iframe) {
-      iframe.src = buildCardIframeSrc(card, true);
-    }
+    // No iframe to refresh here anymore — cc-fullscreen.html is its own
+    // OBR.modal now. If that card is currently open in its modal, the
+    // BC_CARD_UPDATED broadcast sent just below makes fullscreen-page.tsx
+    // reload its own data via its existing onMessage(BC_CARD_UPDATED)
+    // listener.
     try {
       // 2026-05-14 — LOCAL+REMOTE so this client's background propagates
       // the refresh to bound tokens. Without LOCAL the refresher's own
@@ -797,20 +810,122 @@ async function deleteCard(id: string) {
   const updated = cards.filter((c) => c.id !== id);
   await writeCardsToScene(updated);
   cards = updated;
-  const f = cardIframes.get(id);
-  if (f) {
-    f.remove();
-    cardIframes.delete(id);
+  if (current.type === "card" && current.id === id) {
+    current = { type: "empty" };
+    // The card's own OBR.modal is still open if the user deletes a
+    // card from the sidebar while viewing it — close it too, since
+    // there's nothing valid left for it to show.
+    try {
+      await OBR.modal.close(FULLSCREEN_MODAL_ID);
+    } catch {}
   }
-  if (current.type === "card" && current.id === id) current = { type: "empty" };
   render();
   try {
     await fetch(`${API_BASE}/${roomId}/${id}`, { method: "DELETE" });
   } catch {}
 }
 
+// 2026-06 fix — cc-fullscreen.html used to be embedded as a manual
+// <iframe> inside this very modal's DOM (ensureCardIframe below, now
+// removed). That made it a THIRD-LEVEL iframe (owlbear.rodeo →
+// cc-panel.html → cc-fullscreen.html), and the OBR SDK only performs
+// its postMessage handshake with the immediate window.parent. Since
+// cc-panel.html doesn't relay that handshake, OBR.isReady never
+// became true inside cc-fullscreen.html — every OBR.* call (broadcast,
+// scene.getMetadata, etc.) failed silently or threw "not ready",
+// which broke role/owner detection (isGM/canEdit) entirely.
+//
+// Fix: open cc-fullscreen.html as its own OBR.modal — a true direct
+// child of the OBR document, exactly like this very panel is opened
+// by index.ts. It now renders ON TOP of this panel (full viewport),
+// with a "back to list" button (added in fullscreen-page.tsx) that
+// closes it and returns here. myId/role/playerName are passed via
+// query string for instant, race-free availability — no need to wait
+// on any broadcast round-trip for those three values anymore.
+const FULLSCREEN_MODAL_ID = "com.obr-suite/cc-fullscreen";
+
 function selectCard(id: string) {
+  const card = cards.find((c) => c.id === id);
+  if (!card) return;
+
   current = { type: "card", id };
+  saveState();
+
+  const viewer = document.getElementById("viewer") as HTMLDivElement;
+  if (!viewer) return;
+  // Listener globale per richieste dal fullscreen iframe
+  window.addEventListener("message", (event) => {
+    if (event.data?.type === "cc-request-core-data") {
+      const cardId = event.data.cardId;
+
+      // Recupera i dati attuali (già presenti in index.ts)
+      const coreData = {
+        myId: myPlayerId,
+        role: isGM ? "GM" : "PLAYER",
+        players: allPlayers,
+      };
+
+      // Rispondi all'iframe
+      const iframe = document.querySelector(
+        `iframe[src*="cc-fullscreen.html"]`,
+      ) as HTMLIFrameElement;
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage(
+          {
+            type: "cc-core-data-response",
+            payload: coreData,
+          },
+          "*",
+        );
+      }
+    }
+  });
+
+  viewer.innerHTML = "";
+  viewer.classList.remove("is-empty"); // Rimuove la classe vuota
+  viewer.style.display = "block";
+
+  const iframe = document.createElement("iframe");
+  iframe.src = buildCardIframeSrc(card, true);
+  iframe.dataset.kind = "card";
+  iframe.dataset.id = card.id;
+
+  iframe.style.cssText = `
+    width: 100% !important;
+    height: 100% !important;
+    border: none !important;
+    background: #1c2030 !important;
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    overflow: auto !important;
+    z-index: 1 !important;
+  `;
+  iframe.setAttribute("scrolling", "yes");
+
+  iframe.onload = () => {
+    try {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc) {
+        doc.documentElement.style.cssText =
+          "height:100% !important;width:100% !important;";
+        doc.body.style.cssText =
+          "height:100% !important;width:100% !important;overflow:auto !important;background:#1c2030 !important;margin:0 !important;padding:0 !important;";
+      }
+    } catch (e) {
+      console.warn("[cc-panel] iframe onload fix", e);
+    }
+    // 2026-06 — forward the party list (and current myId/role, in
+    // case those somehow changed since the query string was built)
+    // now that the iframe's document and scripts have finished
+    // loading. fullscreen-page.tsx listens for this exact message
+    // type and updates its allPlayers state from it.
+    postPlayersToFullscreenIframe();
+  };
+
+  viewer.appendChild(iframe);
+  resourceIframes.forEach((f) => (f.style.display = "none"));
+
   render();
 }
 
@@ -819,53 +934,22 @@ function selectResource(slug: string) {
   render();
 }
 
-/** Build the iframe src for a card. v2 (2026-05-03+) loads our own
- *  data-driven Preact renderer (cc-fullscreen.html) which fetches
- *  /characters/<room>/<card>/data.json directly. The legacy Jinja2-
- *  rendered index.html on the server is still served for backward
- *  compat (e.g. raw link sharing) but no longer embedded in the
- *  panel — that lets us iterate on layout / edit / export / import
- *  features without redeploying the server. */
+/** Build the cc-fullscreen.html URL for a card. v3 (2026-06+) — opened
+ *  via OBR.modal.open (see selectCard above) instead of embedded as a
+ *  nested <iframe>, so it's a true direct-child OBR document and the
+ *  SDK's postMessage handshake actually completes inside it. myId /
+ *  role / playerName ride along in the query string — same pattern
+ *  index.ts already uses for cc-panel.html's own URL — so fullscreen
+ *  has them immediately on load with zero broadcast round-trip. */
 function buildCardIframeSrc(card: CardEntry, cacheBust = false): string {
   const params = new URLSearchParams();
   params.set("room", roomId);
   params.set("card", card.id);
+  params.set("myId", myPlayerId);
+  params.set("role", isGM ? "GM" : "PLAYER");
+  params.set("playerName", playerName);
   if (cacheBust) params.set("t", String(Date.now()));
   return `${assetUrl("cc-fullscreen.html")}?${params.toString()}`;
-}
-
-function ensureCardIframe(card: CardEntry): HTMLIFrameElement {
-  // Distruggi sempre l'iframe esistente e ricrealo da zero.
-  // Evita il problema del paint mancato su iframe nascosti (display:none)
-  // e qualsiasi stato stale di Preact tra una selezione e l'altra.
-  const old = cardIframes.get(card.id);
-  if (old) {
-    old.remove();
-    cardIframes.delete(card.id);
-  }
-  // Distruggi anche tutti gli altri iframe di carte — teniamo solo
-  // quello attivo in memoria, come già facciamo per le risorse.
-  for (const [id, f] of cardIframes) {
-    f.remove();
-    cardIframes.delete(id);
-  }
-  const f = document.createElement("iframe");
-  f.src = buildCardIframeSrc(card);
-  f.setAttribute("scrolling", "yes");
-  f.dataset.kind = "card";
-  f.dataset.id = card.id;
-  f.style.display = "none";
-  f.addEventListener("load", () => {
-    try {
-      const st = loadState();
-      if (st.activeCardId === card.id && f.contentWindow) {
-        f.contentWindow.scrollTo({ top: st.scrollY || 0 });
-      }
-    } catch {}
-  });
-  viewer.appendChild(f);
-  cardIframes.set(card.id, f);
-  return f;
 }
 
 // Single-live-iframe policy for external resources.
@@ -1107,10 +1191,7 @@ function render() {
           void uploadDirtyCardToServer(c);
         });
       }
-      const canEdit = canEditCard(c, isGM, myPlayerId);
-      if (canEdit) {
-        card.appendChild(cloudBtn);
-      }
+      card.appendChild(cloudBtn);
       const refresh = document.createElement("button");
       refresh.className = "card-refresh";
       refresh.textContent = "↻";
@@ -1119,9 +1200,7 @@ function render() {
         e.stopPropagation();
         await refreshCardFromPicker(c);
       });
-      if (canEdit || isGM) {
-        card.appendChild(refresh);
-      }
+      card.appendChild(refresh);
 
       const del = document.createElement("button");
       del.className = "card-del";
@@ -1136,9 +1215,7 @@ function render() {
 
       card.appendChild(name);
       card.appendChild(sub);
-      if (canEdit || isGM) {
-        card.appendChild(del);
-      }
+      card.appendChild(del);
       listEl.appendChild(card);
     }
   }
@@ -1153,24 +1230,18 @@ function render() {
     );
   }
 
-  // Viewer: ensure the target iframe exists, then toggle visibility
-  if (curView.type === "card") {
-    const c = cards.find((x) => x.id === curView.id);
-    if (c) ensureCardIframe(c);
-  } else if (curView.type === "resource") {
+  // Viewer: only resource tabs still mount their content here. Cards
+  // open as their own OBR.modal (see selectCard) — there's no card
+  // iframe to ensure/show inside .viewer anymore.
+  if (curView.type === "resource") {
     const def = RESOURCES.find((r) => r.slug === curView.slug);
     if (def) ensureResourceIframe(def);
   }
 
-  // Hide every iframe except the active one
+  // Hide every iframe except the active one (resources only now —
+  // card iframes were removed from .viewer entirely).
   viewer.querySelectorAll<HTMLIFrameElement>("iframe").forEach((f) => {
     let show = false;
-    if (
-      curView.type === "card" &&
-      f.dataset.kind === "card" &&
-      f.dataset.id === curView.id
-    )
-      show = true;
     if (
       curView.type === "resource" &&
       f.dataset.kind === "resource" &&
@@ -1178,14 +1249,15 @@ function render() {
     )
       show = true;
     f.style.display = show ? "block" : "none";
-    if (show && f.dataset.kind === "card") {
-      try {
-        f.contentWindow?.postMessage({ type: "cc-fullscreen-show" }, "*");
-      } catch {}
-    }
   });
 
-  const hasContent = current.type !== "empty";
+  // .viewer's empty-state placeholder ("从右侧选择一张角色卡") only
+  // applies to resources now — a selected card opens in its own modal
+  // on top of this panel instead of filling .viewer, so .viewer stays
+  // visually "empty" even while a card is the active selection. This
+  // is intentional: the modal covers the screen, so there's nothing
+  // for .viewer to show underneath it anyway.
+  const hasContent = current.type === "resource";
   viewer.classList.toggle("is-empty", !hasContent);
   viewer.classList.toggle("has-content", hasContent);
   if (!hasContent) {
@@ -1263,6 +1335,24 @@ OBR.onReady(async () => {
   try {
     isGM = (await OBR.player.getRole()) === "GM";
   } catch {}
+  // 2026-06 — fetch the party list HERE, because this document
+  // (cc-panel.html) is a true direct-child OBR document and its SDK
+  // actually completes the postMessage handshake. cc-fullscreen.html
+  // is loaded as a nested <iframe> inside .viewer for layout reasons
+  // (see selectCard below) — that nesting means ITS OBR SDK never
+  // becomes ready (OBR.isReady stays false forever in there), so it
+  // cannot call OBR.party.getPlayers() itself. Instead we fetch it
+  // here and forward it via plain window.postMessage (not OBR
+  // broadcast — that's the part that doesn't need a completed SDK
+  // handshake) whenever the iframe is (re)created or the party
+  // changes.
+  try {
+    allPlayers = await OBR.party.getPlayers();
+  } catch (e) {
+    console.warn("[cc-panel] OBR.party.getPlayers failed", e);
+  }
+  postPlayersToFullscreenIframe();
+
   // Watch for role / id changes (rare, but happens after disconnect-
   // reconnect or if the DM passes ownership). Re-render the list so
   // the visibility filter follows.
@@ -1279,6 +1369,17 @@ OBR.onReady(async () => {
     }
     if (changed) render();
   });
+  // Keep the forwarded player list live — someone joining/leaving
+  // mid-session should update the Manage Owners dropdown without
+  // requiring the GM to close and reopen the card.
+  try {
+    OBR.party.onChange((players) => {
+      allPlayers = players;
+      postPlayersToFullscreenIframe();
+    });
+  } catch (e) {
+    console.warn("[cc-panel] OBR.party.onChange failed to register", e);
+  }
   // Resource column is visible to ALL players now (not just GM) — with only
   // 不全书 in the list it's lightweight enough to share. Pre-warm it so the
   // page is ready the moment anyone clicks the tab.
@@ -1510,7 +1611,7 @@ OBR.onReady(async () => {
   // iframe's src with a cache-buster so the new index.html is fetched.
   // Smart versioning: if local dirty version is newer, don't reload yet,
   // and attempt to re-upload instead.
-  OBR.broadcast.onMessage(BC_CARD_UPDATED, async (event) => {
+  OBR.broadcast.onMessage(BC_CARD_UPDATED, (event) => {
     const data = event.data as { cardId?: string; url?: string } | undefined;
     if (!data?.cardId) return;
     // Non ricaricare mai le carte importate — vivono in localStorage
@@ -1518,8 +1619,6 @@ OBR.onReady(async () => {
     // BC_CARD_UPDATED per una imported_ viene mandato da applyJsonObject
     // solo per aggiornare il pannello info, non per ricaricare l'iframe.
     if (data.cardId.startsWith("imported_")) return;
-    
-    await refreshFromScene();
 
     const card = cards.find((c) => c.id === data.cardId);
     if (!card) return;
@@ -1537,10 +1636,11 @@ OBR.onReady(async () => {
       }
     }
 
-    const iframe = cardIframes.get(data.cardId);
-    if (iframe && card) {
-      iframe.src = buildCardIframeSrc(card, true);
-    }
+    // 2026-06 fix — no iframe.src to bump anymore: cc-fullscreen.html
+    // is its own OBR.modal now, not a nested iframe in this document.
+    // If the card is currently open, that modal's own
+    // fullscreen-page.tsx already reloads itself via its own
+    // onMessage(BC_CARD_UPDATED) listener — nothing more to do here.
   });
 
   // Ascolta cc-dirty-changed — quando fullscreen salva localmente per
@@ -1639,7 +1739,15 @@ OBR.onReady(async () => {
   OBR.scene.onMetadataChange((meta) => {
     if (SCENE_META_KEY in meta) refreshFromScene();
   });
-
+  // Listener per tornare alla lista dal pulsante "←" nella scheda fullscreen
+  window.addEventListener("message", (e) => {
+    if (e.data?.type === "cc-back-to-list") {
+      current = { type: "empty" };
+      const viewer = document.getElementById("viewer") as HTMLDivElement;
+      if (viewer) viewer.innerHTML = "";
+      render();
+    }
+  });
   // Validate restored activeCardId still exists; otherwise clear
   if (current.type === "card") {
     const curId = current.id;

@@ -2,7 +2,10 @@
 <html lang="zh">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="upgrade-insecure-requests"
+    />
     <title>角色卡面板</title>
     <style>
       * {
@@ -53,24 +56,26 @@
         flex: 1;
         min-width: 0;
         min-height: 0;
-        /* Match the loaded sheet's canvas (cc-fullscreen --bg #1c2030) so the
-     iframe-load gap on first open / card switch / refresh reads as the
-     card color instead of a jarring white flash. */
         background: #1c2030;
         border-radius: 10px;
         overflow: hidden;
         box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
         position: relative;
+        display: block !important;
       }
+
       .viewer iframe {
         border: none;
         width: 100%;
         height: 100%;
-        display: block;
+        display: block !important;
         position: absolute;
         inset: 0;
         background: #1c2030;
+        z-index: 1;
       }
+
+      /* Empty state */
       .viewer .empty-state {
         position: absolute;
         inset: 0;
@@ -86,16 +91,17 @@
         text-align: center;
         padding: 20px;
         gap: 10px;
+        z-index: 0;
       }
-      .viewer.has-content {
-        background: #1c2030;
-      }
+
       .viewer.is-empty .empty-state {
-        display: flex;
+        display: flex !important;
       }
+
       .viewer:not(.is-empty) .empty-state {
-        display: none;
+        display: none !important;
       }
+
       .viewer .empty-state .big {
         font-size: 48px;
         opacity: 0.5;
@@ -339,7 +345,9 @@
         align-items: center;
         justify-content: center;
         opacity: 0;
-        transition: opacity 0.12s, background 0.12s;
+        transition:
+          opacity 0.12s,
+          background 0.12s;
       }
       .card-cloud svg {
         width: 14px;

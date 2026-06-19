@@ -31,8 +31,12 @@ const curEl = document.getElementById("cur") as HTMLDivElement;
 const unbindBtn = document.getElementById("unbind") as HTMLButtonElement;
 
 function escapeHtml(s: string) {
-  return String(s).replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!)
+  return String(s).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ]!,
   );
 }
 
@@ -87,7 +91,9 @@ interface BubblesSeed {
   maxHealth?: number;
   ac?: number;
 }
-async function fetchCardBubblesSeed(cardId: string): Promise<BubblesSeed | null> {
+async function fetchCardBubblesSeed(
+  cardId: string,
+): Promise<BubblesSeed | null> {
   try {
     const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
     const url = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
@@ -119,7 +125,9 @@ interface AutoResource {
   max: number;
   icon?: string;
 }
-async function fetchCardAutoResources(cardId: string): Promise<AutoResource[] | null> {
+async function fetchCardAutoResources(
+  cardId: string,
+): Promise<AutoResource[] | null> {
   try {
     const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
     const url = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
@@ -128,9 +136,12 @@ async function fetchCardAutoResources(cardId: string): Promise<AutoResource[] | 
     const d = await res.json();
     const arr = d?.auto_resources;
     if (!Array.isArray(arr)) return null;
-    return arr.filter((r: any): r is AutoResource =>
-      r && typeof r === "object" && typeof r.name === "string"
-      && typeof r.max === "number"
+    return arr.filter(
+      (r: any): r is AutoResource =>
+        r &&
+        typeof r === "object" &&
+        typeof r.name === "string" &&
+        typeof r.max === "number",
     );
   } catch {
     return null;
@@ -180,19 +191,24 @@ async function bindTo(cardId: string | null) {
         // are visible to everyone by default; the new lock toggle
         // controls combat-gated visibility instead).
         if (bubblesSeed) {
-          const existing = (d.metadata[BUBBLES_META] as Record<string, unknown>)
-            ?? (d.metadata[EXTERNAL_BUBBLES_META] as Record<string, unknown>)
-            ?? {};
+          const existing =
+            (d.metadata[BUBBLES_META] as Record<string, unknown>) ??
+            (d.metadata[EXTERNAL_BUBBLES_META] as Record<string, unknown>) ??
+            {};
           const seed: Record<string, unknown> = { ...existing };
-          if (typeof bubblesSeed.health === "number") seed.health = bubblesSeed.health;
-          if (typeof bubblesSeed.maxHealth === "number") seed["max health"] = bubblesSeed.maxHealth;
-          if (typeof bubblesSeed.ac === "number") seed["armor class"] = bubblesSeed.ac;
+          if (typeof bubblesSeed.health === "number")
+            seed.health = bubblesSeed.health;
+          if (typeof bubblesSeed.maxHealth === "number")
+            seed["max health"] = bubblesSeed.maxHealth;
+          if (typeof bubblesSeed.ac === "number")
+            seed["armor class"] = bubblesSeed.ac;
           if (!("temporary health" in seed)) seed["temporary health"] = 0;
           // Clear legacy GM-only flag from a prior bestiary bind so
           // the new lock toggle (default true) is the active gate.
           delete seed.hide;
           d.metadata[BUBBLES_META] = seed;
-          if (d.metadata[EXTERNAL_BUBBLES_META] != null) d.metadata[EXTERNAL_BUBBLES_META] = seed;
+          if (d.metadata[EXTERNAL_BUBBLES_META] != null)
+            d.metadata[EXTERNAL_BUBBLES_META] = seed;
         }
         // 2026-05-15 — auto-resource merge. Spec: only NAME + MAX is
         // applied; if a resource with the same name already exists
@@ -212,12 +228,17 @@ async function bindTo(cardId: string | null) {
               // exceeds the new max (e.g. multi-class re-level dropped
               // the slot count). Leave the rest of the entry alone.
               existing.max = ar.max;
-              if (typeof existing.current === "number" && existing.current > ar.max) {
+              if (
+                typeof existing.current === "number" &&
+                existing.current > ar.max
+              ) {
                 existing.current = ar.max;
               }
             } else {
               byName.set(ar.name, {
-                id: ar.id || `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+                id:
+                  ar.id ||
+                  `auto-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
                 name: ar.name,
                 type: ar.type || "count",
                 current: typeof ar.current === "number" ? ar.current : ar.max,
@@ -238,12 +259,29 @@ async function bindTo(cardId: string | null) {
         delete d.metadata[INIT_DEXMOD_META];
       }
     });
+    if (cardId) {
+      try {
+        const items = await OBR.scene.items.getItems([itemId]);
+        const token = items[0];
+        const playerId = token?.createdUserId as string | undefined;
+        if (playerId) {
+          await OBR.broadcast.sendMessage("com.character-cards/ensure-owner", {
+            cardId,
+            playerId,
+          });
+        }
+      } catch (e) {
+        console.warn("[character-cards] Auto-owner broadcast failed", e);
+      }
+    }
     // Toast removed per user feedback — actions are visible enough on
-     // the modal that closes itself.
+    // the modal that closes itself.
   } catch (e) {
     console.error("[character-cards] bind failed", e);
   }
-  try { await OBR.modal.close(MODAL_ID); } catch {}
+  try {
+    await OBR.modal.close(MODAL_ID);
+  } catch {}
 }
 
 OBR.onReady(async () => {
@@ -271,5 +309,20 @@ OBR.onReady(async () => {
     el.innerHTML = `<span class="n">${escapeHtml(c.name)}</span><span class="m">${escapeHtml(c.uploader || "")}</span>`;
     el.addEventListener("click", () => bindTo(c.id));
     listEl.appendChild(el);
+  }
+});
+
+OBR.broadcast.onMessage("com.character-cards/ensure-owner", async (event) => {
+  const { cardId, playerId } = event.data as {
+    cardId?: string;
+    playerId?: string;
+  };
+  if (cardId && playerId) {
+    try {
+      await OBR.broadcast.sendMessage(
+        "com.character-cards/ensure-owner-internal",
+        { cardId, playerId },
+      );
+    } catch {}
   }
 });

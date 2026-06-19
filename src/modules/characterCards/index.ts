@@ -12,6 +12,14 @@ import {
   type DragEndPayload,
 } from "../../utils/panelLayout";
 
+// [CC-FLOW] Module-evaluation marker. This fires the instant this file
+// is imported/bundled into a document — BEFORE setupCharacterCards() is
+// ever called. If you don't see this log at all in a given iframe's
+// console (panel, fullscreen, or the main extension/action document),
+// this module isn't loaded there, full stop — no broadcast listener
+// can possibly exist in that context regardless of any other fix.
+console.log("%c[CC-FLOW] index.ts module EVALUATED in this document", "color: #fa0; font-weight: bold", { href: location.href });
+
 // Character-card info popover bbox — RIGHT/BOTTOM anchor. Always
 // returns the expected bbox so the layout editor can render a
 // proxy for it regardless of whether a card is currently bound.
@@ -35,7 +43,9 @@ registerPanelBbox(PANEL_IDS.ccInfo, async () => {
       width: w,
       height: h,
     };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 });
 
 // Character Cards module — migrated from the standalone plugin.
@@ -71,7 +81,8 @@ const ICON_URL = assetUrl("cc-icon.svg");
 const BIND_META = `${PLUGIN_ID}/boundCardId`;
 const SCENE_META_KEY = `${PLUGIN_ID}/list`;
 const BUBBLES_META_KEY = "com.obr-suite/bubbles/data";
-const EXTERNAL_BUBBLES_META_KEY = "com.owlbear-rodeo-bubbles-extension/metadata";
+const EXTERNAL_BUBBLES_META_KEY =
+  "com.owlbear-rodeo-bubbles-extension/metadata";
 const INIT_DEXMOD_META = "com.initiative-tracker/dexMod";
 const AUTO_INFO_KEY = "character-cards/auto-info";
 const TOGGLE_MSG = `${PLUGIN_ID}/auto-info-toggled`;
@@ -128,15 +139,35 @@ let currentInfoItemId: string | null = null;
 // of the long-standing "click the tool twice to reopen" bug.
 const PANEL_OPEN_KEY = "com.obr-suite/cc-panel-open";
 function isPanelOpen(): boolean {
-  try { return localStorage.getItem(PANEL_OPEN_KEY) === "1"; } catch { return false; }
+  try {
+    return localStorage.getItem(PANEL_OPEN_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
-let ccMyId = "";
-let ccRole: "GM" | "PLAYER" = "PLAYER";
+export let ccMyId = "";
+export let ccRole: "GM" | "PLAYER" = "PLAYER";
+export let ccAllPlayers: any[] = [];
+
+// Funzioni getter (sicure)
+export function getMyId(): string {
+  return ccMyId;
+}
+
+export function getMyRole(): "GM" | "PLAYER" {
+  return ccRole;
+}
+
+export function getAllPlayers(): any[] {
+  return [...ccAllPlayers];
+}
 
 function isAutoInfoEnabled(): boolean {
   try {
     return localStorage.getItem(AUTO_INFO_KEY) !== "0";
-  } catch { return true; }
+  } catch {
+    return true;
+  }
 }
 
 // The main panel opens as a SIZED modal (NOT fullScreen), leaving a
@@ -171,29 +202,37 @@ async function openMainPopover() {
         OBR.viewport.getWidth(),
         OBR.viewport.getHeight(),
       ]);
-    } catch { /* viewport read failed — fall back to sane defaults */ }
+    } catch {
+      /* viewport read failed — fall back to sane defaults */
+    }
     // 2026-05-16 — width already shrinks by PANEL_SIDE_GAP * 2 = 128,
     // which is wider than MUI's 64 horizontal margin so the side
     // toolbar stays visible AND the width fits MUI's max. Height
     // needs the MUI_DIALOG_MARGIN subtracted to match Paper's max.
     await OBR.modal.open({
       id: PANEL_MODAL_ID,
-      url: PANEL_URL,
+      url: `${PANEL_URL}?myId=${encodeURIComponent(ccMyId)}&role=${ccRole}`,
       width: Math.max(360, Math.round(vw) - PANEL_SIDE_GAP * 2),
       height: Math.max(240, Math.round(vh) - MUI_DIALOG_MARGIN),
       hideBackdrop: true, // no dark overlay → the side gaps stay interactive
-      hidePaper: true,    // no Material paper background / shadow
+      hidePaper: true, // no Material paper background / shadow
       // disablePointerEvents stays default (false) — panel buttons need clicks
     });
-    try { localStorage.setItem(PANEL_OPEN_KEY, "1"); } catch {}
+    try {
+      localStorage.setItem(PANEL_OPEN_KEY, "1");
+    } catch {}
   } catch (e) {
     console.error("[obr-suite/character-cards] openMainPopover failed", e);
   }
 }
 
 async function closeMainPopover() {
-  try { await OBR.modal.close(PANEL_MODAL_ID); } catch {}
-  try { localStorage.removeItem(PANEL_OPEN_KEY); } catch {}
+  try {
+    await OBR.modal.close(PANEL_MODAL_ID);
+  } catch {}
+  try {
+    localStorage.removeItem(PANEL_OPEN_KEY);
+  } catch {}
 }
 
 async function toggleMainPanel() {
@@ -201,7 +240,11 @@ async function toggleMainPanel() {
   else await openMainPopover();
 }
 
-async function openInfoPopoverFor(cardId: string, roomId: string, itemId: string | null) {
+async function openInfoPopoverFor(
+  cardId: string,
+  roomId: string,
+  itemId: string | null,
+) {
   if (infoPopoverOpen) return;
   currentInfoItemId = itemId;
   try {
@@ -232,7 +275,7 @@ async function openInfoPopoverFor(cardId: string, roomId: string, itemId: string
     await OBR.popover.open({
       id: INFO_POPOVER_ID,
       url: `${INFO_URL}?cardId=${encodeURIComponent(cardId)}&roomId=${encodeURIComponent(
-        roomId
+        roomId,
       )}${itemParam}`,
       width: w,
       height: h,
@@ -253,7 +296,9 @@ async function openInfoPopoverFor(cardId: string, roomId: string, itemId: string
 }
 
 async function closeInfoPopover() {
-  try { await OBR.popover.close(INFO_POPOVER_ID); } catch {}
+  try {
+    await OBR.popover.close(INFO_POPOVER_ID);
+  } catch {}
   infoPopoverOpen = false;
   currentInfoCard = null;
   currentInfoItemId = null;
@@ -268,7 +313,7 @@ async function showInfoFor(cardId: string, itemId: string | null = null) {
       await OBR.broadcast.sendMessage(
         INFO_SHOW_MSG,
         { cardId, roomId: OBR.room.id || "default", itemId },
-        { destination: "LOCAL" }
+        { destination: "LOCAL" },
       );
     } catch {}
     return;
@@ -281,7 +326,7 @@ async function showInfoFor(cardId: string, itemId: string | null = null) {
       await OBR.broadcast.sendMessage(
         INFO_SHOW_MSG,
         { cardId, roomId, itemId },
-        { destination: "LOCAL" }
+        { destination: "LOCAL" },
       );
     } catch {}
   }
@@ -300,7 +345,11 @@ async function hideInfo() {
 
 const LS_CC_INFO_PINNED = "obr-suite/cc-info-pinned";
 function isCcInfoPinned(): boolean {
-  try { return localStorage.getItem(LS_CC_INFO_PINNED) === "1"; } catch { return false; }
+  try {
+    return localStorage.getItem(LS_CC_INFO_PINNED) === "1";
+  } catch {
+    return false;
+  }
 }
 
 async function getSceneCardIds(): Promise<Set<string>> {
@@ -335,10 +384,17 @@ async function handleSelection(selection: string[] | undefined) {
     if (typeof m === "string") boundId = m;
     const createdUserId = (item as any)?.createdUserId;
     if (item && createdUserId === ccMyId) ownsItem = true;
-    if (typeof createdUserId === "string" && createdUserId.length > 0) hasAnyPlayerOwner = true;
+    if (typeof createdUserId === "string" && createdUserId.length > 0)
+      hasAnyPlayerOwner = true;
     // Check bubbles lock state
-    const bubblesMeta = item?.metadata?.[BUBBLES_META_KEY] ?? item?.metadata?.[EXTERNAL_BUBBLES_META_KEY];
-    if (bubblesMeta && typeof bubblesMeta === "object" && "locked" in bubblesMeta) {
+    const bubblesMeta =
+      item?.metadata?.[BUBBLES_META_KEY] ??
+      item?.metadata?.[EXTERNAL_BUBBLES_META_KEY];
+    if (
+      bubblesMeta &&
+      typeof bubblesMeta === "object" &&
+      "locked" in bubblesMeta
+    ) {
       locked = !!bubblesMeta.locked;
     }
   } catch {}
@@ -421,7 +477,8 @@ async function propagateCardRefresh(cardId: string): Promise<void> {
   try {
     const boundTokens = await OBR.scene.items.getItems(
       (it: any) =>
-        (it.metadata as Record<string, unknown> | undefined)?.[BIND_META] === cardId,
+        (it.metadata as Record<string, unknown> | undefined)?.[BIND_META] ===
+        cardId,
     );
     if (boundTokens.length === 0) return;
     const ids = boundTokens.map((it: any) => it.id);
@@ -431,8 +488,12 @@ async function propagateCardRefresh(cardId: string): Promise<void> {
         // exists on the token (suite key takes priority, fall through
         // to legacy Stat-Bubbles external key). Preserves all other
         // bubble fields (current hp, temp hp, hide flag, lock flag).
-        const cur = d.metadata[BUBBLES_META_KEY] as Record<string, unknown> | undefined;
-        const ext = d.metadata[EXTERNAL_BUBBLES_META_KEY] as Record<string, unknown> | undefined;
+        const cur = d.metadata[BUBBLES_META_KEY] as
+          | Record<string, unknown>
+          | undefined;
+        const ext = d.metadata[EXTERNAL_BUBBLES_META_KEY] as
+          | Record<string, unknown>
+          | undefined;
         const existing = cur ?? ext ?? {};
         const next: Record<string, unknown> = { ...existing };
         if (snap.maxHp != null) next["max health"] = snap.maxHp;
@@ -454,20 +515,93 @@ async function propagateCardRefresh(cardId: string): Promise<void> {
 
 export async function setupCharacterCards(): Promise<void> {
   const en = getLocalLang() === "en";
-  try {
-    const p = await OBR.player.getRole();
-    ccRole = (p as "GM" | "PLAYER") || "PLAYER";
-    ccMyId = await OBR.player.getId();
-  } catch {}
+  console.log("%c[CC-FLOW] setupCharacterCards() CALLED — module is initializing", "color: #0f0; font-weight: bold");
 
+  try {
+    const [p, myId, players] = await Promise.all([
+      OBR.player.getRole(),
+      OBR.player.getId(),
+      OBR.party.getPlayers(),
+    ]);
+
+    ccRole = (p as "GM" | "PLAYER") || "PLAYER";
+    ccMyId = myId;
+    ccAllPlayers = players.map((el)=>{return JSON.stringify({id: el.id, playerName: el.name})});
+
+
+    console.log("[CC-FLOW] Initial core data fetched:", {
+      myId: ccMyId,
+      role: ccRole,
+      playersCount: players.length,
+      players: "["+ccAllPlayers.join(",")+"]"
+    });
+
+    // NOTE: this initial broadcast almost never reaches fullscreen-page,
+    // because fullscreen is a separate OBR.modal iframe that typically
+    // hasn't mounted (and registered its onMessage listener) yet at the
+    // moment this module finishes its own startup. It's kept anyway for
+    // any listener that DOES happen to already be up (e.g. panel-page,
+    // if it was open before this ran). The REAL handshake fullscreen
+    // relies on is the request-core-data listener registered below.
+    console.log("[CC-FLOW] Sending initial core-data broadcast (best-effort, destination=LOCAL)");
+    OBR.broadcast.sendMessage(
+      "com.character-cards/core-data",
+      {
+        myId: ccMyId,
+        role: ccRole,
+        players:  "["+ccAllPlayers.join(",")+"]",
+      },
+      { destination: "LOCAL" },
+    );
+  } catch (e) {
+    console.error("[CC-FLOW] Failed to initialize character-cards core data", e);
+  }
+  // 2026-06 fix — fullscreen-page.tsx mounts asynchronously (it's a
+  // separate OBR.modal iframe) and may finish mounting AFTER the
+  // one-shot core-data broadcast above has already fired, in which
+  // case it would never learn its role/id/owner status and every
+  // permission gate (edit/save/import/paste/manage-owners) would stay
+  // closed forever. fullscreen-page sends
+  // "com.character-cards/request-core-data" on mount as a fallback;
+  // this listener answers with a fresh snapshot every time, so late
+  // mounts (and any future re-request) always get a real answer.
+  console.log("[CC-FLOW] Registering request-core-data listener (this is what fullscreen-page actually depends on)");
+  unsubs.push(
+    OBR.broadcast.onMessage(
+      "com.character-cards/request-core-data",
+      async () => {
+        console.log("%c[CC-FLOW] ✅ request-core-data RECEIVED from some iframe — responding now", "color: #0af; font-weight: bold");
+        try {
+          const [role, id, players] = await Promise.all([
+            OBR.player.getRole(),
+            OBR.player.getId(),
+            OBR.party.getPlayers(),
+          ]);
+          ccRole = (role as "GM" | "PLAYER") || "PLAYER";
+          ccMyId = id;
+          ccAllPlayers = players;
+          console.log("[CC-FLOW] Responding with core-data:", { myId: ccMyId, role: ccRole, playersCount: ccAllPlayers.length });
+          OBR.broadcast.sendMessage(
+            "com.character-cards/core-data",
+            { myId: ccMyId, role: ccRole, players: ccAllPlayers },
+            { destination: "LOCAL" },
+          );
+        } catch (e) {
+          console.error(
+            "[CC-FLOW] request-core-data handler failed",
+            e,
+          );
+        }
+      },
+    ),
+  );
   // The main panel opens/closes on broadcast from the cluster button or
   // from the Shift keyboard shortcut registered below.
   unsubs.push(
     OBR.broadcast.onMessage("com.character-cards/panel-open", async () => {
       await openMainPopover();
-    })
+    }),
   );
-
   // 角色卡界面 — a standalone TOOL in OBR's toolbar (its own top-level
   // icon, not an action nested under Select/etc.). `onClick` returns
   // false so the tool is never actually "selected" — the active tool
@@ -497,7 +631,7 @@ export async function setupCharacterCards(): Promise<void> {
   unsubs.push(
     OBR.broadcast.onMessage("com.obr-suite/cc-shortcut-toggle", () => {
       toggleMainPanel();
-    })
+    }),
   );
 
   // Close the panel + info popover if scene unloads.
@@ -507,7 +641,7 @@ export async function setupCharacterCards(): Promise<void> {
         await closeMainPopover();
         await closeInfoPopover();
       }
-    })
+    }),
   );
 
   // Right-click context menu (GM only) to bind a card. Restricted to
@@ -548,8 +682,10 @@ export async function setupCharacterCards(): Promise<void> {
   // Selection-based info popover.
   unsubs.push(
     OBR.player.onChange(async (player) => {
-      try { await handleSelection(player.selection); } catch {}
-    })
+      try {
+        await handleSelection(player.selection);
+      } catch {}
+    }),
   );
   try {
     const sel = await OBR.player.getSelection();
@@ -564,7 +700,7 @@ export async function setupCharacterCards(): Promise<void> {
         const sel = await OBR.player.getSelection();
         await handleSelection(sel);
       } catch {}
-    })
+    }),
   );
 
   // 2026-05-14 — propagate refreshed card stats to bound tokens. Fires
@@ -590,7 +726,7 @@ export async function setupCharacterCards(): Promise<void> {
       if (!("com.character-cards/list" in meta)) return;
       const known = await getSceneCardIds();
       if (!known.has(currentInfoCard)) await hideInfo();
-    })
+    }),
   );
   // 2026-05-13 — debounced items.onChange. Mirror of bestiary/index.ts
   // (see comment there). OBR fires onChange multiple times per
@@ -609,9 +745,37 @@ export async function setupCharacterCards(): Promise<void> {
           await handleSelection(sel);
         } catch {}
       }, 30);
-    })
+    }),
   );
 
+  // Listener per auto-owner dal bind-page
+  unsubs.push(
+    OBR.broadcast.onMessage(
+      "com.character-cards/ensure-owner-internal",
+      async (event) => {
+        const { cardId, playerId } = event.data as {
+          cardId?: string;
+          playerId?: string;
+        };
+        if (cardId && playerId) {
+          await ensureCardOwner(cardId, playerId);
+        }
+      },
+    ),
+  );
+
+  // Listener di sicurezza: controlla periodicamente i token bound
+  unsubs.push(
+    OBR.scene.items.onChange(async (items) => {
+      for (const item of items) {
+        const boundId = item.metadata?.[BIND_META] as string | undefined;
+        const playerId = (item as any)?.createdUserId;
+        if (boundId && playerId) {
+          await ensureCardOwner(boundId, playerId);
+        }
+      }
+    }),
+  );
   // Re-anchor the info popover on browser resize. The popover anchors at
   // bottom-right, so a window resize visibly drifts it. Re-open with the
   // same URL (cardId + itemId) so OBR updates position without reloading
@@ -642,10 +806,57 @@ export async function setupCharacterCards(): Promise<void> {
 }
 
 export async function teardownCharacterCards(): Promise<void> {
-  if (selectionDebounceTimer) { clearTimeout(selectionDebounceTimer); selectionDebounceTimer = null; }
+  if (selectionDebounceTimer) {
+    clearTimeout(selectionDebounceTimer);
+    selectionDebounceTimer = null;
+  }
   await closeMainPopover();
   await closeInfoPopover();
-  try { await OBR.contextMenu.remove(CTX_BIND); } catch {}
-  try { await OBR.tool.remove(CC_TOOL_ID); } catch {}
+  try {
+    await OBR.contextMenu.remove(CTX_BIND);
+  } catch {}
+  try {
+    await OBR.tool.remove(CC_TOOL_ID);
+  } catch {}
   for (const u of unsubs.splice(0)) u();
+}
+
+// function to add playerId into character card's owners_id
+async function ensureCardOwner(
+  cardId: string,
+  playerId: string,
+): Promise<void> {
+  if (!cardId || !playerId) return;
+  if (ccRole !== "GM") return; // Solo il GM può modificare le metadata
+
+  try {
+    const meta = await OBR.scene.getMetadata();
+    let list: any[] = (meta[SCENE_META_KEY] as any[]) ?? [];
+
+    const cardIndex = list.findIndex((c: any) => c.id === cardId);
+    if (cardIndex === -1) return;
+
+    const card = list[cardIndex];
+
+    if (!Array.isArray(card.owners_id)) {
+      card.owners_id = [];
+    }
+
+    if (!card.owners_id.includes(playerId)) {
+      card.owners_id.push(playerId);
+      list[cardIndex] = card;
+
+      await OBR.scene.setMetadata({
+        ...meta,
+        [SCENE_META_KEY]: list,
+      });
+
+      // Notifica panel e fullscreen
+      await OBR.broadcast.sendMessage("com.character-cards/owners-updated", {
+        cardId,
+      });
+    }
+  } catch (e) {
+    console.warn("[character-cards] ensureCardOwner error:", e);
+  }
 }
