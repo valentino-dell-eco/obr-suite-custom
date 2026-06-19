@@ -585,7 +585,7 @@ function Header({
             }}
             disabled={ownersLoading}
           >
-            👥 {ownersLoading ? "CARICAMENTO..." : "MANAGE OWNERS"}
+            👥 {ownersLoading ? "LOADING..." : "MANAGE OWNERS"}
             {showOwnersDropdown ? "▲" : "▼"}
           </button>
         )}
@@ -3576,8 +3576,8 @@ function App() {
       console.log(`[cc-fullscreen] Committing data for card ${cardId}`);
       setError(null);
       setData(normalized);
-      const isOwner = normalized.owners_id?.indexOf(myId)??-1;
-      setCanEdit(isOwner!==-1);      
+      const isOwner = normalized.owners_id?.indexOf(myId) ?? -1;
+      setCanEdit(isOwner !== -1);
       forceRender((x) => x + 1);
     },
     [cardId],
@@ -3648,7 +3648,6 @@ function App() {
       card.owners_id.push(playerId);
     }
     console.log("OWNER ADDED", card);
-    
 
     // list[cardIndex] = card;
 
@@ -4376,8 +4375,8 @@ function App() {
               ) : (
                 allPlayers.map((player: any) => {
                   const isCurrentGM = player.id === myId && isGM;
-                  const isChecked =
-                    currentOwners.includes(player.id) || isCurrentGM;
+                  const isOwner = data.owners_id?.indexOf(player.id) ?? -1;
+                  const isChecked = isOwner !== -1;
 
                   return (
                     <div
@@ -4393,10 +4392,10 @@ function App() {
                         type="checkbox"
                         checked={isChecked}
                         disabled={isCurrentGM}
-                        onChange={() => toggleOwner( data, player.id)}
+                        onChange={() => toggleOwner(data, player.id)}
                         style={{ marginRight: "12px", transform: "scale(1.3)" }}
                       />
-                      <span style={{ flex: 1 , color: player.color}}>
+                      <span style={{ flex: 1, color: player.color }}>
                         {player.name || player.id}
                         {isCurrentGM && (
                           <span style={{ opacity: 0.6 }}> (GM)</span>
