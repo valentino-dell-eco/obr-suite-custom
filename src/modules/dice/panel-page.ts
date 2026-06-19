@@ -74,6 +74,32 @@ function setGlobalDarkRoll(v: boolean): void {
   } catch {}
 }
 
+// Player-side equivalent of 全局暗骰 — "全局密骰" (global secret roll).
+// Same on/off persistence pattern, separate LS key so a player's
+// preference never collides with (or gets overwritten by) the GM's
+// toggle on a client that somehow holds both roles across sessions.
+const LS_GLOBAL_SECRET_ROLL = "obr-suite/dice/global-secret-roll";
+function getGlobalSecretRoll(): boolean {
+  try {
+    return localStorage.getItem(LS_GLOBAL_SECRET_ROLL) === "1";
+  } catch {
+    return false;
+  }
+}
+function setGlobalSecretRoll(v: boolean): void {
+  try {
+    localStorage.setItem(LS_GLOBAL_SECRET_ROLL, v ? "1" : "0");
+  } catch {}
+}
+
+// Whichever global toggle applies to THIS client's role. A GM only
+// ever has 全局暗骰 available; a player only ever has 全局密骰. Reading
+// both and OR-ing them is safe because the other one is always false
+// for a client that never had access to set it.
+function getEffectiveGlobalHidden(): boolean {
+  return getGlobalDarkRoll() || getGlobalSecretRoll();
+}
+
 interface DiceRollPayload {
   itemId: string | null;
   dice: DieResult[];
@@ -87,6 +113,11 @@ interface DiceRollPayload {
   rollId: string;
   ts: number;
   hidden?: boolean;
+  // Set once at broadcast time from the SENDER's own resolved role.
+  // Labelling hint ONLY — a GM's hidden roll renders the "暗骰" tag, a
+  // player's hidden roll renders "密骰". Never consulted for
+  // visibility; that's governed exclusively by `hidden` + `rollerId`.
+  rollerIsGM?: boolean;
   // Layout/animation hints introduced by the new wrappers:
   // - rowStarts: explicit row boundaries for `repeat(N, ...)`. Row i
   //   spans [rowStarts[i], rowStarts[i+1]) (last row goes to end of
@@ -1415,10 +1446,13 @@ function groupCombosByCategory(): Array<{
 }
 
 function renderCombos() {
-  // DM-only 暗骰 button — same gating as the main panel's dark-roll.
+  // Hidden-roll button — GM gets "暗骰" (roll-dark), players get
+  // "密骰" (roll-secret). Same underlying visibility (hidden:true);
+  // only the label + i18n string differs so each role sees the term
+  // that matches their own main-panel button.
   const darkBtn = isDM
     ? `<button class="btn dark-roll combo-dark" data-act="roll-dark" type="button">${tt("diceComboBtnDark")}</button>`
-    : "";
+    : `<button class="btn dark-roll combo-secret" data-act="roll-secret" type="button">${tt("diceComboBtnSecret")}</button>`;
 
   const groups = groupCombosByCategory();
   const hasAny =
@@ -1519,17 +1553,21 @@ function wireCardActions() {
         if (!c) return;
         const act = b.dataset.act;
         if (act === "roll") {
-          // Honour DM's 全局暗骰 toggle on the normal-roll path. The
-          // explicit 暗骰 button below always rolls hidden regardless.
-          rollFromCombo(c.expr, c.name, { hidden: getGlobalDarkRoll() }, b);
+          // Honour whichever global toggle applies to this client's
+          // role (GM's 全局暗骰 or player's 全局密骰). The explicit
+          // 暗骰/密骰 button below always rolls hidden regardless.
+          rollFromCombo(c.expr, c.name, { hidden: getEffectiveGlobalHidden() }, b);
         } else if (act === "roll-dark") {
+          rollFromCombo(c.expr, c.name, { hidden: true }, b);
+        } else if (act === "roll-secret") {
           rollFromCombo(c.expr, c.name, { hidden: true }, b);
         } else if (act === "roll-crit") {
           // 重击 — double dice counts in the combo's saved expression
           // before rolling. Pure pre-roll text transform; the combo's
-          // stored expression isn't mutated. Also honours 全局暗骰.
+          // stored expression isn't mutated. Also honours the
+          // role-appropriate global hidden-roll toggle.
           const critExpr = doubleDiceCounts(c.expr);
-          rollFromCombo(critExpr, c.name, { hidden: getGlobalDarkRoll() }, b);
+          rollFromCombo(critExpr, c.name, { hidden: getEffectiveGlobalHidden() }, b);
         } else if (act === "load") {
           setExpression(c.expr);
           labelText = c.name;
@@ -1869,7 +1907,7 @@ function renderEntrySolo(h: DiceRollPayload): string {
     ? buildRepeatStripHtml(h)
     : `<div class="formula">${buildFormulaInner(h, /* showLabel */ false)}</div>`;
   const darkTag = h.hidden
-    ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>`
+    ? `<span class="dark-tag">${h.rollerIsGM ? tt("diceHistDarkTag") : tt("diceHistSecretTag")}</span>`
     : "";
   const titleText = escapeHtml(h.label || h.rollerName);
   return `
@@ -1904,7 +1942,7 @@ function renderEntryCollective(
   if (hasCrit) cls.push("crit");
   else if (hasFail) cls.push("fail");
   const darkTag = head.hidden
-    ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>`
+    ? `<span class="dark-tag">${head.rollerIsGM ? tt("diceHistDarkTag") : tt("diceHistSecretTag")}</span>`
     : "";
   const collTag = `<span class="coll-tag">${tt("diceHistColl")} ${members.length}</span>`;
   const labelOrName = escapeHtml(head.label || head.rollerName);
@@ -3127,7 +3165,7 @@ async function emitOneRoll(opts: {
 
   const rollId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   myActiveRollIds.add(rollId);
-  
+
   let finalLabel = opts.label.trim();
   if (opts.parsed) {
     const dynamicNote = generateRollNotes(opts.parsed);
@@ -3135,13 +3173,13 @@ async function emitOneRoll(opts: {
       finalLabel = finalLabel ? `${finalLabel} (${dynamicNote})` : dynamicNote;
     }
   }
-  
+
   const payload: DiceRollPayload = {
     itemId: opts.itemId,
     dice: opts.dice,
     winnerIdx: opts.winnerIdx,
     modifier: opts.modifier,
-    label: finalLabel, 
+    label: finalLabel,
     total,
     rollerId,
     rollerName,
@@ -3149,6 +3187,10 @@ async function emitOneRoll(opts: {
     rollId,
     ts: Date.now(),
     hidden: opts.hidden,
+    // Labelling hint only — see DiceRollPayload.rollerIsGM. Set from
+    // THIS client's own resolved role, never from opts, so it can't
+    // be spoofed by a caller forgetting to pass it through.
+    ...(isDM ? { rollerIsGM: true } : {}),
     ...(opts.rowStarts ? { rowStarts: opts.rowStarts } : {}),
     ...(opts.sameHighlight ? { sameHighlight: true } : {}),
     ...(opts.collectiveId ? { collectiveId: opts.collectiveId } : {}),
@@ -3249,11 +3291,16 @@ function buildOneRollDice(parsed: ParsedExpr): BuiltRoll {
   return { dice: allDice, winnerIdx, sameHighlight };
 }
 
-async function performRoll(opts: { hidden: boolean }): Promise<void> {
-  // The button to shake — for the main panel that's btnRoll, for the
-  // dark-roll variant it's btnDarkRoll (visible only to DM).
+async function performRoll(opts: {
+  hidden: boolean;
+}): Promise<void> {
+  // The button to shake — for the main panel that's btnRoll; for the
+  // hidden-roll variant it's whichever of btnDarkRoll (GM) /
+  // btnSecretRoll (player) actually exists and is visible on this
+  // client (the other one is display:none and never the click target).
   const btnSelf = opts.hidden
     ? ((document.getElementById("btnDarkRoll") as HTMLButtonElement | null) ??
+      (document.getElementById("btnSecretRoll") as HTMLButtonElement | null) ??
       btnRoll)
     : btnRoll;
 
@@ -3275,8 +3322,9 @@ async function performRoll(opts: { hidden: boolean }): Promise<void> {
   // Resolve target tokens.
   //   - Normal roll: REQUIRES at least one owned-and-visible selected
   //     token. Empty selection → shake and bail.
-  //   - Dark roll: tokens are optional — DM can dark-roll without any
-  //     selection (anchored at viewport center for them only).
+  //   - Hidden roll (dark/secret): tokens are optional — the roller
+  //     can roll without any selection (anchored at viewport center
+  //     for them only).
   let targetTokens = await getOwnedSelectedTokenIds();
   if (!opts.hidden && targetTokens.length === 0) {
     shakeButtonWithReason(btnSelf, tt("diceShakeNoToken"));
@@ -3318,7 +3366,7 @@ async function performRoll(opts: { hidden: boolean }): Promise<void> {
       rowStarts: built.rowStarts,
       sameHighlight: built.sameHighlight,
       collectiveId,
-      parsed: parsed
+      parsed: parsed,
     });
     sent++;
   }
@@ -3332,25 +3380,11 @@ async function performRoll(opts: { hidden: boolean }): Promise<void> {
     }, ANIM_FALLBACK_MS);
   }
 
-  // Clear the expression + label so the next roll starts fresh
-  // (per spec). The "上一次" button gets the saved expr back if needed.
+  // Clear the expression + label so the next roll starts fresh (per
+  // spec). The "上一次" button gets the saved expr back if needed.
   setExpression("");
   labelText = "";
   labelInput.value = "";
-  const dynamicNote = generateRollNotes(parsed);
-
-  // 2. Unisci la nota alla label inserita dall'utente (evitando duplicati o spazi vuoti)
-  let finalLabel = labelText.trim();
-  if (dynamicNote) {
-    finalLabel = finalLabel ? `${finalLabel} (${dynamicNote})` : dynamicNote;
-  }
-
-  // 3. Modifica l'oggetto del payload (es. rollData / metadata) destinato al broadcast
-  // in modo che salvi finalLabel invece della vecchia labelText statica:
-  const rollPayload = {
-    // ... altri campi del tiro (risultati, dadi, itemId, ecc.) ...
-    label: finalLabel, // o il nome esatto della proprietà che visualizza la stringa a schermo
-  };
 }
 
 // Combos tab roll. Same flow as performRoll — the panel just builds
@@ -3390,8 +3424,9 @@ async function rollFromCombo(
     shakeButtonWithReason(btnSelf, tt("diceShakeNoToken"));
     return;
   }
-  // Dark roll: tokens optional — DM can dark-roll a combo with no
-  // selection (anchored at viewport center on their client only).
+  // Hidden roll (dark/secret): tokens optional — the roller can roll
+  // a combo with no selection (anchored at viewport center on their
+  // client only).
   if (hidden && targetTokens.length === 0) {
     targetTokens = [""];
   }
@@ -3401,7 +3436,7 @@ async function rollFromCombo(
   btnLastRoll.disabled = false;
 
   // Camera focus BEFORE broadcasting (skip when there's no real token
-  // for dark-roll-with-no-selection).
+  // for hidden-roll-with-no-selection).
   const focusIds = targetTokens.filter((id) => id);
   if (focusIds.length) focusCameraOnTokens(focusIds);
 
@@ -3586,9 +3621,10 @@ exprInput.addEventListener("input", () => {
 exprInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
-    // Honour 全局暗骰 — same gate as the btnRoll click handler so
-    // pressing Enter inside the expression input has identical semantics.
-    performRoll({ hidden: getGlobalDarkRoll() });
+    // Honour whichever global toggle applies to this role (GM's
+    // 全局暗骰 or player's 全局密骰) — same gate as the btnRoll click
+    // handler so pressing Enter has identical semantics.
+    performRoll({ hidden: getEffectiveGlobalHidden() });
     return;
   }
   if (e.key === "(" || e.key === "（") {
@@ -3619,14 +3655,15 @@ labelInput.addEventListener("input", () => {
   labelText = labelInput.value;
 });
 
-// Roll button. When the DM has the 全局暗骰 toggle on, the regular
-// 投掷 click also routes through dark-roll. Saves the DM from
-// remembering to click 暗骰 every time during a long stealth section.
+// Roll button. When the GM has 全局暗骰 on, or a player has 全局密骰
+// on, the regular 投掷 click also routes through the hidden-roll
+// path. Saves the roller from remembering to click 暗骰/密骰 every
+// time during a long stealth section.
 btnRoll.addEventListener("click", () => {
-  performRoll({ hidden: getGlobalDarkRoll() });
+  performRoll({ hidden: getEffectiveGlobalHidden() });
 });
 
-// Dark-roll button (DM-only — visibility wired up in OBR.onReady).
+// Dark-roll button (GM-only — visibility wired up in OBR.onReady).
 const btnDarkRoll = document.getElementById(
   "btnDarkRoll",
 ) as HTMLButtonElement | null;
@@ -3634,8 +3671,18 @@ btnDarkRoll?.addEventListener("click", () => {
   performRoll({ hidden: true });
 });
 
-// 2026-05-14 — DM-only "全局暗骰" toggle. Persists to LS_GLOBAL_DARK_ROLL
-// and visually reflects via the .on class so the DM sees current state
+// Secret-roll button (player-only — visibility wired up in
+// OBR.onReady). Same mechanics as the GM's dark-roll button: always
+// hidden regardless of the global toggle's current state.
+const btnSecretRoll = document.getElementById(
+  "btnSecretRoll",
+) as HTMLButtonElement | null;
+btnSecretRoll?.addEventListener("click", () => {
+  performRoll({ hidden: true });
+});
+
+// 2026-05-14 — GM-only "全局暗骰" toggle. Persists to LS_GLOBAL_DARK_ROLL
+// and visually reflects via the .on class so the GM sees current state
 // at a glance. Affects: btnRoll above + each combo card's 投掷 action
 // (data-act="roll") + the combo card's 重击 (also a non-dark roll).
 const btnDarkRollGlobal = document.getElementById(
@@ -3656,6 +3703,27 @@ btnDarkRollGlobal?.addEventListener("click", () => {
   refreshDarkRollGlobalBtn();
 });
 refreshDarkRollGlobalBtn();
+
+// Player-only "全局密骰" toggle — same persistence + UI pattern as
+// the GM's 全局暗骰 above, backed by its own LS key so the two never
+// collide. Affects the same surfaces (btnRoll, combo 投掷, combo 重击)
+// via getEffectiveGlobalHidden().
+const btnSecretRollGlobal = document.getElementById(
+  "btnSecretRollGlobal",
+) as HTMLButtonElement | null;
+function refreshSecretRollGlobalBtn(): void {
+  if (!btnSecretRollGlobal) return;
+  const on = getGlobalSecretRoll();
+  btnSecretRollGlobal.classList.toggle("on", on);
+  btnSecretRollGlobal.textContent = on
+    ? tt("diceBtnSecretRollGlobalOn")
+    : tt("diceBtnSecretRollGlobalOff");
+}
+btnSecretRollGlobal?.addEventListener("click", () => {
+  setGlobalSecretRoll(!getGlobalSecretRoll());
+  refreshSecretRollGlobalBtn();
+});
+refreshSecretRollGlobalBtn();
 
 // 上一次: refill expression with the last successfully-rolled expr.
 // Does NOT auto-roll — user must click 投掷.
@@ -3762,7 +3830,7 @@ OBR.onReady(async () => {
   ) as HTMLButtonElement | null;
   if (btnDark) btnDark.style.display = isDM ? "" : "none";
   // 2026-05-14 — 全局暗骰 toggle visibility mirrors btnDarkRoll. Both
-  // are DM-only; we also refresh the label in case localStorage flipped
+  // are GM-only; we also refresh the label in case localStorage flipped
   // out-of-band (e.g., another panel page in the same client) between
   // initial paint and OBR onReady.
   const btnDarkGlobal = document.getElementById(
@@ -3772,12 +3840,27 @@ OBR.onReady(async () => {
     btnDarkGlobal.style.display = isDM ? "" : "none";
     refreshDarkRollGlobalBtn();
   }
+  // Secret-roll button + its global toggle mirror the dark-roll pair
+  // above, but flipped: visible only to players, hidden for the GM
+  // (who has 暗骰/全局暗骰 instead).
+  const btnSecret = document.getElementById(
+    "btnSecretRoll",
+  ) as HTMLButtonElement | null;
+  if (btnSecret) btnSecret.style.display = isDM ? "none" : "";
+  const btnSecretGlobal = document.getElementById(
+    "btnSecretRollGlobal",
+  ) as HTMLButtonElement | null;
+  if (btnSecretGlobal) {
+    btnSecretGlobal.style.display = isDM ? "none" : "";
+    refreshSecretRollGlobalBtn();
+  }
   // 清空历史 hidden for non-GM (user request 2026-05-08). The wipe is
   // local-only (history is in localStorage), but exposing the button
   // to players invites accidental clears of their own scrollback.
   if (btnClearHist) btnClearHist.style.display = isDM ? "" : "none";
-  // Re-render combos so the per-card 暗骰 button shows up for DM
-  // (initial paint ran before isDM was resolved).
+  // Re-render combos so the per-card 暗骰/密骰 button shows up
+  // correctly for this role (initial paint ran before isDM was
+  // resolved).
   renderCombos();
 
   // Keep the skins tab fresh while it's the one on screen — a skin

@@ -190,10 +190,19 @@ export interface DiceRollPayload {
   rollerColor: string;
   rollId: string;
   ts: number;
-  // Dark roll — DM-only visibility. Sender broadcasts LOCAL-only so
-  // players never receive it; receiver renders it at lower opacity to
-  // visually denote "hidden from players".
+  // Dark roll — GM-and-roller-only visibility. Sender broadcasts
+  // LOCAL-only so other players never receive it; receiver renders it
+  // at lower opacity to visually denote "hidden from the table".
+  // Available to GMs ("dark roll" / 暗骰) AND players ("secret roll" /
+  // 密骰) — the visibility rule is identical for both; only the label
+  // shown in the history differs (see `rollerIsGM`).
   hidden?: boolean;
+  // Set once, at broadcast time, from the SENDER's own resolved role.
+  // Purely a labelling hint for receivers (GM's hidden roll renders
+  // the "暗骰" tag, a player's hidden roll renders "密骰") — it must
+  // NEVER be consulted to decide who can see a roll. Visibility is
+  // governed exclusively by `hidden` + `rollerId`.
+  rollerIsGM?: boolean;
   // Auto-dismiss — the effect modal self-closes shortly after the
   // climax (single-die punch, or final scale-pop in the rush path).
   // Used by initiative rolls so they don't linger on the canvas.
@@ -1104,6 +1113,13 @@ async function handleQuickRoll(req: QuickRollRequest): Promise<void> {
     label: req.label ?? "",
     rollerId,
     hidden: !!req.hidden,
+    // This path's only source of `hidden:true` today is the GM-only
+    // 全局暗骰 toggle (see the gate above) — so a hidden quick-roll is
+    // always a GM dark-roll, never a player secret-roll. If a
+    // player-facing quick-roll path is ever added, it must pass its
+    // own rollerIsGM through QuickRollRequest instead of relying on
+    // this default.
+    rollerIsGM: !!req.hidden,
     collectiveId: req.collectiveId,
   });
 }
@@ -1186,6 +1202,7 @@ function normalizePayload(raw: unknown): DiceRollPayload | null {
     rollId: data.rollId,
     ts: data.ts ?? Date.now(),
     hidden: !!(data as any).hidden,
+    ...(((data as any).rollerIsGM) ? { rollerIsGM: true } : {}),
     ...(((data as any).autoDismiss) ? { autoDismiss: true } : {}),
     ...(Array.isArray((data as any).rowStarts) ? { rowStarts: ((data as any).rowStarts as number[]).filter((n) => Number.isFinite(n)) } : {}),
     ...(((data as any).sameHighlight) ? { sameHighlight: true } : {}),
@@ -1212,6 +1229,11 @@ export async function broadcastDiceRoll(opts: {
   rollerId: string;
   rollerName?: string;
   hidden?: boolean;
+  // Labelling hint only (see DiceRollPayload.rollerIsGM) — never read
+  // for visibility decisions. Callers that know the sender's role
+  // (e.g. the dice panel) should pass it through so a player's hidden
+  // roll renders the "密骰" tag instead of "暗骰" in the history.
+  rollerIsGM?: boolean;
   // If provided, this rollId is used instead of an auto-generated one.
   // Initiative passes a deterministic id so it can match BC_DICE_FADE_START.
   rollId?: string;
@@ -1269,6 +1291,7 @@ export async function broadcastDiceRoll(opts: {
     rollId,
     ts: Date.now(),
     hidden: !!opts.hidden,
+    ...(opts.rollerIsGM ? { rollerIsGM: true } : {}),
     ...(opts.autoDismiss ? { autoDismiss: true } : {}),
     ...(opts.collectiveId ? { collectiveId: opts.collectiveId } : {}),
   };
