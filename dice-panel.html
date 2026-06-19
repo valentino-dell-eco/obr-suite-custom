@@ -532,6 +532,16 @@ html,body{
   background:linear-gradient(180deg, rgba(95,50,140,0.6), rgba(60,30,95,0.7));
   color:#ddc0f0;
 }
+.combo-actions .combo-secret{
+  flex:1;
+  background:linear-gradient(180deg, rgba(80,40,120,0.45), rgba(50,25,80,0.55));
+  border-color:rgba(155,89,182,0.45);
+  color:#cda9e8;font-weight:700;letter-spacing:0.3px;
+}
+.combo-actions .combo-secret:hover{
+  background:linear-gradient(180deg, rgba(95,50,140,0.6), rgba(60,30,95,0.7));
+  color:#ddc0f0;
+}
 /* Per-card 重击 button — amber, same shape as 投掷 / 暗骰. Doubles
    dice counts in the combo's saved expression at roll-time only;
    stored expression isn't mutated. */
@@ -1222,6 +1232,14 @@ html,body{
         <!-- 2026-05-14: 全局暗骰 toggle. Same DM-only gating as btnDarkRoll. -->
         <button class="btn dark-roll-global" id="btnDarkRollGlobal" type="button"
                 data-i18n-title="diceBtnDarkRollGlobalTitle"
+                title="开启后，所有普通投掷都会自动变为暗骰。仅 DM 可见。"
+                style="display:none">全局暗骰：关</button>
+      </div>
+      <div class="dark-roll-row" id="secretRollRow" style="display:flex; gap:6px;">
+        <button class="btn dark-roll" id="secretRollRow" type="button" data-i18n="diceBtnSecretRoll" style="display:none">暗骰</button>
+        <!-- 2026-05-14: 全局暗骰 toggle. Same DM-only gating as btnDarkRoll. -->
+        <button class="btn dark-roll-global" id="btnSecretRollGlobal" type="button"
+                data-i18n-title="diceBtnSecretRollGlobalTitle"
                 title="开启后，所有普通投掷都会自动变为暗骰。仅 DM 可见。"
                 style="display:none">全局暗骰：关</button>
       </div>

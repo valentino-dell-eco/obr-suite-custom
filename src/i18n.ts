@@ -201,7 +201,7 @@ const TR: Dict = {
   searchDay: { zh: "天", en: "day" },
   searchRestUsage: { zh: "次", en: "times" },
   searchSpellSlots: { zh: "个法术位", en: "spell slots" },
-  searchWeaponProperties:{zh: "属性", en: "Properties"},
+  searchWeaponProperties: { zh: "属性", en: "Properties" },
   searchSecondDamage: { zh: "双手", en: "Second Damage" },
   searchRange: { zh: "射程", en: "Range" },
   searchACBonus: { zh: "AC加值", en: "AC Bonus" },
@@ -358,6 +358,13 @@ const TR: Dict = {
   diceBtnDarkRollGlobalTitle: {
     zh: "开启后，所有普通投掷都会自动变为暗骰（包括组合面板的投掷按钮）。仅 DM 可见。",
     en: "When ON, all normal rolls (including combo panel roll buttons) are auto-treated as Dark Rolls. DM only.",
+  },
+  diceBtnSecretRoll: { zh: "暗骰", en: "Secret Roll" },
+  diceBtnSecretRollGlobalOn: { zh: "全局暗骰：开", en: "Global Secret: ON" },
+  diceBtnSecretRollGlobalOff: { zh: "全局暗骰：关", en: "Global Secret: OFF" },
+  diceBtnSecretRollGlobalTitle: {
+    zh: "开启后，所有普通投掷都会自动变为暗骰（包括组合面板的投掷按钮）。仅 DM 可见。",
+    en: "When ON, all normal rolls (including combo panel roll buttons) are auto-treated as Secret Rolls. DM and YOU only.",
   },
   diceBtnForceClr: {
     zh: "⚠ 强制结束(若动画卡住)",
