@@ -2961,74 +2961,65 @@ async function getOwnedSelectedTokenIds(): Promise<string[]> {
   try {
     const sel = await OBR.player.getSelection();
     const myId = await OBR.player.getId();
-    if (sel && sel.length) {
+    const isGm = isDM;
+
+    if (sel && sel.length > 0) {
       const items = await OBR.scene.items.getItems(sel);
-      const filtered = items
-        .filter((it: any) => it.visible && (isDM || it.createdUserId === myId))
-        .map((it: any) => it.id);
-      if (filtered.length) return filtered;
+      const valid = items.filter((it: any) => 
+        it.visible && (isGm || it.createdUserId === myId || !it.createdUserId)
+      );
+      if (valid.length > 0) return valid.map((it: any) => it.id);
     }
-    // Player auto-target with multi-owner disambiguation:
-    //   1 owned          → roll on that one (always)
-    //   N owned, 1 has cc → roll on the cc-bound one (the user's
-    //                       "main" character; the others are e.g.
-    //                       summons / familiars without sheets)
-    //   N owned, 0 has cc → no auto-target → empty array → caller
-    //                       shows the "请选中角色" warning
-    //   N owned, ≥2 cc    → ambiguous → same warning
-    if (!isDM) {
-      const items = await OBR.scene.items.getItems(
+
+    if (!isGm) {
+      const myItems = await OBR.scene.items.getItems(
         (it: any) =>
           it.type === "IMAGE" &&
           (it.layer === "CHARACTER" || it.layer === "MOUNT") &&
           it.visible &&
-          it.createdUserId === myId,
+          (it.createdUserId === myId || !it.createdUserId)
       );
-      if (items.length === 1) return [items[0].id];
-      if (items.length > 1) {
-        const carded = items.filter(hasBoundCard);
-        if (carded.length === 1) return [carded[0].id];
-        // Multiple carded or zero carded → ambiguous, force manual
-        // selection.
-      }
-      return [];
+      if (myItems.length === 1) return [myItems[0].id];
+
+      const carded = myItems.filter((it: any) => {
+        const meta = it.metadata || {};
+        return meta["com.character-cards/boundCardId"];
+      });
+      if (carded.length === 1) return [carded[0].id];
     }
-    // DM auto-target: pick the character / mount whose CENTER is
-    // closest to the screen center (the dice-panel crosshair marks
-    // that exact point). Caller will then `focusCameraOnTokens` to
-    // pan the camera over the picked token before the roll fires.
-    const candidates = await OBR.scene.items.getItems(
-      (it: any) =>
-        it.type === "IMAGE" &&
-        (it.layer === "CHARACTER" || it.layer === "MOUNT") &&
-        it.visible,
-    );
-    if (!candidates.length) return [];
-    let bestId: string | null = null;
-    let bestD2 = Infinity;
-    try {
-      const [vw, vh] = await Promise.all([
-        OBR.viewport.getWidth(),
-        OBR.viewport.getHeight(),
-      ]);
-      const cx = vw / 2;
-      const cy = vh / 2;
+
+    if (isGm) {
+      const candidates = await OBR.scene.items.getItems(
+        (it: any) =>
+          it.type === "IMAGE" &&
+          (it.layer === "CHARACTER" || it.layer === "MOUNT") &&
+          it.visible
+      );
+      if (!candidates.length) return [];
+
+      let bestId: string | null = null;
+      let bestD2 = Infinity;
+      const [vw, vh] = await Promise.all([OBR.viewport.getWidth(), OBR.viewport.getHeight()]);
+      const cx = vw / 2, cy = vh / 2;
+
       for (const it of candidates) {
         const p = (it as any).position;
         if (!p) continue;
         const sp = await OBR.viewport.transformPoint(p);
-        const dx = sp.x - cx;
-        const dy = sp.y - cy;
-        const d2 = dx * dx + dy * dy;
+        const d2 = (sp.x - cx)**2 + (sp.y - cy)**2;
         if (d2 < bestD2) {
           bestD2 = d2;
-          bestId = (it as any).id ?? null;
+          bestId = it.id;
         }
       }
-    } catch {}
-    return bestId ? [bestId] : [];
-  } catch {}
-  return [];
+      return bestId ? [bestId] : [];
+    }
+
+    return [];
+  } catch (e) {
+    console.error("[dice] getOwnedSelectedTokenIds failed", e);
+    return [];
+  }
 }
 
 // Camera focus before a roll fires. Single target: keep the user's
@@ -3143,19 +3134,15 @@ async function emitOneRoll(opts: {
   rowStarts?: number[];
   sameHighlight?: boolean;
   collectiveId?: string;
-  parsed?: ParsedExpr; // ← importante
+  parsed?: ParsedExpr;
 }): Promise<void> {
   if (!opts.dice.length) return;
 
   const kept = opts.dice.filter((d) => !d.loser);
-  const baseTotal = kept.reduce(
-    (a, d) => a + (d.subtract ? -d.value : d.value),
-    0,
-  );
-  const total =
-    opts.rowStarts && opts.rowStarts.length > 0
-      ? baseTotal + opts.modifier * opts.rowStarts.length
-      : baseTotal + opts.modifier;
+  const baseTotal = kept.reduce((a, d) => a + (d.subtract ? -d.value : d.value), 0);
+  const total = opts.rowStarts && opts.rowStarts.length > 0
+    ? baseTotal + opts.modifier * opts.rowStarts.length
+    : baseTotal + opts.modifier;
 
   let rollerId = "";
   let rollerName = tt("diceRollerFallback");
@@ -3192,8 +3179,7 @@ async function emitOneRoll(opts: {
     rollId,
     ts: Date.now(),
     hidden: opts.hidden,
-    // ← Questo è importante per distinguere "暗骰" (GM) da "密骰" (Player)
-    ...(isDM ? { rollerIsGM: true } : { rollerIsGM: false }),
+    rollerIsGM: isDM,                    // ← Importante
     ...(opts.rowStarts ? { rowStarts: opts.rowStarts } : {}),
     ...(opts.sameHighlight ? { sameHighlight: true } : {}),
     ...(opts.collectiveId ? { collectiveId: opts.collectiveId } : {}),
@@ -3201,36 +3187,25 @@ async function emitOneRoll(opts: {
 
   try {
     if (opts.hidden) {
-      // Secret Roll (Player) o Dark Roll (GM)
       if (isDM) {
-        // GM Dark Roll → solo LOCAL (gli altri non devono vederlo)
-        await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
-          destination: "LOCAL",
-        });
+        // GM Dark Roll → solo LOCAL
+        await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "LOCAL" });
       } else {
-        // Player Secret Roll → LOCAL (per sé) + REMOTE (per il GM)
+        // Player Secret Roll → LOCAL + REMOTE (così il GM lo vede)
         await Promise.all([
-          OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
-            destination: "LOCAL",
-          }),
-          OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
-            destination: "REMOTE",
-          }),
+          OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "LOCAL" }),
+          OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "REMOTE" }),
         ]);
       }
     } else {
       // Roll normale
       await Promise.all([
-        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
-          destination: "LOCAL",
-        }),
-        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
-          destination: "REMOTE",
-        }),
+        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "LOCAL" }),
+        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "REMOTE" }),
       ]);
     }
   } catch (e) {
-    console.error("[obr-suite/dice-panel] broadcast failed", e);
+    console.error("[dice-panel] broadcast failed", e);
   }
 }
 
