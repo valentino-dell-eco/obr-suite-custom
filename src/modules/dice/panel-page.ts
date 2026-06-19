@@ -3143,15 +3143,10 @@ async function emitOneRoll(opts: {
   rowStarts?: number[];
   sameHighlight?: boolean;
   collectiveId?: string;
-  parsed?: ParsedExpr;
+  parsed?: ParsedExpr; // ← importante
 }): Promise<void> {
   if (!opts.dice.length) return;
-  // Total: sum of all NON-loser dice. Subtraction dice contribute
-  // NEGATIVE to the sum (e.g. 1d20-1d6 with rolls 18 and 4 → 14).
-  // For repeat-mode the panel total is the grand sum; the visual
-  // computes per-row totals from rowStarts independently. modifier
-  // is added once per row visually but only once to the grand total
-  // here (history-friendly aggregate).
+
   const kept = opts.dice.filter((d) => !d.loser);
   const baseTotal = kept.reduce(
     (a, d) => a + (d.subtract ? -d.value : d.value),
@@ -3197,27 +3192,23 @@ async function emitOneRoll(opts: {
     rollId,
     ts: Date.now(),
     hidden: opts.hidden,
-    // Labelling hint only — see DiceRollPayload.rollerIsGM. Set from
-    // THIS client's own resolved role, never from opts, so it can't
-    // be spoofed by a caller forgetting to pass it through.
-    ...(isDM ? { rollerIsGM: true } : {}),
+    // ← Questo è importante per distinguere "暗骰" (GM) da "密骰" (Player)
+    ...(isDM ? { rollerIsGM: true } : { rollerIsGM: false }),
     ...(opts.rowStarts ? { rowStarts: opts.rowStarts } : {}),
     ...(opts.sameHighlight ? { sameHighlight: true } : {}),
     ...(opts.collectiveId ? { collectiveId: opts.collectiveId } : {}),
   };
 
   try {
-    const isHidden = opts.hidden;
-    const isGM = isDM; // già hai questa variabile
-
-    if (isHidden) {
-      if (isGM) {
-        // Dark Roll (GM) → solo LOCAL è sufficiente (gli altri lo ignorano comunque)
+    if (opts.hidden) {
+      // Secret Roll (Player) o Dark Roll (GM)
+      if (isDM) {
+        // GM Dark Roll → solo LOCAL (gli altri non devono vederlo)
         await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
           destination: "LOCAL",
         });
       } else {
-        // Secret Roll (Player) → LOCAL (per sé) + REMOTE (per il GM)
+        // Player Secret Roll → LOCAL (per sé) + REMOTE (per il GM)
         await Promise.all([
           OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
             destination: "LOCAL",
@@ -3228,7 +3219,7 @@ async function emitOneRoll(opts: {
         ]);
       }
     } else {
-      // Roll normale → LOCAL + REMOTE
+      // Roll normale
       await Promise.all([
         OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
           destination: "LOCAL",
@@ -3479,6 +3470,7 @@ async function rollFromCombo(
       rowStarts: built.rowStarts,
       sameHighlight: built.sameHighlight,
       collectiveId,
+      parsed: parsed,
     });
     sent++;
   }
