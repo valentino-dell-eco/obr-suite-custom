@@ -200,6 +200,7 @@ interface CharacterData {
   background?: any;
   inventory?: any;
   exports?: any;
+  owners_id?: string[];
 }
 
 // ===== Const tables ==========================================
@@ -3575,6 +3576,8 @@ function App() {
       console.log(`[cc-fullscreen] Committing data for card ${cardId}`);
       setError(null);
       setData(normalized);
+      const isOwner = normalized.owners_id?.indexOf(myId)??-1;
+      setCanEdit(isOwner!==-1);      
       forceRender((x) => x + 1);
     },
     [cardId],
@@ -3629,7 +3632,7 @@ function App() {
     }
   }, [cardId]);
 
-  const toggleOwner = async (card: any, playerId: string) => {
+  const toggleOwner = async (card: CharacterData, playerId: string) => {
     if (!isGM || playerId === myId) return;
 
     // const meta = await OBR.scene.getMetadata();
