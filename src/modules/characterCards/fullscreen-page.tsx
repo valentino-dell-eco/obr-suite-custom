@@ -568,27 +568,6 @@ function Header({
         >
           {measureSys === "imperial" ? "🇺🇸 lbs / ft" : "🌍 kg / m"}
         </button>
-        {isGM && (
-          <button
-            onClick={async () => {
-              const success = await checkCoreData();
-              setShowOwnersModal(true); // apri comunque (anche se fallisce)
-            }}
-            class="cc-btn"
-            style={{
-              backgroundColor: "#5c4dff",
-              color: "white",
-              fontWeight: "bold",
-              marginLeft: "8px",
-              marginRight: "8px",
-              border: "2px solid #7c6eff",
-            }}
-            disabled={ownersLoading}
-          >
-            👥 {ownersLoading ? "LOADING..." : "MANAGE OWNERS"}
-            {showOwnersDropdown ? "▲" : "▼"}
-          </button>
-        )}
         {canEdit && (
           <button
             class={`cc-btn ${editing ? "primary" : ""}`}
@@ -608,6 +587,27 @@ function Header({
           >
             <span class="ic">💾</span>
             {savingEdits ? T("ccSaving") : T("ccSaveBtn")}
+          </button>
+        )}
+        {isGM && editing && (
+          <button
+            onClick={async () => {
+              const success = await checkCoreData();
+              setShowOwnersModal(true); // apri comunque (anche se fallisce)
+            }}
+            class="cc-btn"
+            style={{
+              backgroundColor: "#5c4dff",
+              color: "white",
+              fontWeight: "bold",
+              marginLeft: "8px",
+              marginRight: "8px",
+              border: "2px solid #7c6eff",
+            }}
+            disabled={ownersLoading}
+          >
+            👥 {ownersLoading ? "LOADING..." : "MANAGE OWNERS"}
+            {showOwnersDropdown ? "▲" : "▼"}
           </button>
         )}
         <button class="cc-btn" onClick={onRefresh} title={T("ccRefreshTitle")}>
@@ -3466,7 +3466,7 @@ function App() {
   useEffect(() => onLangChange((l) => setLang((l as Language) ?? "zh")), []);
 
   const [showOwnersModal, setShowOwnersModal] = useState(false);
-  const [currentOwners, setCurrentOwners] = useState<string[]>([]);
+
   const [obrReady, setObrReady] = useState(false);
   const [showOwnersDropdown, setShowOwnersDropdown] = useState(false);
 
@@ -3655,8 +3655,6 @@ function App() {
     //   ...meta,
     //   "com.character-cards/list": list,
     // });
-
-    setCurrentOwners(card.owners_id);
     // await OBR.broadcast.sendMessage("com.character-cards/owners-updated", {
     //   cardId,
     // });
