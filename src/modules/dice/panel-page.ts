@@ -1556,7 +1556,12 @@ function wireCardActions() {
           // Honour whichever global toggle applies to this client's
           // role (GM's 全局暗骰 or player's 全局密骰). The explicit
           // 暗骰/密骰 button below always rolls hidden regardless.
-          rollFromCombo(c.expr, c.name, { hidden: getEffectiveGlobalHidden() }, b);
+          rollFromCombo(
+            c.expr,
+            c.name,
+            { hidden: getEffectiveGlobalHidden() },
+            b,
+          );
         } else if (act === "roll-dark") {
           rollFromCombo(c.expr, c.name, { hidden: true }, b);
         } else if (act === "roll-secret") {
@@ -1567,7 +1572,12 @@ function wireCardActions() {
           // stored expression isn't mutated. Also honours the
           // role-appropriate global hidden-roll toggle.
           const critExpr = doubleDiceCounts(c.expr);
-          rollFromCombo(critExpr, c.name, { hidden: getEffectiveGlobalHidden() }, b);
+          rollFromCombo(
+            critExpr,
+            c.name,
+            { hidden: getEffectiveGlobalHidden() },
+            b,
+          );
         } else if (act === "load") {
           setExpression(c.expr);
           labelText = c.name;
@@ -3197,13 +3207,28 @@ async function emitOneRoll(opts: {
   };
 
   try {
-    if (opts.hidden) {
-      // Dark roll: LOCAL only — players never receive it; only the
-      // sender's own client renders the (translucent) modal.
-      await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
-        destination: "LOCAL",
-      });
+    const isHidden = opts.hidden;
+    const isGM = isDM; // già hai questa variabile
+
+    if (isHidden) {
+      if (isGM) {
+        // Dark Roll (GM) → solo LOCAL è sufficiente (gli altri lo ignorano comunque)
+        await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
+          destination: "LOCAL",
+        });
+      } else {
+        // Secret Roll (Player) → LOCAL (per sé) + REMOTE (per il GM)
+        await Promise.all([
+          OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
+            destination: "LOCAL",
+          }),
+          OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
+            destination: "REMOTE",
+          }),
+        ]);
+      }
     } else {
+      // Roll normale → LOCAL + REMOTE
       await Promise.all([
         OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
           destination: "LOCAL",
@@ -3291,9 +3316,7 @@ function buildOneRollDice(parsed: ParsedExpr): BuiltRoll {
   return { dice: allDice, winnerIdx, sameHighlight };
 }
 
-async function performRoll(opts: {
-  hidden: boolean;
-}): Promise<void> {
+async function performRoll(opts: { hidden: boolean }): Promise<void> {
   // The button to shake — for the main panel that's btnRoll; for the
   // hidden-roll variant it's whichever of btnDarkRoll (GM) /
   // btnSecretRoll (player) actually exists and is visible on this
