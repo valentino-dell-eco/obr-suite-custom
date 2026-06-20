@@ -2975,64 +2975,45 @@ async function getOwnedSelectedTokenIds(): Promise<string[]> {
     const myId = await OBR.player.getId();
     const isGm = isDM;
 
+    // 1. Token attualmente selezionati (priorità massima)
     if (sel && sel.length > 0) {
       const items = await OBR.scene.items.getItems(sel);
-      const valid = items.filter(
-        (it: any) =>
-          it.visible &&
-          (isGm || it.createdUserId === myId || !it.createdUserId),
+      const valid = items.filter((it: any) => 
+        it && it.visible && 
+        (isGm || it.createdUserId === myId || !it.createdUserId || it.createdUserId === "")
       );
-      if (valid.length > 0) return valid.map((it: any) => it.id);
+      if (valid.length > 0) {
+        console.log("[dice] Selected tokens found:", valid.map((it: any) => it.id));
+        return valid.map((it: any) => it.id);
+      }
     }
 
+    // 2. Fallback per Player: cerca tutti i suoi token visibili
     if (!isGm) {
       const myItems = await OBR.scene.items.getItems(
         (it: any) =>
           it.type === "IMAGE" &&
           (it.layer === "CHARACTER" || it.layer === "MOUNT") &&
           it.visible &&
-          (it.createdUserId === myId || !it.createdUserId),
+          (it.createdUserId === myId || !it.createdUserId || it.createdUserId === "")
       );
+
+      console.log("[dice] Player owned tokens found:", myItems.length);
+
       if (myItems.length === 1) return [myItems[0].id];
 
+      // Se ha più token, preferisce quello con character card
       const carded = myItems.filter((it: any) => {
         const meta = it.metadata || {};
         return meta["com.character-cards/boundCardId"];
       });
       if (carded.length === 1) return [carded[0].id];
+
+      // Ultimo tentativo: restituisci comunque il primo token visibile dell'utente
+      if (myItems.length > 0) return [myItems[0].id];
     }
 
-    if (isGm) {
-      const candidates = await OBR.scene.items.getItems(
-        (it: any) =>
-          it.type === "IMAGE" &&
-          (it.layer === "CHARACTER" || it.layer === "MOUNT") &&
-          it.visible,
-      );
-      if (!candidates.length) return [];
-
-      let bestId: string | null = null;
-      let bestD2 = Infinity;
-      const [vw, vh] = await Promise.all([
-        OBR.viewport.getWidth(),
-        OBR.viewport.getHeight(),
-      ]);
-      const cx = vw / 2,
-        cy = vh / 2;
-
-      for (const it of candidates) {
-        const p = (it as any).position;
-        if (!p) continue;
-        const sp = await OBR.viewport.transformPoint(p);
-        const d2 = (sp.x - cx) ** 2 + (sp.y - cy) ** 2;
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          bestId = it.id;
-        }
-      }
-      return bestId ? [bestId] : [];
-    }
-
+    console.log("[dice] No valid token found for this player");
     return [];
   } catch (e) {
     console.error("[dice] getOwnedSelectedTokenIds failed", e);
