@@ -509,6 +509,7 @@ const TR: Dict = {
   diceHistPlayer: { zh: "玩家", en: "Player" },
   diceHistBack: { zh: "← 返回", en: "← Back" },
   diceHistDarkTag: { zh: "暗", en: "DARK" },
+  diceHistSecretTag: { zh: "暗", en: "SECRET" },
   diceHistColl: { zh: "集体", en: "Group" },
   diceHistCount: { zh: "位", en: " " },
   diceHistTimes: { zh: "次", en: "rolls" },

@@ -91,7 +91,10 @@ let activeReplayCid: string | null = null;
 // BC_DICE_HISTORY_REVEAL (sent by effect-page near the end of the
 // fly-to-history animation) before being unshifted into `history`.
 // Falls back to a timeout so a stuck modal doesn't lose history.
-const pendingEntries = new Map<string, { entry: HistoryEntry; timer: number }>();
+const pendingEntries = new Map<
+  string,
+  { entry: HistoryEntry; timer: number }
+>();
 
 function commitPending(rollId: string): void {
   const p = pendingEntries.get(rollId);
@@ -192,10 +195,13 @@ function chipsHtml(dice: DieResult[]): string {
   const parts: string[] = [];
   for (const d of dice) {
     const sides = sidesOf(d.type);
-    const cls =
-      d.loser ? "loser" :
-      d.value === sides ? "crit" :
-      d.value === 1 ? "fail" : "";
+    const cls = d.loser
+      ? "loser"
+      : d.value === sides
+        ? "crit"
+        : d.value === 1
+          ? "fail"
+          : "";
     // Subtraction dice show a leading "−" so users see what's being
     // deducted at a glance, plus a `subtract` class for the dimmer
     // styling (matches the effect-modal's faded subtract dice).
@@ -203,9 +209,9 @@ function chipsHtml(dice: DieResult[]): string {
     const valueStr = d.subtract ? `−${d.value}` : String(d.value);
     parts.push(
       `<span class="die-chip ${cls}${subtractCls}">` +
-      `<img src="/suite/${imgFor(d.type)}.png" alt="${escapeHtml(d.type)}" draggable="false">` +
-      `<span>${valueStr}</span>` +
-      `</span>`,
+        `<img src="/suite/${imgFor(d.type)}.png" alt="${escapeHtml(d.type)}" draggable="false">` +
+        `<span>${valueStr}</span>` +
+        `</span>`,
     );
   }
   return parts.join("");
@@ -219,23 +225,26 @@ function buildFormula(entry: HistoryEntry, showLabel = true): string {
     // mod as `+5×3` so the chips → total arithmetic actually balances.
     const N = entry.rowStarts?.length ?? 0;
     const sign = entry.modifier > 0 ? "+" : "";
-    modStr = N > 1
-      ? `<span class="mod">${sign}${entry.modifier}×${N}</span>`
-      : `<span class="mod">${sign}${entry.modifier}</span>`;
+    modStr =
+      N > 1
+        ? `<span class="mod">${sign}${entry.modifier}×${N}</span>`
+        : `<span class="mod">${sign}${entry.modifier}</span>`;
   }
   // Repeat header: `repeat(N)` so the user sees at a glance this isn't
   // a flat single roll but N independent ones.
-  const repeatTag = (entry.rowStarts?.length ?? 0) > 1
-    ? `<span class="label-tag" style="background:rgba(93,173,226,0.18);color:#9ad9ff">repeat×${entry.rowStarts!.length}</span>`
-    : "";
+  const repeatTag =
+    (entry.rowStarts?.length ?? 0) > 1
+      ? `<span class="label-tag" style="background:rgba(93,173,226,0.18);color:#9ad9ff">repeat×${entry.rowStarts!.length}</span>`
+      : "";
   // `showLabel = false` in the detail view — the row's `.player`
   // line already shows the label as the entry's title there, so an
   // inline italic-grey duplicate would be visual noise. The
   // popover-row solo path keeps `showLabel = true` since its title
   // shows the roller's name, not the label.
-  const labelStr = showLabel && entry.label
-    ? `<span class="label-tag">${escapeHtml(entry.label)}</span>`
-    : "";
+  const labelStr =
+    showLabel && entry.label
+      ? `<span class="label-tag">${escapeHtml(entry.label)}</span>`
+      : "";
   const list = `<div class="dice-list">${repeatTag}${chips}${modStr}${labelStr}<span class="eq">=</span></div>`;
   const total = `<span class="total">${entry.total}</span>`;
   return list + total;
@@ -249,9 +258,10 @@ function buildFormula(entry: HistoryEntry, showLabel = true): string {
 // .coll-entry which owns the gesture (open detail / fire replay).
 function buildMemberCard(m: HistoryEntry): string {
   const chips = chipsHtml(m.dice);
-  const modStr = m.modifier !== 0
-    ? `<span class="mod">${m.modifier > 0 ? `+${m.modifier}` : m.modifier}</span>`
-    : "";
+  const modStr =
+    m.modifier !== 0
+      ? `<span class="mod">${m.modifier > 0 ? `+${m.modifier}` : m.modifier}</span>`
+      : "";
   // Crit / fail tinting reflects this specific member's d20 outcome
   // (so a 4-token collective with one nat-20 lights up exactly that
   // card, not the whole strip).
@@ -276,11 +286,17 @@ function buildMemberStripHtml(members: HistoryEntry[]): string {
 // model ("3 separate attacks, top-to-bottom"). Each card shows the
 // dice chips + modifier + per-row total — modifier is applied to
 // every row, never aggregated, so the math at a glance is unambiguous.
-function buildRepeatRowCard(entry: HistoryEntry, rowIdx: number, rowDice: DieResult[], rowTotal: number): string {
+function buildRepeatRowCard(
+  entry: HistoryEntry,
+  rowIdx: number,
+  rowDice: DieResult[],
+  rowTotal: number,
+): string {
   const chips = chipsHtml(rowDice);
-  const modStr = entry.modifier !== 0
-    ? `<span class="mod">${entry.modifier > 0 ? `+${entry.modifier}` : entry.modifier}</span>`
-    : "";
+  const modStr =
+    entry.modifier !== 0
+      ? `<span class="mod">${entry.modifier > 0 ? `+${entry.modifier}` : entry.modifier}</span>`
+      : "";
   const kept = rowDice.filter((d) => !d.loser);
   const isCrit = kept.some((d) => d.type === "d20" && d.value === 20);
   const isFail = kept.some((d) => d.type === "d20" && d.value === 1);
@@ -296,7 +312,10 @@ function buildRepeatRowCard(entry: HistoryEntry, rowIdx: number, rowDice: DieRes
   );
 }
 
-function buildRepeatStripHtml(entry: HistoryEntry, layout: "flow" | "stack" = "stack"): string {
+function buildRepeatStripHtml(
+  entry: HistoryEntry,
+  layout: "flow" | "stack" = "stack",
+): string {
   const rows = entry.rowStarts ?? [];
   if (rows.length === 0) return "";
   const out: string[] = [];
@@ -308,7 +327,8 @@ function buildRepeatStripHtml(entry: HistoryEntry, layout: "flow" | "stack" = "s
     const rowTotal = kept.reduce((a, d) => a + d.value, 0) + entry.modifier;
     out.push(buildRepeatRowCard(entry, r, rowDice, rowTotal));
   }
-  const cls = layout === "flow" ? "repeat-strip is-flow" : "repeat-strip is-stack";
+  const cls =
+    layout === "flow" ? "repeat-strip is-flow" : "repeat-strip is-stack";
   return `<div class="${cls}">${out.join("")}</div>`;
 }
 
@@ -365,34 +385,42 @@ function render(): void {
     if (boxEl) boxEl.classList.remove("has-rows");
     return;
   }
-  if (headHint) headHint.textContent = lang === "zh" ? `${rows.length} 位` : `${rows.length}`;
-  rowsEl.innerHTML = rows.map((g) => {
-    const h = g.head;
-    const isCollective = g.members.length > 1;
-    const isRepeat = !isCollective && (h.rowStarts?.length ?? 0) > 1;
-    const dmTag = h.rollerId && myRoleIsDM(h) ? `<span class="dm-tag">DM</span>` : "";
-    const darkTag = h.hidden ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>` : "";
-    const collTag = isCollective ? `<span class="coll-tag">${tt("diceHistColl")} ${g.members.length}</span>` : "";
-    const repeatTag = isRepeat
-      ? `<span class="coll-tag" style="background:rgba(93,173,226,0.18);color:#9ad9ff">×${h.rowStarts!.length}</span>`
-      : "";
-    const rowCls = ["row"];
-    if (h.hidden) rowCls.push("hidden-roll");
-    // Three render paths:
-    //   collective → wrap-friendly strip of member-cards (one per token)
-    //   repeat     → flow-wrap strip of member-cards (matches the
-    //                in-row visual rhythm of a collective; wraps to
-    //                a new line only when the strip can't fit)
-    //   solo       → flat formula with chips + total
-    const bodyTail = isCollective
-      ? buildMemberStripHtml(g.members)
-      : isRepeat
-      ? buildRepeatStripHtml(h, "flow")
-      : `<div class="formula">${buildFormula(h)}</div>`;
-    // Progress bar removed (no transient auto-dismiss).
-    const playerKey = h.rollerId || h.rollerName || "?";
-    const cid = g.cid;
-    return `
+  if (headHint)
+    headHint.textContent =
+      lang === "zh" ? `${rows.length} 位` : `${rows.length}`;
+  rowsEl.innerHTML = rows
+    .map((g) => {
+      const h = g.head;
+      const isCollective = g.members.length > 1;
+      const isRepeat = !isCollective && (h.rowStarts?.length ?? 0) > 1;
+      const dmTag =
+        h.rollerId && myRoleIsDM(h) ? `<span class="dm-tag">DM</span>` : "";
+      const darkTag = h.hidden
+        ? `<span class="dark-tag">${myRoleIsDM(h) ? tt("diceHistDarkTag") : tt("diceHistSecretTag")}</span>`
+        : "";
+      const collTag = isCollective
+        ? `<span class="coll-tag">${tt("diceHistColl")} ${g.members.length}</span>`
+        : "";
+      const repeatTag = isRepeat
+        ? `<span class="coll-tag" style="background:rgba(93,173,226,0.18);color:#9ad9ff">×${h.rowStarts!.length}</span>`
+        : "";
+      const rowCls = ["row"];
+      if (h.hidden) rowCls.push("hidden-roll");
+      // Three render paths:
+      //   collective → wrap-friendly strip of member-cards (one per token)
+      //   repeat     → flow-wrap strip of member-cards (matches the
+      //                in-row visual rhythm of a collective; wraps to
+      //                a new line only when the strip can't fit)
+      //   solo       → flat formula with chips + total
+      const bodyTail = isCollective
+        ? buildMemberStripHtml(g.members)
+        : isRepeat
+          ? buildRepeatStripHtml(h, "flow")
+          : `<div class="formula">${buildFormula(h)}</div>`;
+      // Progress bar removed (no transient auto-dismiss).
+      const playerKey = h.rollerId || h.rollerName || "?";
+      const cid = g.cid;
+      return `
       <div class="${rowCls.join(" ")}" data-roller="${escapeHtml(h.rollerName)}" data-rollerid="${escapeHtml(h.rollerId)}" data-player="${escapeHtml(playerKey)}" data-cid="${escapeHtml(cid)}">
         <div class="swatch" style="--player-color:${h.rollerColor}"></div>
         <div class="body">
@@ -404,7 +432,8 @@ function render(): void {
         </div>
       </div>
     `;
-  }).join("");
+    })
+    .join("");
 
   rowsEl.querySelectorAll<HTMLDivElement>(".row").forEach((row) => {
     row.addEventListener("click", () => {
@@ -477,13 +506,18 @@ async function focusCameraOnGroup(g: GroupedRow): Promise<void> {
         OBR.viewport.getScale(),
       ]);
       const p = items[0].position;
-      OBR.viewport.animateTo({
-        position: { x: -p.x * scale + vw / 2, y: -p.y * scale + vh / 2 },
-        scale,
-      }).catch(() => {});
+      OBR.viewport
+        .animateTo({
+          position: { x: -p.x * scale + vw / 2, y: -p.y * scale + vh / 2 },
+          scale,
+        })
+        .catch(() => {});
       return;
     }
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
     for (const it of items) {
       const p = (it as any).position;
       if (!p) continue;
@@ -494,17 +528,22 @@ async function focusCameraOnGroup(g: GroupedRow): Promise<void> {
     }
     if (!Number.isFinite(minX)) return;
     let dpi = 150;
-    try { dpi = await OBR.scene.grid.getDpi(); } catch {}
+    try {
+      dpi = await OBR.scene.grid.getDpi();
+    } catch {}
     const padX = dpi * 1.5;
     const padY = dpi * 2;
     const min = { x: minX - padX, y: minY - padY };
     const max = { x: maxX + padX, y: maxY + padY };
-    OBR.viewport.animateToBounds({
-      min, max,
-      width: max.x - min.x,
-      height: max.y - min.y,
-      center: { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2 },
-    }).catch(() => {});
+    OBR.viewport
+      .animateToBounds({
+        min,
+        max,
+        width: max.x - min.x,
+        height: max.y - min.y,
+        center: { x: (min.x + max.x) / 2, y: (min.y + max.y) / 2 },
+      })
+      .catch(() => {});
   } catch {}
 }
 
@@ -546,10 +585,14 @@ function renderDetail(): void {
   }
   const head = entries[0];
   detailName.textContent = head.rollerName || tt("diceHistPlayer");
-  detailCount.textContent = lang === "zh"
-    ? `${entries.length} ${tt("diceHistTimes")}`
-    : `${entries.length} ${tt("diceHistTimes")}`;
-  detailSwatch.style.setProperty("--player-color", head.rollerColor || "#5dade2");
+  detailCount.textContent =
+    lang === "zh"
+      ? `${entries.length} ${tt("diceHistTimes")}`
+      : `${entries.length} ${tt("diceHistTimes")}`;
+  detailSwatch.style.setProperty(
+    "--player-color",
+    head.rollerColor || "#5dade2",
+  );
   (detailSwatch.style as any).background = head.rollerColor || "#5dade2";
 
   // Walk entries chronologically (newest first) and pack consecutive
@@ -592,7 +635,7 @@ function renderDetail(): void {
   // collective members — every clickable .entry element gets one).
   detailList.querySelectorAll<HTMLDivElement>(".entry").forEach((el) => {
     el.addEventListener("click", async (ev) => {
-      ev.stopPropagation();   // don't bubble to the empty-area handler
+      ev.stopPropagation(); // don't bubble to the empty-area handler
       const cid = el.dataset.cid ?? "";
       if (!cid) return;
       await toggleReplayForCid(cid);
@@ -624,7 +667,9 @@ function renderHistoryBlock(cid: string, members: HistoryEntry[]): string {
   );
   if (hasCrit) cls.push("crit");
   else if (hasFail) cls.push("fail");
-  const darkTag = head.hidden ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>` : "";
+  const darkTag = head.hidden
+    ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>`
+    : "";
   const collTag = `<span class="coll-tag">${tt("diceHistColl")} ${members.length}</span>`;
   const labelOrName = escapeHtml(head.label || head.rollerName);
   return `
@@ -688,12 +733,22 @@ async function toggleReplayForCid(cid: string): Promise<void> {
   if (activeReplayCid === cid) {
     try {
       await Promise.all([
-        OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action: "close" }, { destination: "LOCAL" }),
-        OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action: "close" }, { destination: "REMOTE" }),
+        OBR.broadcast.sendMessage(
+          BC_DICE_REPLAY,
+          { cid, action: "close" },
+          { destination: "LOCAL" },
+        ),
+        OBR.broadcast.sendMessage(
+          BC_DICE_REPLAY,
+          { cid, action: "close" },
+          { destination: "REMOTE" },
+        ),
       ]);
     } catch {}
     activeReplayCid = null;
-    try { localStorage.removeItem("obr-suite/dice/active-replay-cid"); } catch {}
+    try {
+      localStorage.removeItem("obr-suite/dice/active-replay-cid");
+    } catch {}
     renderDetail();
     return;
   }
@@ -716,17 +771,29 @@ async function toggleReplayForCid(cid: string): Promise<void> {
   // clicked a row here. AND stash the active cid in localStorage so
   // the dice action panel — which mounts AFTER the broadcast can no
   // longer reach it — restores the highlight on its own init.
-  try { localStorage.setItem("obr-suite/dice/active-replay-cid", cid); } catch {}
+  try {
+    localStorage.setItem("obr-suite/dice/active-replay-cid", cid);
+  } catch {}
   // 2026-05-10: also stash a "pending show history" flag so the dice
   // action panel — which mounts AFTER our BC_PANEL_TOGGLE arrives —
   // knows to switch to the history tab on init. Without this, the
   // panel would default to the "roll" tab even though we're trying
   // to focus a specific history row.
-  try { localStorage.setItem("obr-suite/dice/pending-show-history", "1"); } catch {}
+  try {
+    localStorage.setItem("obr-suite/dice/pending-show-history", "1");
+  } catch {}
   try {
     await Promise.all([
-      OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action: "open" }, { destination: "LOCAL" }),
-      OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action: "open" }, { destination: "REMOTE" }),
+      OBR.broadcast.sendMessage(
+        BC_DICE_REPLAY,
+        { cid, action: "open" },
+        { destination: "LOCAL" },
+      ),
+      OBR.broadcast.sendMessage(
+        BC_DICE_REPLAY,
+        { cid, action: "open" },
+        { destination: "REMOTE" },
+      ),
       OBR.broadcast.sendMessage(
         "com.obr-suite/dice-panel-toggle",
         { open: true },
@@ -744,8 +811,16 @@ async function clearActiveReplay(): Promise<void> {
   activeReplayCid = null;
   try {
     await Promise.all([
-      OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action: "close" }, { destination: "LOCAL" }),
-      OBR.broadcast.sendMessage(BC_DICE_REPLAY, { cid, action: "close" }, { destination: "REMOTE" }),
+      OBR.broadcast.sendMessage(
+        BC_DICE_REPLAY,
+        { cid, action: "close" },
+        { destination: "LOCAL" },
+      ),
+      OBR.broadcast.sendMessage(
+        BC_DICE_REPLAY,
+        { cid, action: "close" },
+        { destination: "REMOTE" },
+      ),
     ]);
   } catch {}
   renderDetail();
@@ -829,7 +904,10 @@ OBR.onReady(async () => {
     }
     // Stash. Fallback timer: if the reveal never arrives (effect
     // modal crashed / cancelled), commit anyway after PENDING_TIMEOUT_MS.
-    const timer = window.setTimeout(() => commitPending(data.rollId), PENDING_TIMEOUT_MS);
+    const timer = window.setTimeout(
+      () => commitPending(data.rollId),
+      PENDING_TIMEOUT_MS,
+    );
     pendingEntries.set(data.rollId, { entry: data, timer });
   });
 
