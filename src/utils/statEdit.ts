@@ -21,6 +21,20 @@ import OBR from "@owlbear-rodeo/sdk";
 export const BUBBLES_META_KEY = "com.obr-suite/bubbles/data";
 export const EXTERNAL_BUBBLES_META_KEY = "com.owlbear-rodeo-bubbles-extension/metadata";
 
+// 2026-06-20 — "creature stats" namespace for a token that is BOTH
+// character-card-bound AND transformed into a bestiary monster. When
+// the GM's "使用角色卡数值" (use-CC-stats) toggle on monster-info is
+// OFF (the default — see monster-info-page.ts), the monster popover
+// reads/writes THIS key instead of BUBBLES_META_KEY, so the
+// creature's HP/AC stay completely separate from the bound card's
+// own HP/AC. The card's own popover (cc-info / mountStatBanner) is
+// intentionally unaware of this key — it always reads/writes
+// BUBBLES_META_KEY, so the card's stats are never silently masked by
+// whatever the monster side is currently using. The on-canvas bubbles
+// bar (modules/bubbles/index.ts) picks whichever of the two is
+// "active" per the same toggle, mirrored from scene-token metadata.
+export const MONSTER_OVERRIDE_META_KEY = "com.obr-suite/bubbles/monster-override";
+
 export interface BubblesData {
   health?: number;
   "max health"?: number;
@@ -33,12 +47,22 @@ export interface BubblesData {
   locked?: boolean;
 }
 
-function readDataFromMetadata(meta: Record<string, unknown> | undefined): BubblesData {
+// `ownKey` defaults to BUBBLES_META_KEY (the card / legacy behaviour).
+// The external-plugin fallback is ONLY consulted for the default key
+// — MONSTER_OVERRIDE_META_KEY has no upstream-plugin equivalent, so a
+// monster-override read with no data simply returns {} rather than
+// accidentally picking up the card's (or the plugin's) values.
+function readDataFromMetadata(
+  meta: Record<string, unknown> | undefined,
+  ownKey: string = BUBBLES_META_KEY,
+): BubblesData {
   if (!meta) return {};
-  const own = meta[BUBBLES_META_KEY];
+  const own = meta[ownKey];
   if (own && typeof own === "object") return { ...(own as BubblesData) };
-  const external = meta[EXTERNAL_BUBBLES_META_KEY];
-  if (external && typeof external === "object") return { ...(external as BubblesData) };
+  if (ownKey === BUBBLES_META_KEY) {
+    const external = meta[EXTERNAL_BUBBLES_META_KEY];
+    if (external && typeof external === "object") return { ...(external as BubblesData) };
+  }
   return {};
 }
 
@@ -61,10 +85,13 @@ export function parseStatInput(input: string, current: number): number | null {
   return null;
 }
 
-export async function readBubbles(itemId: string): Promise<BubblesData> {
+export async function readBubbles(
+  itemId: string,
+  metaKey: string = BUBBLES_META_KEY,
+): Promise<BubblesData> {
   try {
     const items = await OBR.scene.items.getItems([itemId]);
-    return readDataFromMetadata(items[0]?.metadata as Record<string, unknown> | undefined);
+    return readDataFromMetadata(items[0]?.metadata as Record<string, unknown> | undefined, metaKey);
   } catch (e) {
     console.warn("[statEdit] readBubbles failed", e);
   }
@@ -89,6 +116,7 @@ export async function readBubbles(itemId: string): Promise<BubblesData> {
 export async function patchBubbles(
   itemId: string,
   patch: Partial<BubblesData>,
+  metaKey: string = BUBBLES_META_KEY,
 ): Promise<BubblesData> {
   let finalState: BubblesData = {};
   try {
@@ -96,13 +124,18 @@ export async function patchBubbles(
       for (const d of drafts) {
         // Read each namespace independently — they may carry
         // different sets of fields (esp. when the upstream extension
-        // owns the token).
+        // owns the token). The external/upstream namespace only
+        // exists for the default (card) key — monster-override has
+        // no upstream-plugin equivalent.
         const meta = (d.metadata as Record<string, unknown>) ?? {};
-        const ownPrev = (meta[BUBBLES_META_KEY] as Record<string, unknown> | undefined) ?? null;
-        const extPrev = (meta[EXTERNAL_BUBBLES_META_KEY] as Record<string, unknown> | undefined) ?? null;
+        const ownPrev = (meta[metaKey] as Record<string, unknown> | undefined) ?? null;
+        const extPrev = metaKey === BUBBLES_META_KEY
+          ? ((meta[EXTERNAL_BUBBLES_META_KEY] as Record<string, unknown> | undefined) ?? null)
+          : null;
 
         // Determine the "current" stat snapshot for clamp math: prefer
-        // own, fall back to external. Same precedence as readBubbles.
+        // own, fall back to external (default key only). Same
+        // precedence as readBubbles.
         const baseForClamp: BubblesData = (ownPrev && typeof ownPrev === "object")
           ? { ...(ownPrev as BubblesData) }
           : (extPrev && typeof extPrev === "object")
@@ -133,15 +166,15 @@ export async function patchBubbles(
           clampedPatch["temporary health"] = merged["temporary health"];
         }
 
-        // Suite namespace — replace with the full merged state
-        // (we own this key entirely, no foreign fields to preserve).
-        d.metadata[BUBBLES_META_KEY] = merged;
+        // Own namespace — replace with the full merged state (we own
+        // this key entirely, no foreign fields to preserve).
+        d.metadata[metaKey] = merged;
 
         // Upstream extension namespace — only touch if it already
-        // exists. Shallow-merge the clamped patch INTO the existing
-        // object so we don't drop fields the upstream extension owns
-        // (e.g. `dm only`, `name`, `name plate`, anything else its
-        // own UI writes there).
+        // exists, and ONLY for the default (card) key. Shallow-merge
+        // the clamped patch INTO the existing object so we don't drop
+        // fields the upstream extension owns (e.g. `dm only`, `name`,
+        // `name plate`, anything else its own UI writes there).
         if (extPrev != null) {
           d.metadata[EXTERNAL_BUBBLES_META_KEY] = { ...extPrev, ...clampedPatch };
         }

@@ -96,6 +96,15 @@ const COMBAT_STATE_KEY = "com.initiative-tracker/combat";
 export const BUBBLES_META = "com.obr-suite/bubbles/data";
 export const EXTERNAL_BUBBLES_META = "com.owlbear-rodeo-bubbles-extension/metadata";
 
+// 2026-06-20 — "creature stats" namespace for a token that is BOTH
+// character-card-bound AND transformed into a bestiary monster. Must
+// match utils/statEdit.ts's MONSTER_OVERRIDE_META_KEY exactly — that
+// file is monster-info-page.ts's read/write path for the same data;
+// this file just needs to know which key to draw the on-canvas bar
+// from. See USE_CARD_STATS_KEY below for the per-token flag that
+// decides which of the two (this, or BUBBLES_META) is "active".
+export const MONSTER_OVERRIDE_META = "com.obr-suite/bubbles/monster-override";
+
 // Suite binding markers — bubbles only renders for tokens that the
 // suite has explicitly tagged as a bestiary monster or a character
 // card. Plain image tokens (decorations, NPCs without HP, etc.)
@@ -103,6 +112,16 @@ export const EXTERNAL_BUBBLES_META = "com.owlbear-rodeo-bubbles-extension/metada
 // bubbles metadata from a previous binding.
 const CC_BIND_KEY = "com.character-cards/boundCardId";
 const BESTIARY_SLUG_KEY = "com.bestiary/slug";
+// 2026-06-20 — GM-only per-token toggle (set from monster-info-page.ts's
+// "使用角色卡数值" button). Only meaningful for a token that carries
+// BOTH CC_BIND_KEY and BESTIARY_SLUG_KEY: true → the on-canvas bar
+// reads the bound card's own stats (BUBBLES_META, same data cc-info
+// edits); false/absent (default) → the bar reads the separate
+// "creature" snapshot (MONSTER_OVERRIDE_META) instead, so transforming
+// a bound token into a monster doesn't make its bar inherit the
+// card's HP/AC. Irrelevant — and ignored — for tokens that aren't
+// dual-bound; readBubbleData below only branches on it in that case.
+const USE_CARD_STATS_KEY = "com.obr-suite/bestiary/useCardStats";
 const BUBBLES_NAME = "com.owlbear-rodeo-bubbles-extension/name";
 // Lightweight HP bar component flag — set by modules/hpBar/index.ts
 // (right-click menu OR auto-add on selection of a token that
@@ -190,9 +209,37 @@ interface BubbleData {
   locked: boolean;
 }
 
+// 2026-06-20 — picks which metadata key is "active" for this token's
+// on-canvas bar. Mirrors monster-info-page.ts's `activeMetaKey()`
+// exactly, so the popover and the bar never disagree about which
+// snapshot is currently in play:
+//   - not dual-bound (no CC_BIND_KEY, or no BESTIARY_SLUG_KEY) →
+//     always BUBBLES_META (today's behaviour, completely unchanged
+//     for every token that isn't both a bound card AND a transformed
+//     monster).
+//   - dual-bound + useCardStats flag true  → BUBBLES_META (the card's
+//     own data — same key cc-info reads/writes).
+//   - dual-bound + useCardStats flag false/absent (default) →
+//     MONSTER_OVERRIDE_META (the separate creature snapshot).
+function activeBubbleMetaKey(meta: Record<string, unknown>): string {
+  const hasCc = typeof meta[CC_BIND_KEY] === "string" && !!meta[CC_BIND_KEY];
+  const hasBestiary = typeof meta[BESTIARY_SLUG_KEY] === "string" && !!meta[BESTIARY_SLUG_KEY];
+  if (!hasCc || !hasBestiary) return BUBBLES_META;
+  return meta[USE_CARD_STATS_KEY] === true ? BUBBLES_META : MONSTER_OVERRIDE_META;
+}
+
 function readBubbleData(item: Item): BubbleData | null {
   const meta = (item.metadata as any) ?? {};
-  const m = meta[BUBBLES_META] ?? meta[EXTERNAL_BUBBLES_META];
+  const ownKey = activeBubbleMetaKey(meta);
+  // The external-plugin fallback only makes sense for the card
+  // namespace (BUBBLES_META) — MONSTER_OVERRIDE_META has no upstream
+  // equivalent, so a dual-bound token with useCardStats OFF must NOT
+  // fall back to whatever the external plugin / card happens to have
+  // written; an empty/missing override should read as "no data yet"
+  // rather than silently borrowing the card's numbers.
+  const m = ownKey === BUBBLES_META
+    ? (meta[ownKey] ?? meta[EXTERNAL_BUBBLES_META])
+    : meta[ownKey];
   if (!m || typeof m !== "object") return null;
   const hpRaw = Number(m["health"]);
   const maxRaw = Number(m["max health"]);

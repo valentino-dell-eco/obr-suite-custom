@@ -12,6 +12,8 @@ import {
   readBubbles,
   patchBubbles,
   clampStat,
+  BUBBLES_META_KEY,
+  MONSTER_OVERRIDE_META_KEY,
   type BubblesData,
 } from "../../utils/statEdit";
 import { mountResourcePanel } from "../resourceTracker/panel";
@@ -62,6 +64,52 @@ let currentItemId: string | null = null;
 // render and after each commit. Lets stat-row inputs revert cleanly on
 // invalid input.
 let liveBubbles: BubblesData = {};
+
+// 2026-06-20 — "use CC stats" support. When a token is BOTH bound to a
+// character card (CC_BIND_KEY) AND transformed into a bestiary monster
+// (has a slug), the GM can switch whether this popover's HP/AC rows
+// read/write the card's own stats (BUBBLES_META_KEY, shared with
+// cc-info) or a separate "creature" snapshot
+// (MONSTER_OVERRIDE_META_KEY) that never touches the card's data.
+// Default OFF (creature stats) so existing dual-bound tokens don't
+// suddenly start sharing values they weren't sharing a moment ago —
+// wait, actually they WERE sharing before this feature existed (that
+// was the bug being fixed); OFF is still the safer default since it
+// gives every dual-bound token a clean, separate creature-stat slate
+// instead of silently inheriting whatever the card happened to have.
+const CC_BIND_KEY = "com.character-cards/boundCardId";
+const USE_CARD_STATS_KEY = "com.obr-suite/bestiary/useCardStats";
+// Whether the CURRENT token carries a CC_BIND_KEY — i.e. whether the
+// toggle should even be offered. Recomputed every showMonster() call.
+let currentTokenHasCcBind = false;
+// The toggle's current value for the current token. Irrelevant (and
+// the toggle is hidden) when currentTokenHasCcBind is false.
+let useCardStats = false;
+
+// Single choke point for "which metadata key is this popover currently
+// bound to". Every read/write of bubbles data in this file goes
+// through this so the dual-bound / not-dual-bound and ON/OFF cases
+// never diverge.
+// Single choke point for "which metadata key is this popover currently
+// bound to". Every read/write of bubbles data in this file goes
+// through this so the dual-bound / not-dual-bound and ON/OFF cases
+// never diverge.
+//
+// 2026-06-20 — CRITICAL: only a DUAL-bound token (has BOTH a
+// character-card binding AND a bestiary slug) ever reads/writes
+// MONSTER_OVERRIDE_META_KEY. A plain bestiary token (no card binding
+// at all) must keep using BUBBLES_META_KEY exactly as it always has —
+// `currentTokenHasCcBind` is false for those, so this correctly falls
+// through to the default key. (An earlier draft of this function
+// returned MONSTER_OVERRIDE_META_KEY whenever the ON-card-stats
+// condition was false, which silently broke every non-dual-bound
+// bestiary token by pointing it at an empty namespace nothing had
+// ever written. Don't repeat that — the override key must ONLY ever
+// be reached via the `currentTokenHasCcBind &&` branch below.)
+function activeMetaKey(): string {
+  if (!currentTokenHasCcBind) return BUBBLES_META_KEY;
+  return useCardStats ? BUBBLES_META_KEY : MONSTER_OVERRIDE_META_KEY;
+}
 
 const SHOW_MSG = "com.bestiary/info-show";
 const BESTIARY_DATA_KEY = "com.bestiary/monsters";
@@ -306,6 +354,21 @@ function hpToNumber(hp: any): number | null {
     }
   }
   return null;
+}
+
+// 2026-06-20 — shared HP/AC default derivation, factored out of
+// render()'s inline fallback so showMonster()'s monster-override seed
+// (see below) computes the EXACT same numbers the panel would have
+// shown anyway. Previously the panel only ever displayed this
+// fallback in memory — never persisted it — so a dual-bound token's
+// on-canvas bar stayed perpetually empty (MONSTER_OVERRIDE_META_KEY
+// had no data to read) even though the popover looked correct.
+function staticMonsterDefaults(m: any): { hp: number; ac: number } {
+  const hp = hpToNumber(m?.hp) ?? 0;
+  const acStr = parseAc(m?.ac);
+  const acMatch = /(\d+)/.exec(acStr);
+  const ac = acMatch ? parseInt(acMatch[1], 10) : 10;
+  return { hp, ac };
 }
 
 // Returns a list of speed segments, one per movement type. The caller renders
@@ -564,7 +627,10 @@ let myPlayerId: string | null = null;
 function applyRoleGating() {
   // Editable for the GM OR the token's owner; read-only for everyone
   // else. The lock button stays GM-only (toggles whole-room
-  // visibility — not an owner concern).
+  // visibility — not an owner concern). The use-CC-stats toggle is
+  // ALSO GM-only — it decides which metadata namespace this token's
+  // bars read from at all, which is a DM-prep concern, not something
+  // an owning player should be able to flip mid-session.
   const canEdit = isGMRole || isOwner;
   document.body.classList.toggle("is-gm", isGMRole);
   document.body.classList.toggle("is-player", !isGMRole);
@@ -573,6 +639,9 @@ function applyRoleGating() {
     el.title = canEdit ? "" : (_curLang === "en" ? "Read-only for players" : "玩家端只读");
   });
   root.querySelectorAll<HTMLButtonElement>(".stat-lock").forEach((el) => {
+    el.style.display = isGMRole ? "" : "none";
+  });
+  root.querySelectorAll<HTMLElement>(".use-card-stats-row").forEach((el) => {
     el.style.display = isGMRole ? "" : "none";
   });
 }
@@ -614,22 +683,19 @@ function render(m: any) {
   // (rare — the popover is auto-opened on selection so currentItemId
   // is usually present). Live values override the monster's default
   // HP / max HP / AC so the panel matches the bubbles bar.
+  const staticDefaults = staticMonsterDefaults(m);
   const liveHp = typeof liveBubbles.health === "number"
     ? liveBubbles.health
-    : hpToNumber(m.hp);
+    : staticDefaults.hp;
   const liveMaxHp = typeof liveBubbles["max health"] === "number"
     ? liveBubbles["max health"]
-    : hpToNumber(m.hp);
+    : staticDefaults.hp;
   const liveTempHp = typeof liveBubbles["temporary health"] === "number"
     ? liveBubbles["temporary health"]
     : 0;
   const liveAc = typeof liveBubbles["armor class"] === "number"
     ? liveBubbles["armor class"]
-    : (() => {
-        // Pull a numeric default from the static AC string if possible.
-        const acMatch = /(\d+)/.exec(String(ac));
-        return acMatch ? parseInt(acMatch[1], 10) : 10;
-      })();
+    : staticDefaults.ac;
 
   // Stat banner — single-row HP red pill + temp pink circle + AC
   // heater shield. Mirrors cc-info layout. Editable in place; commits
@@ -641,6 +707,16 @@ function render(m: any) {
   const hpRatio = (typeof liveHp === "number" && typeof liveMaxHp === "number" && liveMaxHp > 0)
     ? Math.max(0, Math.min(1, liveHp / liveMaxHp))
     : 1;
+  // 2026-06-20 — "use CC stats" toggle row. Only rendered when this
+  // token is dual-bound (has a character-card binding in addition to
+  // being a bestiary monster) — a token without a card binding has
+  // nothing to switch to, so the row is simply absent rather than
+  // disabled. Sits ABOVE the stat banner as its own row (the banner
+  // itself is already tight with 4 inputs + the lock button; cramming
+  // a 5th control inline would crowd it).
+  const useCardStatsRow = (currentItemId && currentTokenHasCcBind)
+    ? `<div class="use-card-stats-row">${renderUseCardStatsButton(useCardStats)}</div>`
+    : "";
   const statBanner = currentItemId ? `
     <div class="stat-banner">
       <div class="hp-pill" style="--hp-ratio: ${hpRatio.toFixed(3)}">
@@ -725,7 +801,7 @@ function render(m: any) {
   // visible regardless of which tab is active.
   // 2026-05-13 — resource-tracker tabs graduated from dev to stable;
   // no longer gated on STABLE_HIDES.
-  const stickyTop = `${statBanner}${renderTabStrip()}`;
+  const stickyTop = `${useCardStatsRow}${statBanner}${renderTabStrip()}`;
 
   const saves = m.save || {};
   const monsterName = stripTags(m.name ?? m.ENG_name ?? (en ? "Monster" : "怪物"));
@@ -1029,6 +1105,45 @@ function renderLockButton(locked: boolean): string {
   `;
 }
 
+// 2026-06-20 — "use CC stats" toggle. GM-only, and only rendered at
+// all when the current token carries a character-card binding (no
+// point offering a switch with nothing on the other side). ON = this
+// popover's HP/AC rows read/write the BOUND CARD's own stats (the
+// same key cc-info edits); OFF (default) = a separate "creature"
+// snapshot that the card never sees. Visually mirrors the lock
+// button's pill shape but uses a swap icon instead of a padlock so
+// it doesn't read as another lock-state control.
+function useCardStatsTitle(on: boolean): string {
+  const en = _curLang === "en";
+  return on
+    ? (en ? "Using the bound character card's own HP/AC. Click to switch back to this creature's separate stats." : "正在使用绑定角色卡自身的 HP / AC。点击切换回这个怪物独立的数值。")
+    : (en ? "Using this creature's own separate HP/AC. Click to switch to the bound character card's stats instead." : "正在使用这个怪物独立的 HP / AC。点击切换为绑定角色卡的数值。");
+}
+function renderUseCardStatsButton(on: boolean): string {
+  const title = useCardStatsTitle(on);
+  const label = _curLang === "en" ? "CC stats" : "角色卡数值";
+  return `
+    <button class="use-card-stats-toggle" data-on="${on ? "true" : "false"}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}" type="button">
+      <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2 5.5h9M11 5.5 8.5 3M11 5.5 8.5 8M14 10.5H5M5 10.5 7.5 8M5 10.5 7.5 13"/>
+      </svg>
+      <span class="use-card-stats-lbl">${escapeHtml(label)}</span>
+    </button>
+  `;
+}
+// Repaint the toggle's on/off visual state + title WITHOUT a full
+// re-render — same "patch in place" approach refreshStatInputs uses
+// for the four numeric fields, so neither call clobbers the other's
+// in-flight DOM work.
+function refreshUseCardStatsButton(): void {
+  const btn = root.querySelector<HTMLButtonElement>(".use-card-stats-toggle");
+  if (!btn) return;
+  btn.dataset.on = useCardStats ? "true" : "false";
+  const title = useCardStatsTitle(useCardStats);
+  btn.title = title;
+  btn.setAttribute("aria-label", title);
+}
+
 // After a successful patch, refresh all four stat inputs so the user
 // sees the actual cross-field-clamped values (typed HP=999 with
 // maxHp=20 → input snaps to 20).
@@ -1082,10 +1197,26 @@ function refreshStatInputs(live: BubblesData, skipFocused = true): void {
 // itself coalesces rapid metadata changes.
 async function syncFromExternal(): Promise<void> {
   if (!currentItemId) return;
+  // Re-resolve the dual-bind + useCardStats state too — items.onChange
+  // also fires when the GM clicks the toggle (it's a metadata write on
+  // this same token), and when that happens from a DIFFERENT client
+  // (e.g. the GM has two windows open) THIS client needs to pick up
+  // the new active namespace, not just re-read whichever one it was
+  // already pointed at.
+  try {
+    const items = await OBR.scene.items.getItems([currentItemId]);
+    const meta = (items[0]?.metadata as Record<string, unknown> | undefined) ?? {};
+    currentTokenHasCcBind = typeof meta[CC_BIND_KEY] === "string" && !!meta[CC_BIND_KEY];
+    useCardStats = meta[USE_CARD_STATS_KEY] === true;
+  } catch {}
   let live: BubblesData = {};
-  try { live = await readBubbles(currentItemId); } catch {}
+  try { live = await readBubbles(currentItemId, activeMetaKey()); } catch {}
   liveBubbles = { ...liveBubbles, ...live };
   refreshStatInputs(live, /* skipFocused */ true);
+  // The toggle button itself (if rendered) needs its on/off state +
+  // title kept current too — a metadata change from elsewhere should
+  // visually flip it here without waiting for the next full render().
+  refreshUseCardStatsButton();
 }
 
 // Stat-row input wiring — mirrors cc-info's binder but writes to
@@ -1103,11 +1234,40 @@ function bindStatRowInputs(): void {
         await patchBubbles(
           currentItemId!,
           { locked: next } as Partial<BubblesData>,
+          activeMetaKey(),
         );
         liveBubbles = { ...liveBubbles, locked: next };
       } catch (e) {
         console.warn("[monster-info] toggle lock failed", e);
         lockBtn.dataset.locked = wasLocked ? "true" : "false";
+      }
+    });
+  }
+  const useCardBtn = root.querySelector<HTMLButtonElement>(".use-card-stats-toggle");
+  if (useCardBtn) {
+    useCardBtn.addEventListener("click", async () => {
+      const id = currentItemId;
+      if (!id) return;
+      const next = !useCardStats;
+      useCardBtn.disabled = true;
+      try {
+        await OBR.scene.items.updateItems([id], (drafts) => {
+          for (const d of drafts) {
+            d.metadata[USE_CARD_STATS_KEY] = next;
+          }
+        });
+        useCardStats = next;
+        // Re-read from the NEW active namespace and repaint the four
+        // stat rows + the toggle's own label/state.
+        let live: BubblesData = {};
+        try { live = await readBubbles(id, activeMetaKey()); } catch {}
+        liveBubbles = live;
+        refreshStatInputs(live, /* skipFocused */ false);
+        refreshUseCardStatsButton();
+      } catch (e) {
+        console.warn("[monster-info] toggle useCardStats failed", e);
+      } finally {
+        useCardBtn.disabled = false;
       }
     });
   }
@@ -1136,6 +1296,7 @@ function bindStatRowInputs(): void {
         const final = await patchBubbles(
           currentItemId,
           { [field]: next } as Partial<BubblesData>,
+          activeMetaKey(),
         );
         liveBubbles = { ...liveBubbles, ...final };
         refreshStatInputs(final);
@@ -1184,28 +1345,39 @@ async function showMonster(slug: string, itemId: string | null = currentItemId) 
   // Resolve ownership of the bound token in parallel with everything
   // else: a player who CREATED this token owns it and may edit its HP.
   // Mirror bestiary/index.ts's check: item.createdUserId === myId.
-  const ownP: Promise<boolean> = itemId
+  // 2026-06-20 — also resolve the dual-bind state here (same
+  // getItems call, no extra round-trip): does this token carry a
+  // character-card binding, and if so what's the GM's current
+  // "useCardStats" choice for it. Both default to false/off when the
+  // token (or its metadata) can't be read.
+  const tokenInfoP: Promise<{ owns: boolean; hasCcBind: boolean; useCard: boolean }> = itemId
     ? OBR.scene.items
         .getItems([itemId])
         .then((arr) => {
           const it = arr[0] as any;
-          return !!(it && myPlayerId && it.createdUserId === myPlayerId);
+          const owns = !!(it && myPlayerId && it.createdUserId === myPlayerId);
+          const meta = (it?.metadata as Record<string, unknown> | undefined) ?? {};
+          const hasCcBind = typeof meta[CC_BIND_KEY] === "string" && !!meta[CC_BIND_KEY];
+          const useCard = meta[USE_CARD_STATS_KEY] === true;
+          return { owns, hasCcBind, useCard };
         })
-        .catch(() => false)
-    : Promise.resolve(false);
-  // Load the bound token's bubbles snapshot in parallel with monster
-  // data — render() reads liveBubbles for the editable HP/AC rows.
-  const liveP = itemId ? readBubbles(itemId) : Promise.resolve({} as BubblesData);
+        .catch(() => ({ owns: false, hasCcBind: false, useCard: false }))
+    : Promise.resolve({ owns: false, hasCcBind: false, useCard: false });
   try {
-    const [meta, live, owns] = await Promise.all([
+    const [meta, tokenInfo] = await Promise.all([
       OBR.scene.getMetadata(),
-      liveP,
-      ownP,
+      tokenInfoP,
     ]);
-    liveBubbles = live;
-    // Update ownership BEFORE render() → its trailing applyRoleGating()
-    // (called inside render) picks up the correct editable state.
-    isOwner = owns;
+    // Update ownership + dual-bind state BEFORE reading bubbles (the
+    // metaKey choice depends on them) and before render() → its
+    // trailing applyRoleGating() picks up the correct editable state.
+    isOwner = tokenInfo.owns;
+    currentTokenHasCcBind = tokenInfo.hasCcBind;
+    useCardStats = tokenInfo.useCard;
+    // Load the bound token's bubbles snapshot from whichever
+    // namespace is currently active for this token. render() reads
+    // liveBubbles for the editable HP/AC rows.
+    liveBubbles = itemId ? await readBubbles(itemId, activeMetaKey()) : {};
     const table = (meta[BESTIARY_DATA_KEY] as Record<string, any>) || {};
     let m = table[slug];
     if (!m) m = await fetchMonsterBySlug(slug);
@@ -1214,6 +1386,40 @@ async function showMonster(slug: string, itemId: string | null = currentItemId) 
       root.innerHTML = `<div class="err">${_curLang === "en" ? "Monster data not found" : "未找到怪物数据"}</div>`;
       await adjustHeight();
       return;
+    }
+    // 2026-06-20 — seed the active namespace with the monster's static
+    // defaults the FIRST time it has no real HP/AC data yet. Without
+    // this, a freshly dual-bound token (transformed into a monster
+    // while already card-bound, toggle OFF by default) shows correct
+    // numbers in THIS popover — render()'s fallback computes them on
+    // the fly — but the on-canvas bubbles bar stays empty forever,
+    // because MONSTER_OVERRIDE_META_KEY never actually receives a
+    // write. Persisting once here means both the popover AND the bar
+    // read the same real, committed values from then on. Only runs
+    // when the active namespace has NEITHER health NOR armor class
+    // set — i.e. genuinely never written, not just momentarily
+    // missing one field the user is mid-edit on.
+    if (
+      itemId &&
+      typeof liveBubbles.health !== "number" &&
+      typeof liveBubbles["armor class"] !== "number"
+    ) {
+      const seed = staticMonsterDefaults(m);
+      try {
+        const written = await patchBubbles(
+          itemId,
+          {
+            health: seed.hp,
+            "max health": seed.hp,
+            "temporary health": 0,
+            "armor class": seed.ac,
+          } as Partial<BubblesData>,
+          activeMetaKey(),
+        );
+        liveBubbles = written;
+      } catch (e) {
+        console.warn("[monster-info] initial stat seed failed", e);
+      }
     }
     render(m);
     await adjustHeight();
