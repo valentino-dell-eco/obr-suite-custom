@@ -89,12 +89,10 @@
         border-radius: 6px;
         padding: 4px 0 3px;
         cursor: pointer;
-        transition: all 0.12s;
       }
       .dice-btn:hover {
         background: var(--bg-strong);
         border-color: var(--border-strong);
-        transform: translateY(-1px);
       }
       .dice-btn img {
         width: 26px;
@@ -206,14 +204,13 @@
         color: var(--crit);
       }
 
-      /* Dark row - solo per GM */
       .actions-dark {
         display: none;
         gap: 5px;
         align-items: stretch;
         margin-top: -2px;
       }
-      .actions-dark.is-dm {
+      .actions-dark.is-visible {
         display: flex;
       }
       .btn-dark-mini {
@@ -231,9 +228,6 @@
         justify-content: center;
         gap: 3px;
       }
-      .btn-dark-mini:hover {
-        background: rgba(187, 135, 221, 0.22);
-      }
     </style>
   </head>
   <body>
@@ -243,7 +237,6 @@
       </div>
 
       <div class="dice-row" id="diceRow">
-        <!-- I tuoi 7 pulsanti dadi rimangono uguali -->
         <button class="dice-btn" data-type="d4">
           <img src="/suite/d4.png" alt="d4" /><span class="lbl">d4</span
           ><span class="badge">0</span>
@@ -280,12 +273,13 @@
           class="expr-input"
           id="exprInput"
           type="text"
-          placeholder="例如 2d6 + 1d20 + 5"
           spellcheck="false"
+          placeholder="例如 2d6 + 1d20 + 5"
+          data-lp="exprPh"
         />
         <div class="expr-mod">
-          <button id="btnModDec" type="button">−</button>
-          <button id="btnModInc" type="button">＋</button>
+          <button id="btnModDec" type="button" data-lt="modDec">−</button>
+          <button id="btnModInc" type="button" data-lt="modInc">＋</button>
         </div>
       </div>
 
@@ -294,32 +288,37 @@
         id="labelInput"
         type="text"
         placeholder="备注（可选）"
+        data-lp="labelPh"
       />
 
       <div class="actions">
-        <button class="btn-act dis" data-act="dis" type="button">▼ 劣势</button>
-        <button class="btn-act normal" data-act="roll" type="button">
-          ⚀ 普通
+        <button class="btn-act dis" data-act="dis" type="button">
+          <span class="ico">▼</span><span data-l="dis">劣势</span>
         </button>
-        <button class="btn-act adv" data-act="adv" type="button">▲ 优势</button>
+        <button class="btn-act normal" data-act="roll" type="button">
+          <span class="ico">⚀</span><span data-l="roll">普通</span>
+        </button>
+        <button class="btn-act adv" data-act="adv" type="button">
+          <span class="ico">▲</span><span data-l="adv">优势</span>
+        </button>
         <button class="btn-act crit" data-act="crit" type="button">
-          ✦ 重击
+          <span class="ico">✦</span><span data-l="crit">重击</span>
         </button>
       </div>
 
-      <!-- RIGA DARK / SECRET -->
+      <!-- Riga Secret/Dark -->
       <div class="actions-dark" id="darkActions">
         <button class="btn-dark-mini dis" data-act="dark-dis" type="button">
-          ● 劣势
+          <span class="ico">●</span><span data-l="secretDis">暗劣势</span>
         </button>
         <button class="btn-dark-mini normal" data-act="dark-roll" type="button">
-          ● 普通
+          <span class="ico">●</span><span data-l="secretRoll">暗普通</span>
         </button>
         <button class="btn-dark-mini adv" data-act="dark-adv" type="button">
-          ● 优势
+          <span class="ico">●</span><span data-l="secretAdv">暗优势</span>
         </button>
         <button class="btn-dark-mini crit" data-act="dark-crit" type="button">
-          ● 重击
+          <span class="ico">●</span><span data-l="secretCrit">暗重击</span>
         </button>
       </div>
     </div>
@@ -332,7 +331,6 @@
 
       let isGmQuick = false;
 
-      // ==================== FIRE ROLL ====================
       async function fireRoll(opts = {}) {
         const expression = document.getElementById("exprInput").value.trim();
         const label = document.getElementById("labelInput").value.trim();
@@ -351,12 +349,10 @@
 
         try {
           if (isGmQuick && opts.hidden) {
-            // GM Dark Roll
             await OBR.broadcast.sendMessage(BC_QUICK_ROLL, payload, {
               destination: "LOCAL",
             });
           } else if (opts.hidden) {
-            // Player Secret Roll
             await Promise.all([
               OBR.broadcast.sendMessage(BC_QUICK_ROLL, payload, {
                 destination: "LOCAL",
@@ -366,7 +362,6 @@
               }),
             ]);
           } else {
-            // Roll normale
             await OBR.broadcast.sendMessage(BC_QUICK_ROLL, payload, {
               destination: "REMOTE",
             });
@@ -384,16 +379,13 @@
         } catch {}
       }
 
-      // ==================== INIT ====================
       OBR.onReady(async () => {
         try {
           const role = await OBR.player.getRole();
           isGmQuick = role === "GM";
         } catch {}
 
-        if (isGmQuick) {
-          document.getElementById("darkActions").classList.add("is-dm");
-        }
+        document.getElementById("darkActions").classList.add("is-visible");
 
         document.querySelectorAll("[data-act]").forEach((btn) => {
           btn.addEventListener("click", () => {
