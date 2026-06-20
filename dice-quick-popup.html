@@ -532,7 +532,7 @@
        Each performs the corresponding action with hidden:true so the
        result stays on the DM client only. Player clients never see
        this row (CSS is `display:none` until JS adds .is-dm). -->
-      <div class="actions-dark is-dm" id="darkActions">
+      <div class="actions-dark" id="darkActions">
         <button
           class="btn-dark-mini dis"
           data-act="dark-dis"
@@ -785,54 +785,23 @@
         const expression = exprInput.value.trim();
         const label = labelInput.value.trim();
         if (!expression) return;
-        const payload = {
-          expression,
-          label,
-          itemId,
-          focus: !!itemId,
-          hidden: !!opts.hidden,
-          ...(opts.advMode ? { advMode: opts.advMode } : {}),
-          ...(opts.critMode ? { critMode: true } : {}),
-        };
         try {
-          if (!!opts.isGM && opts.hidden) {
-            await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
-              destination: "LOCAL",
-            });
-          } else if (opts.hidden) {
-            await Promise.all([
-              OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
-                destination: "LOCAL",
-              }),
-              OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
-                destination: "REMOTE",
-              }),
-            ]);
-          } else {
-            await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
-              destination: "REMOTE",
-            });
-          }
+          await OBR.broadcast.sendMessage(
+            BC_QUICK_ROLL,
+            {
+              expression,
+              label,
+              itemId,
+              focus: !!itemId,
+              hidden: !!opts.hidden,
+              ...(opts.advMode ? { advMode: opts.advMode } : {}),
+              ...(opts.critMode ? { critMode: true } : {}),
+            },
+            { destination: "LOCAL" },
+          );
         } catch (e) {
-          console.error("[quick-roll]", e);
+          console.error("[rollable-quick]", e);
         }
-        // try {
-        //   await OBR.broadcast.sendMessage(
-        //     BC_QUICK_ROLL,
-        //     {
-        //       expression,
-        //       label,
-        //       itemId,
-        //       focus: !!itemId,
-        //       hidden: !!opts.hidden,
-        //       ...(opts.advMode ? { advMode: opts.advMode } : {}),
-        //       ...(opts.critMode ? { critMode: true } : {}),
-        //     },
-        //     { destination: "LOCAL" },
-        //   );
-        // } catch (e) {
-        //   console.error("[rollable-quick]", e);
-        // }
         await close();
       }
 
@@ -840,14 +809,12 @@
         // Show the dark-roll mini-row only for the GM client. 2026-05-10 —
         // was a single long "暗骰" bar; user wanted four small per-mode
         // dark variants (one under each of 劣势/普通/优势/重击).
-        let isGM = false;
         try {
           const role = await OBR.player.getRole();
-          isGM = role === "GM";
-          // if (isGM ) {
-          //   const darkRow = document.getElementById("darkActions");
-          //   if (darkRow) darkRow.classList.add("is-dm");
-          // }
+          if (role === "GM") {
+            const darkRow = document.getElementById("darkActions");
+            if (darkRow) darkRow.classList.add("is-dm");
+          }
         } catch {}
 
         document.querySelectorAll("[data-act]").forEach((el) => {
@@ -863,11 +830,11 @@
             // the SFX (handled by the bg's receive listener).
             else if (act === "dark-roll") void fireRoll({ hidden: true });
             else if (act === "dark-adv")
-              void fireRoll({ isGM: isGM, hidden: true, advMode: "adv" });
+              void fireRoll({ hidden: true, advMode: "adv" });
             else if (act === "dark-dis")
-              void fireRoll({ isGM: isGM, hidden: true, advMode: "dis" });
+              void fireRoll({ hidden: true, advMode: "dis" });
             else if (act === "dark-crit")
-              void fireRoll({ isGM: isGM, hidden: true, critMode: true });
+              void fireRoll({ hidden: true, critMode: true });
           });
         });
 
