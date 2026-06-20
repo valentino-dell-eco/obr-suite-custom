@@ -570,6 +570,44 @@
           <span class="ico">●</span><span data-l="crit">重击</span>
         </button>
       </div>
+      <div class="actions-dark" id="secretActions">
+        <button
+          class="btn-dark-mini dis"
+          data-act="dark-dis"
+          type="button"
+          title="暗劣势"
+          data-lt="secretDis"
+        >
+          <span class="ico">●</span><span data-l="dis">劣势</span>
+        </button>
+        <button
+          class="btn-dark-mini normal"
+          data-act="dark-roll"
+          type="button"
+          title="暗普通"
+          data-lt="secretRoll"
+        >
+          <span class="ico">●</span><span data-l="roll">普通</span>
+        </button>
+        <button
+          class="btn-dark-mini adv"
+          data-act="dark-adv"
+          type="button"
+          title="暗优势"
+          data-lt="secretAdv"
+        >
+          <span class="ico">●</span><span data-l="adv">优势</span>
+        </button>
+        <button
+          class="btn-dark-mini crit"
+          data-act="dark-crit"
+          type="button"
+          title="暗重击"
+          data-lt="secretCrit"
+        >
+          <span class="ico">●</span><span data-l="crit">重击</span>
+        </button>
+      </div>
     </div>
 
     <script type="module">
@@ -604,6 +642,10 @@
           darkRoll: "暗普通",
           darkAdv: "暗优势",
           darkCrit: "暗重击",
+          secretDis: "暗劣势",
+          secretRoll: "暗普通",
+          secretAdv: "暗优势",
+          secretCrit: "暗重击",
         },
         en: {
           roll: "Normal",
@@ -621,6 +663,10 @@
           darkRoll: "Dark normal",
           darkAdv: "Dark adv",
           darkCrit: "Dark crit",
+          secretDis: "Secret dis",
+          secretRoll: "Secret normal",
+          secretAdv: "Secret adv",
+          secretCrit: "Secret crit",
         },
       }[LANG];
 
@@ -777,20 +823,32 @@
         if (!expression) return;
 
         try {
-          await OBR.broadcast.sendMessage(
-            BC_QUICK_ROLL,
-            {
-              expression,
-              label,
-              itemId,
-              focus: !!itemId,
-              hidden: !!opts.hidden,
-              rollerIsGM: isGmQuick, // ← Importante per distinguere Secret Roll
-              ...(opts.advMode ? { advMode: opts.advMode } : {}),
-              ...(opts.critMode ? { critMode: true } : {}),
-            },
-            { destination: "LOCAL" },
-          );
+          const payload = {
+            expression,
+            label,
+            itemId,
+            focus: !!itemId,
+            hidden: !!opts.hidden,
+            rollerIsGM: isGmQuick,
+            ...(opts.advMode ? { advMode: opts.advMode } : {}),
+            ...(opts.critMode ? { critMode: true } : {}),
+          };
+          if (isGmQuick) {
+            // GM Dark Roll → solo LOCAL
+            await OBR.broadcast.sendMessage(BC_QUICK_ROLL, payload, {
+              destination: "LOCAL",
+            });
+          } else {
+            // Player Secret Roll → LOCAL + REMOTE (così il GM lo vede)
+            await Promise.all([
+              OBR.broadcast.sendMessage(BC_QUICK_ROLL, payload, {
+                destination: "LOCAL",
+              }),
+              OBR.broadcast.sendMessage(BC_QUICK_ROLL, payload, {
+                destination: "REMOTE",
+              }),
+            ]);
+          }
         } catch (e) {
           console.error("[rollable-quick]", e);
         }
@@ -810,6 +868,9 @@
         if (isGmQuick) {
           const darkRow = document.getElementById("darkActions");
           if (darkRow) darkRow.classList.add("is-dm");
+        } else {
+          const secretRow = document.getElementById("secretActions");
+          if (secretRow) secretRow.classList.add("is-player");
         }
 
         document.querySelectorAll("[data-act]").forEach((el) => {
