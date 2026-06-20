@@ -374,6 +374,23 @@
         font-size: 8px;
         opacity: 0.7;
       }
+
+      /* Player-only secret-roll mini-row — exact same mechanics and
+   layout as .actions-dark above (GM's hidden-roll row), just gated
+   on the opposite role. Deliberately reuses .btn-dark-mini as-is:
+   same violet "hidden roll" palette — each client only ever sees ONE
+   of #darkActions / #secretActions, so sharing styling causes no
+   ambiguity (confirmed acceptable for the main panel's 暗骰/密骰
+   buttons too). */
+      .actions-secret {
+        display: none; /* .is-player enables on non-DM client */
+        gap: 5px;
+        align-items: stretch;
+        margin-top: -2px;
+      }
+      .actions-secret.is-player {
+        display: flex;
+      }
     </style>
   </head>
   <body>
@@ -570,6 +587,50 @@
           <span class="ico">●</span><span data-l="crit">重击</span>
         </button>
       </div>
+
+      <!-- Player-only secret variants — same mechanics as the DM's dark
+       row above (hidden:true → visible only to GM + this roller), just
+       gated on the opposite role. Reuses .btn-dark-mini as-is (see CSS
+       comment). Hidden entirely on the GM client (CSS is `display:none`
+       until JS adds .is-player). -->
+      <div class="actions-secret" id="secretActions">
+        <button
+          class="btn-dark-mini dis"
+          data-act="secret-dis"
+          type="button"
+          title="密劣势"
+          data-lt="secretDis"
+        >
+          <span class="ico">●</span><span data-l="dis">劣势</span>
+        </button>
+        <button
+          class="btn-dark-mini normal"
+          data-act="secret-roll"
+          type="button"
+          title="密普通"
+          data-lt="secretRoll"
+        >
+          <span class="ico">●</span><span data-l="roll">普通</span>
+        </button>
+        <button
+          class="btn-dark-mini adv"
+          data-act="secret-adv"
+          type="button"
+          title="密优势"
+          data-lt="secretAdv"
+        >
+          <span class="ico">●</span><span data-l="adv">优势</span>
+        </button>
+        <button
+          class="btn-dark-mini crit"
+          data-act="secret-crit"
+          type="button"
+          title="密重击"
+          data-lt="secretCrit"
+        >
+          <span class="ico">●</span><span data-l="crit">重击</span>
+        </button>
+      </div>
     </div>
 
     <script type="module">
@@ -606,6 +667,10 @@
           darkRoll: "暗普通",
           darkAdv: "暗优势",
           darkCrit: "暗重击",
+          secretDis: "密劣势",
+          secretRoll: "密普通",
+          secretAdv: "密优势",
+          secretCrit: "密重击",
         },
         en: {
           roll: "Normal",
@@ -624,6 +689,10 @@
           darkRoll: "Dark normal",
           darkAdv: "Dark adv",
           darkCrit: "Dark crit",
+          secretDis: "Secret dis",
+          secretRoll: "Secret normal",
+          secretAdv: "Secret adv",
+          secretCrit: "Secret crit",
         },
       }[LANG];
       document.querySelectorAll("[data-l]").forEach((el) => {
@@ -806,14 +875,19 @@
       }
 
       OBR.onReady(async () => {
-        // Show the dark-roll mini-row only for the GM client. 2026-05-10 —
+        // Show the dark-roll mini-row only for the GM client, and the
+        // secret-roll mini-row only for everyone else. 2026-05-10 —
         // was a single long "暗骰" bar; user wanted four small per-mode
-        // dark variants (one under each of 劣势/普通/优势/重击).
+        // dark variants (one under each of 劣势/普通/优势/重击). The
+        // player-facing secret row mirrors that exactly.
         try {
           const role = await OBR.player.getRole();
+          const darkRow = document.getElementById("darkActions");
+          const secretRow = document.getElementById("secretActions");
           if (role === "GM") {
-            const darkRow = document.getElementById("darkActions");
             if (darkRow) darkRow.classList.add("is-dm");
+          } else {
+            if (secretRow) secretRow.classList.add("is-player");
           }
         } catch {}
 
@@ -826,7 +900,7 @@
             else if (act === "dis") void fireRoll({ advMode: "dis" });
             else if (act === "crit") void fireRoll({ critMode: true });
             // Dark variants — same as the matching light mode but hidden:true
-            // so only the DM client receives the result. Players still hear
+            // so only the GM client receives the result. Players still hear
             // the SFX (handled by the bg's receive listener).
             else if (act === "dark-roll") void fireRoll({ hidden: true });
             else if (act === "dark-adv")
@@ -834,6 +908,17 @@
             else if (act === "dark-dis")
               void fireRoll({ hidden: true, advMode: "dis" });
             else if (act === "dark-crit")
+              void fireRoll({ hidden: true, critMode: true });
+            // Secret variants — player-side equivalent of the dark
+            // buttons above. Same hidden:true mechanics (visibility is
+            // "GM + this roller only" either way); only the row a
+            // given client sees differs, gated by role in onReady.
+            else if (act === "secret-roll") void fireRoll({ hidden: true });
+            else if (act === "secret-adv")
+              void fireRoll({ hidden: true, advMode: "adv" });
+            else if (act === "secret-dis")
+              void fireRoll({ hidden: true, advMode: "dis" });
+            else if (act === "secret-crit")
               void fireRoll({ hidden: true, critMode: true });
           });
         });

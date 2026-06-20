@@ -107,12 +107,25 @@ const BC_QUICK_ROLL = "com.obr-suite/dice-quick-roll";
 // 2026-05-14 — exported so paths that bypass handleQuickRoll and call
 // broadcastDiceRoll directly (initiative-panel rollInitiativeLocal,
 // bestiary fireInitiative, the suite's drag-in auto-roll) can honour
-// the DM 全局暗骰 toggle without duplicating the LS key string.
-// Source-of-truth for the LS key lives in dice/panel-page.ts; we read
-// the same key here.
+// the GM's 全局暗骰 toggle — or a player's 全局密骰 toggle, when the
+// caller is itself a player — without duplicating the LS key strings.
+// Source-of-truth for both LS keys lives in dice/panel-page.ts; we
+// read the same keys here.
+//
+// 2026-06-20 — bugfix: this used to read ONLY the GM key, so any
+// caller that fired on behalf of a player (e.g. that player's own
+// initiative roll) ignored their 全局密骰 toggle entirely and rolled
+// visible-to-all even with the toggle on. A client only ever has ONE
+// of the two keys set to "1" — the GM-only panel button writes
+// global-dark-roll, the player-only panel button writes
+// global-secret-roll — so OR-ing them is safe: whichever toggle
+// belongs to the CALLING client's own role is the one that can
+// actually be "1".
 export function isGlobalDarkRollEnabled(): boolean {
   try {
-    return localStorage.getItem("obr-suite/dice/global-dark-roll") === "1";
+    const gmDark = localStorage.getItem("obr-suite/dice/global-dark-roll") === "1";
+    const playerSecret = localStorage.getItem("obr-suite/dice/global-secret-roll") === "1";
+    return gmDark || playerSecret;
   } catch { return false; }
 }
 // Sent by the dice-history popover's X button. Closes the popover
@@ -940,7 +953,7 @@ export async function setupDice(): Promise<void> {
       const req = event.data as QuickRollRequest | undefined;
       if (!req || typeof req.expression !== "string" || !req.expression.trim()) return;
 
-      // 2026-05-14 — DM 全局暗骰 toggle. When the LS flag is "1", force
+      // 2026-05-14 — GM 全局暗骰 toggle. When the LS flag is "1", force
       // every quick-roll hidden regardless of caller's intent. This
       // is what makes group saves (bestiary fireSave), group initiative
       // (group-saves fireInitiative), attack-check tag clicks (5etools
@@ -948,13 +961,22 @@ export async function setupDice(): Promise<void> {
       // menu), and adv/dis/crit variants all honour the toggle — the
       // panel's own btnRoll handles its path separately by passing
       // hidden:true at call time.
-      // Player clients never have this LS set (the toggle button is
-      // GM-only in panel-page.ts), so this gate naturally restricts to
-      // DM-only impact even though we don't check role here.
+      //
+      // 2026-06-20 — bugfix: this used to read ONLY the GM's LS key,
+      // so a player's own "全局密骰" toggle had no effect on this path
+      // — any tag/context-menu/quick-popup roll a player fired while
+      // their global-secret toggle was on still broadcast un-hidden
+      // and was visible to the whole table. We now read BOTH keys; a
+      // client only ever has ONE of them set to "1" (the GM-only
+      // button writes global-dark-roll, the player-only button writes
+      // global-secret-roll), so OR-ing them is safe and applies
+      // whichever toggle is actually relevant to the sender's role.
       let effectiveReq = req;
       if (!req.hidden) {
         try {
-          if (localStorage.getItem("obr-suite/dice/global-dark-roll") === "1") {
+          const gmDark = localStorage.getItem("obr-suite/dice/global-dark-roll") === "1";
+          const playerSecret = localStorage.getItem("obr-suite/dice/global-secret-roll") === "1";
+          if (gmDark || playerSecret) {
             effectiveReq = { ...req, hidden: true };
           }
         } catch {}
@@ -1103,7 +1125,9 @@ async function handleQuickRoll(req: QuickRollRequest): Promise<void> {
   }
 
   let rollerId = "";
+  let rollerIsGM = false;
   try { rollerId = await OBR.player.getId(); } catch {}
+  try { rollerIsGM = (await OBR.player.getRole()) === "GM"; } catch {}
 
   await broadcastDiceRoll({
     itemId: req.itemId ?? null,
@@ -1113,13 +1137,15 @@ async function handleQuickRoll(req: QuickRollRequest): Promise<void> {
     label: req.label ?? "",
     rollerId,
     hidden: !!req.hidden,
-    // This path's only source of `hidden:true` today is the GM-only
-    // 全局暗骰 toggle (see the gate above) — so a hidden quick-roll is
-    // always a GM dark-roll, never a player secret-roll. If a
-    // player-facing quick-roll path is ever added, it must pass its
-    // own rollerIsGM through QuickRollRequest instead of relying on
-    // this default.
-    rollerIsGM: !!req.hidden,
+    // 2026-06-20 — was derived from `!!req.hidden`, which assumed the
+    // ONLY way this path produces a hidden roll is the GM's global
+    // toggle. That assumption broke once the player's own global
+    // toggle was wired into the gate above (see comment there) — a
+    // hidden roll from THIS path can now come from either role. Use
+    // the sender's actual resolved role instead, exactly like the
+    // dice panel does, so the history tag reads "暗骰" vs "密骰"
+    // correctly regardless of which toggle caused the hide.
+    rollerIsGM,
     collectiveId: req.collectiveId,
   });
 }
