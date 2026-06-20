@@ -85,6 +85,35 @@ function setMeasureSystem(s: MeasureSystem): void {
   } catch {}
 }
 
+function quickRoll(
+  expression: string,
+  label: string = "",
+  mode?: "adv" | "dis",
+) {
+  let finalExpr = expression.trim();
+
+  if (mode === "adv") {
+    finalExpr = `adv(${finalExpr})`;
+  } else if (mode === "dis") {
+    finalExpr = `dis(${finalExpr})`;
+  }
+
+  try {
+    window.parent.postMessage(
+      {
+        type: "cc-roll-dice",
+        payload: {
+          expression: finalExpr,
+          label: label.trim(),
+        },
+      },
+      "*",
+    );
+  } catch (e) {
+    console.error("[cc-fullscreen] quickRoll failed", e);
+  }
+}
+
 // Converte un peso in lb verso l'unità corrente.
 function fmtWeight(lbs: number | null | undefined, qty: number = 1): string {
   if (lbs == null || lbs === 0) return "";
@@ -1312,13 +1341,13 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
                 <div
                   class="abl-mod"
                   onClick={() =>
-                    rollExpr(`${ablLabel(k)}${T("ccCheckSuffix")}`, aExpr)
+                    quickRoll(aExpr, `${ablLabel(k)}${T("ccCheckSuffix")}`)
                   }
-                  onContextMenu={(e: any) => {
+                  onContextMenu={(e) => {
                     e.preventDefault();
-                    rollExpr(
-                      `${ablLabel(k)}${T("ccCheckAdvSuffix")}`,
+                    quickRoll(
                       aExpr,
+                      `${ablLabel(k)}${T("ccCheckAdvSuffix")}`,
                       "adv",
                     );
                   }}
@@ -1326,10 +1355,20 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
                 >
                   {fmtMod(a.modifier)}
                 </div>
+
                 <div
                   class={`abl-save ${a.save?.proficient ? "is-prof" : ""}`}
                   onClick={() =>
-                    rollExpr(`${ablLabel(k)}${T("ccSaveSuffix")}`, sExpr)
+                    quickRoll(sExpr, `${ablLabel(k)}${T("ccSaveSuffix")}`)
+                  }
+                  title={`${ablLabel(k)}${T("ccSaveSuffix")} ${sExpr}`}
+                >
+                  {T("ccSave")} <b>{fmtMod(saveBonus)}</b>
+                </div>
+                <div
+                  class={`abl-save ${a.save?.proficient ? "is-prof" : ""}`}
+                  onClick={() =>
+                    quickRoll(sExpr, `${ablLabel(k)}${T("ccSaveSuffix")}`)
                   }
                   title={`${ablLabel(k)}${T("ccSaveSuffix")} ${sExpr}`}
                 >
@@ -1384,13 +1423,13 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
                   <div
                     class={`sk ${cls}`}
                     onClick={() =>
-                      rollExpr(`${s.name}${T("ccCheckSuffix")}`, expr)
+                      quickRoll(expr, `${s.name}${T("ccCheckSuffix")}`)
                     }
-                    onContextMenu={(e: any) => {
+                    onContextMenu={(e) => {
                       e.preventDefault();
-                      rollExpr(
-                        `${s.name}${T("ccCheckAdvSuffix")}`,
+                      quickRoll(
                         expr,
+                        `${s.name}${T("ccCheckAdvSuffix")}`,
                         "adv",
                       );
                     }}
