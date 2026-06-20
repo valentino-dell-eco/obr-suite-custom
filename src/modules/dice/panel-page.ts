@@ -2772,39 +2772,51 @@ async function resolveWrapperModifier(
   itemId: string | null,
   wrapper: Wrapper,
 ): Promise<number> {
-  if (!itemId || (wrapper.kind !== "save" && wrapper.kind !== "check"))
+  console.log("=== resolveWrapperModifier ===");
+  console.log("itemId:", itemId);
+  console.log("wrapper:", wrapper);
+
+  if (!itemId || (wrapper.kind !== "save" && wrapper.kind !== "check")) {
+    console.log("→ Early return 0 (no itemId or wrong wrapper)");
     return 0;
-  const item = await getItemData(itemId);
+  }
+
+  const item = await getItemData(itemId); // questa funzione deve esistere
+  console.log("Item fetched:", item ? item.id : null);
+  console.log("Metadata keys:", item ? Object.keys(item.metadata || {}) : []);
+
   if (!item) return 0;
+
+  const CC_BOUND_KEY = "com.character-cards/boundCardId";
   const cardId =
     typeof item.metadata?.[CC_BOUND_KEY] === "string"
       ? item.metadata[CC_BOUND_KEY]
       : "";
+
+  console.log("Card ID extracted:", cardId);
+
   if (cardId) {
-    const card = await fetchCardData(cardId);
-    if (card) {
-      if (wrapper.kind === "save")
-        return computeCardSaveBonus(card, wrapper.arg ?? "");
-      return computeCardCheckBonus(card, wrapper.arg ?? "", wrapper.arg2);
+    try {
+      const card = await fetchCardData(cardId);
+      console.log("Card fetched:", card ? "YES" : "NO");
+      console.log("Card keys:", card ? Object.keys(card) : []);
+
+      if (card) {
+        let bonus = 0;
+        if (wrapper.kind === "save") {
+          bonus = computeCardSaveBonus(card, wrapper.arg ?? "");
+        } else {
+          bonus = computeCardCheckBonus(card, wrapper.arg ?? "", wrapper.arg2);
+        }
+        console.log("FINAL BONUS calculated:", bonus);
+        return bonus;
+      }
+    } catch (e) {
+      console.error("Error fetching card:", e);
     }
   }
-  const slug =
-    typeof item.metadata?.[BESTIARY_SLUG_KEY] === "string"
-      ? item.metadata[BESTIARY_SLUG_KEY]
-      : "";
-  if (slug) {
-    const table = await getBestiaryTable();
-    const monster = table[slug];
-    if (monster) {
-      if (wrapper.kind === "save")
-        return computeBestiarySaveBonus(monster, wrapper.arg ?? "");
-      return computeBestiaryCheckBonus(
-        monster,
-        wrapper.arg ?? "",
-        wrapper.arg2,
-      );
-    }
-  }
+
+  console.log("→ Fallback to 0 (no card or bestiary)");
   return 0;
 }
 
@@ -2965,8 +2977,10 @@ async function getOwnedSelectedTokenIds(): Promise<string[]> {
 
     if (sel && sel.length > 0) {
       const items = await OBR.scene.items.getItems(sel);
-      const valid = items.filter((it: any) => 
-        it.visible && (isGm || it.createdUserId === myId || !it.createdUserId)
+      const valid = items.filter(
+        (it: any) =>
+          it.visible &&
+          (isGm || it.createdUserId === myId || !it.createdUserId),
       );
       if (valid.length > 0) return valid.map((it: any) => it.id);
     }
@@ -2977,7 +2991,7 @@ async function getOwnedSelectedTokenIds(): Promise<string[]> {
           it.type === "IMAGE" &&
           (it.layer === "CHARACTER" || it.layer === "MOUNT") &&
           it.visible &&
-          (it.createdUserId === myId || !it.createdUserId)
+          (it.createdUserId === myId || !it.createdUserId),
       );
       if (myItems.length === 1) return [myItems[0].id];
 
@@ -2993,20 +3007,24 @@ async function getOwnedSelectedTokenIds(): Promise<string[]> {
         (it: any) =>
           it.type === "IMAGE" &&
           (it.layer === "CHARACTER" || it.layer === "MOUNT") &&
-          it.visible
+          it.visible,
       );
       if (!candidates.length) return [];
 
       let bestId: string | null = null;
       let bestD2 = Infinity;
-      const [vw, vh] = await Promise.all([OBR.viewport.getWidth(), OBR.viewport.getHeight()]);
-      const cx = vw / 2, cy = vh / 2;
+      const [vw, vh] = await Promise.all([
+        OBR.viewport.getWidth(),
+        OBR.viewport.getHeight(),
+      ]);
+      const cx = vw / 2,
+        cy = vh / 2;
 
       for (const it of candidates) {
         const p = (it as any).position;
         if (!p) continue;
         const sp = await OBR.viewport.transformPoint(p);
-        const d2 = (sp.x - cx)**2 + (sp.y - cy)**2;
+        const d2 = (sp.x - cx) ** 2 + (sp.y - cy) ** 2;
         if (d2 < bestD2) {
           bestD2 = d2;
           bestId = it.id;
@@ -3139,10 +3157,14 @@ async function emitOneRoll(opts: {
   if (!opts.dice.length) return;
 
   const kept = opts.dice.filter((d) => !d.loser);
-  const baseTotal = kept.reduce((a, d) => a + (d.subtract ? -d.value : d.value), 0);
-  const total = opts.rowStarts && opts.rowStarts.length > 0
-    ? baseTotal + opts.modifier * opts.rowStarts.length
-    : baseTotal + opts.modifier;
+  const baseTotal = kept.reduce(
+    (a, d) => a + (d.subtract ? -d.value : d.value),
+    0,
+  );
+  const total =
+    opts.rowStarts && opts.rowStarts.length > 0
+      ? baseTotal + opts.modifier * opts.rowStarts.length
+      : baseTotal + opts.modifier;
 
   let rollerId = "";
   let rollerName = tt("diceRollerFallback");
@@ -3179,7 +3201,7 @@ async function emitOneRoll(opts: {
     rollId,
     ts: Date.now(),
     hidden: opts.hidden,
-    rollerIsGM: isDM,                    // ← Importante
+    rollerIsGM: isDM, // ← Importante
     ...(opts.rowStarts ? { rowStarts: opts.rowStarts } : {}),
     ...(opts.sameHighlight ? { sameHighlight: true } : {}),
     ...(opts.collectiveId ? { collectiveId: opts.collectiveId } : {}),
@@ -3189,19 +3211,29 @@ async function emitOneRoll(opts: {
     if (opts.hidden) {
       if (isDM) {
         // GM Dark Roll → solo LOCAL
-        await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "LOCAL" });
+        await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
+          destination: "LOCAL",
+        });
       } else {
         // Player Secret Roll → LOCAL + REMOTE (così il GM lo vede)
         await Promise.all([
-          OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "LOCAL" }),
-          OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "REMOTE" }),
+          OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
+            destination: "LOCAL",
+          }),
+          OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
+            destination: "REMOTE",
+          }),
         ]);
       }
     } else {
       // Roll normale
       await Promise.all([
-        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "LOCAL" }),
-        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "REMOTE" }),
+        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
+          destination: "LOCAL",
+        }),
+        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
+          destination: "REMOTE",
+        }),
       ]);
     }
   } catch (e) {
