@@ -795,21 +795,21 @@
           ...(opts.critMode ? { critMode: true } : {}),
         };
         try {
-          if (!!opts.isGm && opts.hidden) {
-            await OBR.broadcast.sendMessage(BC_QUICK_ROLL, payload, {
+          if (!!opts.isGM && opts.hidden) {
+            await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
               destination: "LOCAL",
             });
           } else if (opts.hidden) {
             await Promise.all([
-              OBR.broadcast.sendMessage(BC_QUICK_ROLL, payload, {
+              OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
                 destination: "LOCAL",
               }),
-              OBR.broadcast.sendMessage(BC_QUICK_ROLL, payload, {
+              OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
                 destination: "REMOTE",
               }),
             ]);
           } else {
-            await OBR.broadcast.sendMessage(BC_QUICK_ROLL, payload, {
+            await OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, {
               destination: "REMOTE",
             });
           }
