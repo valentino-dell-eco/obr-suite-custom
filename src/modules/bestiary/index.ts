@@ -38,7 +38,9 @@ registerPanelBbox(PANEL_IDS.bestiaryPanel, async () => {
       width: w,
       height: h,
     };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 });
 
 // Monster info popover bbox — RIGHT/TOP anchor (since 2026-05-03 UI
@@ -60,7 +62,9 @@ registerPanelBbox(PANEL_IDS.bestiaryInfo, async () => {
       width: w,
       height: h,
     };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 });
 
 // Bestiary module — migrated from the standalone plugin.
@@ -94,7 +98,9 @@ const INFO_SHOW_MSG = `${PLUGIN_ID}/info-show`;
 // metadata and would keep showing the stale stat block.
 async function refreshSharedMonsterTableFromLocal(): Promise<void> {
   // Force a fresh load of rawBySlug — the cache was just cleared.
-  try { await loadAllMonsters(); } catch (e) {
+  try {
+    await loadAllMonsters();
+  } catch (e) {
     console.warn("[bestiary] refresh-from-local: loadAllMonsters failed", e);
     return;
   }
@@ -129,7 +135,9 @@ async function refreshSharedMonsterTableFromLocal(): Promise<void> {
   if (touched === 0) return;
   try {
     await OBR.scene.setMetadata({ [BESTIARY_DATA_KEY]: next });
-    console.info(`[bestiary] refresh-from-local: refreshed ${touched} bound monster(s)`);
+    console.info(
+      `[bestiary] refresh-from-local: refreshed ${touched} bound monster(s)`,
+    );
   } catch (e) {
     console.warn("[bestiary] refresh-from-local: setMetadata failed", e);
   }
@@ -172,7 +180,11 @@ const BUBBLES_NAME = "com.owlbear-rodeo-bubbles-extension/name";
 const INITIATIVE_MODKEY = "com.initiative-tracker/dexMod";
 
 const isAutoPopupOn = (): boolean => {
-  try { return localStorage.getItem(AUTO_POPUP_KEY) !== "0"; } catch { return true; }
+  try {
+    return localStorage.getItem(AUTO_POPUP_KEY) !== "0";
+  } catch {
+    return true;
+  }
 };
 
 const POPOVER_WIDTH = 350;
@@ -203,7 +215,7 @@ let currentInfoSlug: string | null = null;
 // item to write to.
 let currentInfoItemId: string | null = null;
 let bestiaryRole: "GM" | "PLAYER" = "PLAYER";
-let bestiaryMyId = "";  // own player ID — used by handleSelection's owner check
+let bestiaryMyId = ""; // own player ID — used by handleSelection's owner check
 // Tracks the previous tool so CapsLock can toggle back to it when the user
 // is currently on the bestiary tool.
 let previousTool: string | null = null;
@@ -236,7 +248,9 @@ async function openPanel() {
 }
 
 async function closePanel() {
-  try { await OBR.popover.close(POPOVER_ID); } catch {}
+  try {
+    await OBR.popover.close(POPOVER_ID);
+  } catch {}
   isOpen = false;
 }
 
@@ -272,19 +286,30 @@ async function openInfoPopoverFor(slug: string, itemId: string | null) {
 }
 
 async function closeInfoPopover() {
-  try { await OBR.popover.close(INFO_POPOVER_ID); } catch {}
+  try {
+    await OBR.popover.close(INFO_POPOVER_ID);
+  } catch {}
   infoPopoverOpen = false;
   currentInfoSlug = null;
   currentInfoItemId = null;
 }
 
 async function showInfoFor(slug: string, itemId: string | null) {
-  if (currentInfoSlug === slug && currentInfoItemId === itemId && infoPopoverOpen) return;
+  if (
+    currentInfoSlug === slug &&
+    currentInfoItemId === itemId &&
+    infoPopoverOpen
+  )
+    return;
   if (!infoPopoverOpen) {
     await openInfoPopoverFor(slug, itemId);
   } else {
     try {
-      await OBR.broadcast.sendMessage(INFO_SHOW_MSG, { slug, itemId }, { destination: "LOCAL" });
+      await OBR.broadcast.sendMessage(
+        INFO_SHOW_MSG,
+        { slug, itemId },
+        { destination: "LOCAL" },
+      );
     } catch {}
   }
   currentInfoSlug = slug;
@@ -303,7 +328,11 @@ async function hideInfo() {
 
 const LS_MONSTER_INFO_PINNED = "obr-suite/monster-info-pinned";
 function isMonsterInfoPinned(): boolean {
-  try { return localStorage.getItem(LS_MONSTER_INFO_PINNED) === "1"; } catch { return false; }
+  try {
+    return localStorage.getItem(LS_MONSTER_INFO_PINNED) === "1";
+  } catch {
+    return false;
+  }
 }
 
 async function handleSelection(selection: string[] | undefined) {
@@ -327,7 +356,18 @@ async function handleSelection(selection: string[] | undefined) {
     if (typeof m === "string") slug = m;
     const createdUserId = item?.createdUserId;
     if (item && createdUserId === bestiaryMyId) ownsItem = true;
-    const bubblesMeta = item?.metadata?.[BUBBLES_META] ?? item?.metadata?.[EXTERNAL_BUBBLES_META];
+    // 2026-06-20 — TEMP DIAGNOSTIC, remove after testing.
+    console.log("[obr-suite/bestiary DIAG]", {
+      itemId,
+      slug,
+      createdUserId,
+      bestiaryMyId,
+      ownsItem,
+      rawItemPermissions: (item as any)?.permissions,
+      rawLastModifiedUserId: (item as any)?.lastModifiedUserId,
+    });
+    const bubblesMeta =
+      item?.metadata?.[BUBBLES_META] ?? item?.metadata?.[EXTERNAL_BUBBLES_META];
     if (bubblesMeta && typeof bubblesMeta === "object") {
       const raw = (bubblesMeta as Record<string, unknown>)["locked"];
       locked = raw === undefined ? true : !!raw;
@@ -409,11 +449,15 @@ export async function setupBestiary(): Promise<void> {
   // added/removed OR a per-source blacklist toggled in settings.
   // Signature includes baseUrl + disabledSources so both kinds of
   // mutation invalidate.
-  const libSig = () => JSON.stringify(
-    (getState().libraries || [])
-      .filter((l) => l.enabled)
-      .map((l) => `${l.baseUrl}|${(l.disabledSources ?? []).slice().sort().join(",")}`),
-  );
+  const libSig = () =>
+    JSON.stringify(
+      (getState().libraries || [])
+        .filter((l) => l.enabled)
+        .map(
+          (l) =>
+            `${l.baseUrl}|${(l.disabledSources ?? []).slice().sort().join(",")}`,
+        ),
+    );
   let lastLibSig = libSig();
   unsubs.push(
     onStateChange(() => {
@@ -474,7 +518,7 @@ export async function setupBestiary(): Promise<void> {
         previousTool = activeId;
         if (isOpen) await closePanel();
       }
-    })
+    }),
   );
 
   // ② CapsLock shortcut. Two paths to the same toggle:
@@ -502,7 +546,9 @@ export async function setupBestiary(): Promise<void> {
   // shortcut that activates a hidden tool. Snapshot role here; a mid-
   // session role flip is rare and the action survives a reload.
   let bestiaryRoleAtSetup: "GM" | "PLAYER" = "PLAYER";
-  try { bestiaryRoleAtSetup = (await OBR.player.getRole()) as "GM" | "PLAYER"; } catch {}
+  try {
+    bestiaryRoleAtSetup = (await OBR.player.getRole()) as "GM" | "PLAYER";
+  } catch {}
   if (bestiaryRoleAtSetup === "GM") {
     try {
       await OBR.tool.createAction({
@@ -525,15 +571,18 @@ export async function setupBestiary(): Promise<void> {
   unsubs.push(
     OBR.broadcast.onMessage("com.obr-suite/bestiary-shortcut-toggle", () => {
       performShortcutToggle();
-    })
+    }),
   );
 
   // Panel close button broadcasts → switch to default move tool.
   unsubs.push(
     OBR.broadcast.onMessage(CLOSE_MSG, async () => {
-      try { await OBR.tool.activateTool("rodeo.owlbear.tool/move"); }
-      catch { await closePanel(); }
-    })
+      try {
+        await OBR.tool.activateTool("rodeo.owlbear.tool/move");
+      } catch {
+        await closePanel();
+      }
+    }),
   );
 
   // --- Monster info popover (auto-popup on selection) ---
@@ -544,8 +593,12 @@ export async function setupBestiary(): Promise<void> {
   //      ID (i.e. DM gave them Owner permission for that token)
   // Both checks happen inside handleSelection per-selection — keeping
   // it inline means we don't need any registration-time gate.
-  try { bestiaryRole = (await OBR.player.getRole()) as "GM" | "PLAYER"; } catch {}
-  try { bestiaryMyId = await OBR.player.getId(); } catch {}
+  try {
+    bestiaryRole = (await OBR.player.getRole()) as "GM" | "PLAYER";
+  } catch {}
+  try {
+    bestiaryMyId = await OBR.player.getId();
+  } catch {}
   // Snapshot at setup time. The OBR.player.onChange listener below
   // refreshes bestiaryRole live, but the late `if (!isGMNow) return`
   // gate uses this initial value — registering bind / spawn / group
@@ -559,10 +612,15 @@ export async function setupBestiary(): Promise<void> {
       const nextRole = (player.role as "GM" | "PLAYER") || bestiaryRole;
       if (nextRole !== bestiaryRole) bestiaryRole = nextRole;
       if (player.id && player.id !== bestiaryMyId) bestiaryMyId = player.id;
-      try { await handleSelection(player.selection); } catch (e) {
-        console.warn("[obr-suite/bestiary] handleSelection from onChange threw:", e);
+      try {
+        await handleSelection(player.selection);
+      } catch (e) {
+        console.warn(
+          "[obr-suite/bestiary] handleSelection from onChange threw:",
+          e,
+        );
       }
-    })
+    }),
   );
   // State change (DM flips allowPlayerMonsters) → re-evaluate the
   // current selection. If it just became visible / invisible, the
@@ -573,14 +631,14 @@ export async function setupBestiary(): Promise<void> {
         const sel = await OBR.player.getSelection();
         await handleSelection(sel);
       } catch {}
-    })
+    }),
   );
 
   // Cleanup on scene-close — harmless to register even for non-GM.
   unsubs.push(
     OBR.scene.onReadyChange(async (ready) => {
       if (!ready) await closeInfoPopover();
-    })
+    }),
   );
 
   // Initial render: if a bound monster is already selected when the
@@ -596,7 +654,7 @@ export async function setupBestiary(): Promise<void> {
         const sel = await OBR.player.getSelection();
         await handleSelection(sel);
       } catch {}
-    })
+    }),
   );
 
   // 2026-05-13 — debounced items.onChange. OBR fires the listener
@@ -630,7 +688,7 @@ export async function setupBestiary(): Promise<void> {
           await handleSelection(sel);
         } catch {}
       }, 30);
-    })
+    }),
   );
 
   // Re-anchor popovers on viewport resize. The `isOpen` check covers
@@ -729,7 +787,11 @@ export async function setupBestiary(): Promise<void> {
             every: [
               { key: "type", value: "IMAGE" },
               { key: "layer", value: "CHARACTER" },
-              { key: ["metadata", BESTIARY_SLUG_KEY], operator: "!=", value: undefined },
+              {
+                key: ["metadata", BESTIARY_SLUG_KEY],
+                operator: "!=",
+                value: undefined,
+              },
             ],
             max: 1,
           },
@@ -751,7 +813,11 @@ export async function setupBestiary(): Promise<void> {
             every: [
               { key: "type", value: "IMAGE" },
               { key: "layer", value: "CHARACTER" },
-              { key: ["metadata", BESTIARY_SLUG_KEY], operator: "!=", value: undefined },
+              {
+                key: ["metadata", BESTIARY_SLUG_KEY],
+                operator: "!=",
+                value: undefined,
+              },
             ],
             max: 1,
           },
@@ -820,7 +886,11 @@ export async function setupBestiary(): Promise<void> {
             every: [{ key: "type", value: "IMAGE" }],
             some: [
               { key: "layer", value: "CHARACTER" },
-              { key: ["metadata", BESTIARY_SLUG_KEY], operator: "!=", value: undefined },
+              {
+                key: ["metadata", BESTIARY_SLUG_KEY],
+                operator: "!=",
+                value: undefined,
+              },
             ],
             min: 2,
           },
@@ -893,11 +963,15 @@ export async function setupBestiary(): Promise<void> {
     }
     if (!dragModalOpen) return;
     dragModalOpen = false;
-    try { await OBR.modal.close(MONSTER_DRAG_MODAL_ID); } catch {}
+    try {
+      await OBR.modal.close(MONSTER_DRAG_MODAL_ID);
+    } catch {}
   };
   // Expose for teardown so an in-flight drag modal + its 35s safety
   // timer are torn down with the module.
-  closeDragModalFn = () => { void closeDragModal(); };
+  closeDragModalFn = () => {
+    void closeDragModal();
+  };
   unsubs.push(
     OBR.broadcast.onMessage(BC_MONSTER_DRAG_START, async (event) => {
       const payload = event.data as Record<string, unknown> | undefined;
@@ -917,7 +991,9 @@ export async function setupBestiary(): Promise<void> {
         // drag-preview modal.
         if (dragSafetyTimer) clearTimeout(dragSafetyTimer);
         dragSafetyTimer = setTimeout(() => {
-          console.warn("[bestiary/drag] background safety: force-closing stuck modal");
+          console.warn(
+            "[bestiary/drag] background safety: force-closing stuck modal",
+          );
           void closeDragModal();
         }, 35_000);
       } catch (e) {
@@ -926,10 +1002,14 @@ export async function setupBestiary(): Promise<void> {
     }),
   );
   unsubs.push(
-    OBR.broadcast.onMessage(BC_MONSTER_DROP, () => { void closeDragModal(); }),
+    OBR.broadcast.onMessage(BC_MONSTER_DROP, () => {
+      void closeDragModal();
+    }),
   );
   unsubs.push(
-    OBR.broadcast.onMessage(BC_MONSTER_DRAG_CANCEL, () => { void closeDragModal(); }),
+    OBR.broadcast.onMessage(BC_MONSTER_DRAG_CANCEL, () => {
+      void closeDragModal();
+    }),
   );
 }
 
@@ -937,19 +1017,45 @@ export async function teardownBestiary(): Promise<void> {
   // Cancel the selection debounce + close any in-flight drag modal
   // (and its 35s safety timer) before detaching listeners, so neither
   // can fire after teardown.
-  if (selectionDebounceTimer) { clearTimeout(selectionDebounceTimer); selectionDebounceTimer = null; }
-  if (closeDragModalFn) { try { closeDragModalFn(); } catch {} closeDragModalFn = null; }
+  if (selectionDebounceTimer) {
+    clearTimeout(selectionDebounceTimer);
+    selectionDebounceTimer = null;
+  }
+  if (closeDragModalFn) {
+    try {
+      closeDragModalFn();
+    } catch {}
+    closeDragModalFn = null;
+  }
   await teardownGroupSaves();
   await closePanel();
   await closeInfoPopover();
-  try { await OBR.modal.close(PICKER_MODAL_ID); } catch {}
-  try { await OBR.tool.removeAction(TOOL_ACTION_TOGGLE); } catch {}
-  try { await OBR.tool.removeMode(`${TOOL_ID}/mode`); } catch {}
-  try { await OBR.tool.remove(TOOL_ID); } catch {}
-  try { await OBR.contextMenu.remove(CTX_BIND); } catch {}
-  try { await OBR.contextMenu.remove(CTX_REBIND); } catch {}
-  try { await OBR.contextMenu.remove(CTX_UNBIND); } catch {}
-  try { await OBR.contextMenu.remove(CTX_GROUP_BIND); } catch {}
-  try { await OBR.contextMenu.remove(CTX_GROUP_UNBIND); } catch {}
+  try {
+    await OBR.modal.close(PICKER_MODAL_ID);
+  } catch {}
+  try {
+    await OBR.tool.removeAction(TOOL_ACTION_TOGGLE);
+  } catch {}
+  try {
+    await OBR.tool.removeMode(`${TOOL_ID}/mode`);
+  } catch {}
+  try {
+    await OBR.tool.remove(TOOL_ID);
+  } catch {}
+  try {
+    await OBR.contextMenu.remove(CTX_BIND);
+  } catch {}
+  try {
+    await OBR.contextMenu.remove(CTX_REBIND);
+  } catch {}
+  try {
+    await OBR.contextMenu.remove(CTX_UNBIND);
+  } catch {}
+  try {
+    await OBR.contextMenu.remove(CTX_GROUP_BIND);
+  } catch {}
+  try {
+    await OBR.contextMenu.remove(CTX_GROUP_UNBIND);
+  } catch {}
   for (const u of unsubs.splice(0)) u();
 }
