@@ -179,6 +179,8 @@ const EXTERNAL_BUBBLES_META = "com.owlbear-rodeo-bubbles-extension/metadata";
 const BUBBLES_NAME = "com.owlbear-rodeo-bubbles-extension/name";
 const INITIATIVE_MODKEY = "com.initiative-tracker/dexMod";
 
+const MONSTER_OVERRIDE_META = "com.obr-suite/bubbles/monster-override";
+
 const isAutoPopupOn = (): boolean => {
   try {
     return localStorage.getItem(AUTO_POPUP_KEY) !== "0";
@@ -830,11 +832,11 @@ export async function setupBestiary(): Promise<void> {
           await OBR.scene.items.updateItems(ids, (drafts) => {
             for (const d of drafts) {
               delete d.metadata[BESTIARY_SLUG_KEY];
-              // Bubbles HP/AC and the bound name are kept — the user
-              // may want to re-bind later or just continue without
-              // the stat-block link. Only the slug reference is
-              // removed, which is what disables the auto-popup +
-              // info popover behavior.
+              // 2026-06-20 — also drop the dual-bind "creature stats"
+              // snapshot. Bubbles HP/AC (the card's own data) and the
+              // bound name are still kept, as before — only the
+              // bestiary-specific override goes away with the binding.
+              delete d.metadata[MONSTER_OVERRIDE_META];
             }
           });
         } catch (e) {
@@ -862,11 +864,25 @@ export async function setupBestiary(): Promise<void> {
           },
         },
       ],
-      onClick: (ctx) => {
+      onClick: async (ctx) => {
         const ids = ctx.items
-          .filter((it) => it.layer === "CHARACTER")
+          .filter(
+            (it) =>
+              it.layer === "CHARACTER" &&
+              (it.metadata as any)?.[BESTIARY_SLUG_KEY] != null,
+          )
           .map((i) => i.id);
-        if (ids.length >= 1) void openPicker(ids);
+        if (ids.length === 0) return;
+        try {
+          await OBR.scene.items.updateItems(ids, (drafts) => {
+            for (const d of drafts) {
+              delete d.metadata[BESTIARY_SLUG_KEY];
+              delete d.metadata[MONSTER_OVERRIDE_META];
+            }
+          });
+        } catch (e) {
+          console.error("[obr-suite/bestiary] group unbind failed", e);
+        }
       },
     });
     await OBR.contextMenu.create({

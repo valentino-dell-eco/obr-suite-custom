@@ -4,10 +4,23 @@ import OBR from "@owlbear-rodeo/sdk";
 import { installDebugOverlay } from "../../utils/debugOverlay";
 import { installPanelZoom } from "../../utils/panelZoom";
 import { ParsedMonster, MonsterEdition } from "./types";
-import { loadAllMonsters, searchMonsters, getRawMonster, makeSlug } from "./data";
+import {
+  loadAllMonsters,
+  searchMonsters,
+  getRawMonster,
+  makeSlug,
+} from "./data";
 import { spawnMonster } from "./spawn";
 import { t } from "../../i18n";
-import { getLocalLang, onLangChange, startSceneSync, refreshFromScene, getState, setState, onStateChange } from "../../state";
+import {
+  getLocalLang,
+  onLangChange,
+  startSceneSync,
+  refreshFromScene,
+  getState,
+  setState,
+  onStateChange,
+} from "../../state";
 import { bindPanelDrag } from "../../utils/panelDrag";
 import { PANEL_IDS } from "../../utils/panelLayout";
 import "./styles.css";
@@ -33,6 +46,8 @@ const BESTIARY_SLUG_KEY = "com.bestiary/slug";
 const BESTIARY_DATA_KEY = "com.bestiary/monsters";
 const PICKER_MODAL_ID = "com.obr-suite/bestiary-picker";
 
+const MONSTER_OVERRIDE_META = "com.obr-suite/bubbles/monster-override";
+
 // Read once at module load; the modal's URL is set by the caller.
 // Two URL conventions:
 //   • pickerForItemId=<id>           — single-token bind (legacy)
@@ -45,7 +60,11 @@ const PICKER_TARGET_ITEM_IDS: string[] = (() => {
   const single = URL_PARAMS.get("pickerForItemId");
   if (single) return [single];
   const multi = URL_PARAMS.get("pickerForItemIds");
-  if (multi) return multi.split(",").map((s) => s.trim()).filter(Boolean);
+  if (multi)
+    return multi
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
   return [];
 })();
 const PICKER_TARGET_ITEM = PICKER_TARGET_ITEM_IDS[0] || null;
@@ -95,7 +114,10 @@ async function ensureSharedMonsterData(slug: string, raw: any): Promise<void> {
 // is opting into when they pick the bestiary entry; only the
 // init mod is left alone.
 const CC_BIND_KEY = "com.character-cards/boundCardId";
-async function bindMonsterToTokens(mon: ParsedMonster, itemIds: string[]): Promise<void> {
+async function bindMonsterToTokens(
+  mon: ParsedMonster,
+  itemIds: string[],
+): Promise<void> {
   if (itemIds.length === 0) return;
   const slug = makeSlug(mon.source, mon.engName);
   await ensureSharedMonsterData(slug, getRawMonster(slug));
@@ -103,20 +125,9 @@ async function bindMonsterToTokens(mon: ParsedMonster, itemIds: string[]): Promi
     await OBR.scene.items.updateItems(itemIds, (drafts) => {
       for (const d of drafts) {
         const hasCcBinding =
-          typeof (d.metadata as any)[CC_BIND_KEY] === "string"
-          && !!(d.metadata as any)[CC_BIND_KEY];
+          typeof (d.metadata as any)[CC_BIND_KEY] === "string" &&
+          !!(d.metadata as any)[CC_BIND_KEY];
         d.metadata[BESTIARY_SLUG_KEY] = slug;
-        // 2026-05-12 — user request #13: when binding a bestiary
-        // monster to a token that ALREADY HAS A CHARACTER CARD
-        // BINDING, leave the bubbles/HP/AC alone. The character
-        // card is the source of truth for that token's stats; the
-        // bestiary entry is just a reference (e.g. "this PC is a
-        // wereraven — show me the wereraven monster stats" for the
-        // DM). Overwriting HP/AC/name would clobber the player
-        // character.
-        //
-        // For non-CC-bound tokens (plain monster tokens), bestiary
-        // binding still writes stats + name as before.
         if (!hasCcBinding) {
           d.metadata[BUBBLES_META] = {
             health: mon.hp,
@@ -129,18 +140,32 @@ async function bindMonsterToTokens(mon: ParsedMonster, itemIds: string[]): Promi
           d.metadata[BUBBLES_NAME] = mon.name;
           d.metadata[INITIATIVE_MODKEY] = mon.dexMod;
           d.name = mon.name;
+        } else {
+          // 2026-06-20 — dual-bound token (CC + bestiary): the card stays
+          // the source of truth for BUBBLES_META (untouched, as above),
+          // but the monster-override snapshot belongs to THIS bestiary
+          // entry specifically. Clear it so monster-info-page.ts's
+          // empty-namespace seed re-populates it from the NEW monster's
+          // static HP/AC on next open, instead of showing the previous
+          // monster's leftover numbers under the new monster's name.
+          delete d.metadata[MONSTER_OVERRIDE_META];
         }
       }
     });
   } catch (e) {
     console.error("[bestiary] bindMonsterToTokens failed", e);
   }
-  try { await OBR.modal.close(PICKER_MODAL_ID); } catch {}
+  try {
+    await OBR.modal.close(PICKER_MODAL_ID);
+  } catch {}
 }
 
 // Backwards-compat single-token wrapper retained for any external
 // callers; new code should use bindMonsterToTokens.
-async function bindMonsterToToken(mon: ParsedMonster, itemId: string): Promise<void> {
+async function bindMonsterToToken(
+  mon: ParsedMonster,
+  itemId: string,
+): Promise<void> {
   return bindMonsterToTokens(mon, [itemId]);
 }
 
@@ -186,27 +211,34 @@ async function healSceneMonsterTable(): Promise<void> {
     // will fix it next time the user notices.
     console.warn(
       `[bestiary] heal: ${missing.size} token(s) reference missing monster data; ` +
-      `re-bind to refresh: ${[...missing].slice(0, 5).join(", ")}${missing.size > 5 ? "…" : ""}`,
+        `re-bind to refresh: ${[...missing].slice(0, 5).join(", ")}${missing.size > 5 ? "…" : ""}`,
     );
     return;
   }
   try {
     const next = { ...table, ...additions };
     await OBR.scene.setMetadata({ [BESTIARY_DATA_KEY]: next });
-    console.info(`[bestiary] heal: filled ${addCount} missing monsters in scene-meta table`);
+    console.info(
+      `[bestiary] heal: filled ${addCount} missing monsters in scene-meta table`,
+    );
   } catch (e) {
     console.warn("[bestiary] heal: setMetadata failed", e);
   }
 }
 
-
 // Persisted UI state (keys are shared across panel opens / reloads).
 const LS_PREFIX = "bestiary/";
 const readLS = (k: string, d: string) => {
-  try { return localStorage.getItem(LS_PREFIX + k) ?? d; } catch { return d; }
+  try {
+    return localStorage.getItem(LS_PREFIX + k) ?? d;
+  } catch {
+    return d;
+  }
 };
 const writeLS = (k: string, v: string) => {
-  try { localStorage.setItem(LS_PREFIX + k, v); } catch {}
+  try {
+    localStorage.setItem(LS_PREFIX + k, v);
+  } catch {}
 };
 
 // Suite state lives in scene metadata under "com.obr-suite/state". When the
@@ -240,12 +272,16 @@ function App() {
   const [monsters, setMonsters] = useState<ParsedMonster[]>([]);
   const [filtered, setFiltered] = useState<ParsedMonster[]>([]);
   const [query, setQuery] = useState(() => readLS("query", ""));
-  const [sortDesc, setSortDesc] = useState(() => readLS("sortDesc", "0") === "1");
+  const [sortDesc, setSortDesc] = useState(
+    () => readLS("sortDesc", "0") === "1",
+  );
   // Source-code filter (e.g. "PHB", "MYHB", "kiwee"). Free-text;
   // case-insensitive substring match on each monster's `source`.
   // Persisted per-client so a homebrew GM doesn't re-type their tag
   // every panel reopen.
-  const [sourceFilter, setSourceFilter] = useState(() => readLS("sourceFilter", ""));
+  const [sourceFilter, setSourceFilter] = useState(() =>
+    readLS("sourceFilter", ""),
+  );
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<"GM" | "PLAYER">("PLAYER");
   // Edition gate now flows from suite scene metadata (via dataVersion).
@@ -255,23 +291,23 @@ function App() {
   // this popover so the GM can flip it inline while spawning. Mirrors
   // suite state via startSceneSync; the spawn pipeline reads from
   // scene metadata so a state change propagates immediately.
-  const [autoInit, setAutoInit] = useState<boolean>(() =>
-    getState().bestiaryAutoInitiative !== false,
+  const [autoInit, setAutoInit] = useState<boolean>(
+    () => getState().bestiaryAutoInitiative !== false,
   );
   // Auto-hide toggle — when ON, freshly spawned monsters get
   // `visible:false` so the DM can stage them off-screen before the
   // big reveal. Default ON. Mirrors suite state via startSceneSync;
   // spawn.ts reads from scene metadata so changes take effect on
   // the next spawn without a panel reopen.
-  const [autoHide, setAutoHide] = useState<boolean>(() =>
-    getState().bestiaryAutoHide !== false,
+  const [autoHide, setAutoHide] = useState<boolean>(
+    () => getState().bestiaryAutoHide !== false,
   );
   // Auto-name toggle — when ON, freshly spawned monsters write their
   // display name into the OBR-native plainText label (the small text
   // under the token). Default OFF; the DM can opt in when they want
   // labels to appear automatically without click-syncing per token.
-  const [autoName, setAutoName] = useState<boolean>(() =>
-    getState().bestiaryAutoName === true,
+  const [autoName, setAutoName] = useState<boolean>(
+    () => getState().bestiaryAutoName === true,
   );
   useEffect(() => {
     const unsub = onStateChange(() => {
@@ -290,11 +326,15 @@ function App() {
   // immediately rather than the next time the panel reopens.
   useEffect(() => {
     let lastLibSig = JSON.stringify(
-      (getState().libraries || []).map((l) => `${l.id}|${l.enabled}|${l.baseUrl}`),
+      (getState().libraries || []).map(
+        (l) => `${l.id}|${l.enabled}|${l.baseUrl}`,
+      ),
     );
     const unsub = onStateChange(() => {
       const sig = JSON.stringify(
-        (getState().libraries || []).map((l) => `${l.id}|${l.enabled}|${l.baseUrl}`),
+        (getState().libraries || []).map(
+          (l) => `${l.id}|${l.enabled}|${l.baseUrl}`,
+        ),
       );
       if (sig === lastLibSig) return;
       lastLibSig = sig;
@@ -313,12 +353,17 @@ function App() {
   // the BC_MONSTER_DROP handler — it can't use the state value
   // directly because the handler closure is created once on mount).
   const monstersRef = useRef<ParsedMonster[]>([]);
-  useEffect(() => { monstersRef.current = monsters; }, [monsters]);
+  useEffect(() => {
+    monstersRef.current = monsters;
+  }, [monsters]);
 
   // Per-client language: re-render when the user flips the suite-level
   // language toggle so labels/placeholders update without a popover reopen.
   useEffect(() => {
-    const unsub = onLangChange((next) => { _lang = next; setLang(next); });
+    const unsub = onLangChange((next) => {
+      _lang = next;
+      setLang(next);
+    });
     return unsub;
   }, []);
 
@@ -363,14 +408,22 @@ function App() {
   // Re-filter when the data version changes (suite settings flipped).
   useEffect(() => {
     if (monsters.length === 0) return;
-    setFiltered(searchMonsters(monsters, query, sortDesc, dvToEditionSet(dataVersion), sourceFilter));
+    setFiltered(
+      searchMonsters(
+        monsters,
+        query,
+        sortDesc,
+        dvToEditionSet(dataVersion),
+        sourceFilter,
+      ),
+    );
   }, [dataVersion, monsters, sourceFilter]);
 
   const doSearch = useCallback(
     (q: string, desc: boolean, eds: Set<MonsterEdition>, src: string) => {
       setFiltered(searchMonsters(monsters, q, desc, eds, src));
     },
-    [monsters]
+    [monsters],
   );
 
   const handleSearch = useCallback(
@@ -380,7 +433,7 @@ function App() {
       writeLS("query", val);
       doSearch(val, sortDesc, editions, sourceFilter);
     },
-    [doSearch, sortDesc, editions, sourceFilter]
+    [doSearch, sortDesc, editions, sourceFilter],
   );
 
   const handleSourceChange = useCallback(
@@ -421,7 +474,10 @@ function App() {
             itemId: TRANSFORM_TARGET_ITEM_ID,
             tokenUrl: mon.tokenUrl || "",
             size: mon.size || "",
-            name: mon.name || mon.engName || t(getLocalLang(), "bestiaryTransformForm"),
+            name:
+              mon.name ||
+              mon.engName ||
+              t(getLocalLang(), "bestiaryTransformForm"),
           },
           { destination: "LOCAL" },
         );
@@ -451,12 +507,20 @@ function App() {
       const data = event.data as
         | { slug?: string; sceneX?: number; sceneY?: number }
         | undefined;
-      if (!data?.slug || typeof data.sceneX !== "number" || typeof data.sceneY !== "number") return;
+      if (
+        !data?.slug ||
+        typeof data.sceneX !== "number" ||
+        typeof data.sceneY !== "number"
+      )
+        return;
       const mon = monstersRef.current.find(
         (m) => makeSlug(m.source, m.engName) === data.slug,
       );
       if (!mon) {
-        console.warn("[bestiary] drop target slug not in current list", data.slug);
+        console.warn(
+          "[bestiary] drop target slug not in current list",
+          data.slug,
+        );
         return;
       }
       try {
@@ -495,7 +559,7 @@ function App() {
           OBR.broadcast.sendMessage(
             "com.obr-suite/bestiary-shortcut-toggle",
             {},
-            { destination: "LOCAL" }
+            { destination: "LOCAL" },
           );
         } catch {}
       }
@@ -534,14 +598,15 @@ function App() {
   return (
     <div class="app">
       {PICKER_TARGET_ITEM && (
-        <div
-          style="background:rgba(93,173,226,0.18);border-bottom:1px solid rgba(93,173,226,0.40);padding:8px 14px;font-size:12px;color:#7ec8f0;font-weight:600;text-align:center;"
-        >
+        <div style="background:rgba(93,173,226,0.18);border-bottom:1px solid rgba(93,173,226,0.40);padding:8px 14px;font-size:12px;color:#7ec8f0;font-weight:600;text-align:center;">
           {t(lang, "bestiaryPanelHint")}
           {PICKER_IS_GROUP && (
             <span style="display:block;margin-top:2px;font-size:11px;font-weight:500;opacity:0.85">
               {lang === "zh"
-                ? t(getLocalLang(), "bestiaryBulkBadge").replace("{n}", String(PICKER_TARGET_ITEM_IDS.length))
+                ? t(getLocalLang(), "bestiaryBulkBadge").replace(
+                    "{n}",
+                    String(PICKER_TARGET_ITEM_IDS.length),
+                  )
                 : `(group bind · ${PICKER_TARGET_ITEM_IDS.length} tokens)`}
             </span>
           )}
@@ -597,31 +662,37 @@ function App() {
         </div>
         <div class="header-row">
           <span class="count">
-            {loading ? t(lang, "bestiaryLoading") : `${filtered.length} / ${monsters.length}`}
+            {loading
+              ? t(lang, "bestiaryLoading")
+              : `${filtered.length} / ${monsters.length}`}
           </span>
           {monsters.length > 0 && (
-          <div class="source-filter-wrap">
-            <input
-              type="text"
-              class="source-filter"
-              placeholder={lang === "zh" ? "来源筛选" : "Source"}
-              value={sourceFilter}
-              onInput={handleSourceChange}
-              title={lang === "zh"
-                ? t(_lang, "bestiaryFilterSourceHint")
-                : "Filter by source code (e.g. PHB / kiwee / your homebrew tag)"}
-            />
-            {sourceFilter && (
-              <button
-                class="source-filter-clear"
-                onClick={clearSourceFilter}
-                title={lang === "zh" ? "清空来源筛选" : "Clear source filter"}
-                aria-label={lang === "zh" ? "清空来源筛选" : "Clear source filter"}
-              >
-                ✕
-              </button>
-            )}
-          </div>
+            <div class="source-filter-wrap">
+              <input
+                type="text"
+                class="source-filter"
+                placeholder={lang === "zh" ? "来源筛选" : "Source"}
+                value={sourceFilter}
+                onInput={handleSourceChange}
+                title={
+                  lang === "zh"
+                    ? t(_lang, "bestiaryFilterSourceHint")
+                    : "Filter by source code (e.g. PHB / kiwee / your homebrew tag)"
+                }
+              />
+              {sourceFilter && (
+                <button
+                  class="source-filter-clear"
+                  onClick={clearSourceFilter}
+                  title={lang === "zh" ? "清空来源筛选" : "Clear source filter"}
+                  aria-label={
+                    lang === "zh" ? "清空来源筛选" : "Clear source filter"
+                  }
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           )}
           {role === "GM" && (
             <button
@@ -629,9 +700,11 @@ function App() {
               onClick={async () => {
                 await setState({ bestiaryAutoHide: !autoHide });
               }}
-              title={lang === "zh"
-                ? t(_lang, "bestiaryAutoHideHint")
-                : "Auto-hide spawned monsters (DM-only until manually revealed)"}
+              title={
+                lang === "zh"
+                  ? t(_lang, "bestiaryAutoHideHint")
+                  : "Auto-hide spawned monsters (DM-only until manually revealed)"
+              }
               aria-pressed={autoHide}
             >
               {lang === "zh" ? "自动隐藏" : "Auto-hide"}
@@ -643,9 +716,11 @@ function App() {
               onClick={async () => {
                 await setState({ bestiaryAutoInitiative: !autoInit });
               }}
-              title={lang === "zh"
-                ? t(_lang, "bestiaryAutoInitHint")
-                : "Auto-add spawned tokens to initiative"}
+              title={
+                lang === "zh"
+                  ? t(_lang, "bestiaryAutoInitHint")
+                  : "Auto-add spawned tokens to initiative"
+              }
               aria-pressed={autoInit}
             >
               {lang === "zh" ? "自动先攻" : "Auto-init"}
@@ -657,22 +732,32 @@ function App() {
               onClick={async () => {
                 await setState({ bestiaryAutoName: !autoName });
               }}
-              title={lang === "zh"
-                ? t(_lang, "bestiaryAutoNameHint")
-                : "Auto-fill the token's native plainText label with the monster name"}
+              title={
+                lang === "zh"
+                  ? t(_lang, "bestiaryAutoNameHint")
+                  : "Auto-fill the token's native plainText label with the monster name"
+              }
               aria-pressed={autoName}
             >
               {lang === "zh" ? "自动命名" : "Auto-name"}
             </button>
           )}
-          <button class="sort-btn" onClick={toggleSort} title={t(lang, "bestiarySortByCR")}>
+          <button
+            class="sort-btn"
+            onClick={toggleSort}
+            title={t(lang, "bestiarySortByCR")}
+          >
             CR {sortDesc ? "↓" : "↑"}
           </button>
         </div>
       </div>
       <div class="list">
         {filtered.map((mon) => (
-          <MonsterCard key={`${mon.source}-${mon.engName}`} monster={mon} onSpawn={handleSpawn} />
+          <MonsterCard
+            key={`${mon.source}-${mon.engName}`}
+            monster={mon}
+            onSpawn={handleSpawn}
+          />
         ))}
         {!loading && filtered.length === 0 && (
           <div class="empty">{t(lang, "bestiaryNoMatch")}</div>
@@ -694,7 +779,10 @@ const SIZE_CELL_SCALE: Record<string, number> = {
   G: 4,
 };
 
-async function startMonsterDrag(monster: ParsedMonster, e: PointerEvent): Promise<void> {
+async function startMonsterDrag(
+  monster: ParsedMonster,
+  e: PointerEvent,
+): Promise<void> {
   // Compute the ghost preview size so the user sees roughly what the
   // spawned token will look like at the current zoom.
   let ghostSize = 80;
@@ -745,66 +833,82 @@ function MonsterCard({
   // No drag (release before threshold): existing onClick path runs as
   // before → spawn at viewport center. Drag past threshold: we
   // suppress the trailing click so we don't double-spawn.
-  const onPointerDown = useCallback((e: PointerEvent) => {
-    if (e.button !== 0) return;
-    const cardEl = e.currentTarget as HTMLElement;
-    const pointerId = e.pointerId;
-    try { cardEl.setPointerCapture(pointerId); } catch {}
+  const onPointerDown = useCallback(
+    (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      const cardEl = e.currentTarget as HTMLElement;
+      const pointerId = e.pointerId;
+      try {
+        cardEl.setPointerCapture(pointerId);
+      } catch {}
 
-    const sx = e.screenX;
-    const sy = e.screenY;
-    let dragStarted = false;
-    let cleanedUp = false;
+      const sx = e.screenX;
+      const sy = e.screenY;
+      let dragStarted = false;
+      let cleanedUp = false;
 
-    const onMove = (ev: PointerEvent) => {
-      if (dragStarted || ev.pointerId !== pointerId) return;
-      const dx = ev.screenX - sx;
-      const dy = ev.screenY - sy;
-      if (Math.abs(dx) >= DRAG_THRESHOLD_PX || Math.abs(dy) >= DRAG_THRESHOLD_PX) {
-        dragStarted = true;
-        // Hand the pointer to the modal — without this, the card
-        // keeps implicit/explicit capture and the modal never gets
-        // pointermove events until release.
-        try { cardEl.releasePointerCapture(pointerId); } catch {}
-        void startMonsterDrag(monster, e);
-        // Stop tracking on the card; modal's document.pointermove /
-        // pointerup take over from here.
+      const onMove = (ev: PointerEvent) => {
+        if (dragStarted || ev.pointerId !== pointerId) return;
+        const dx = ev.screenX - sx;
+        const dy = ev.screenY - sy;
+        if (
+          Math.abs(dx) >= DRAG_THRESHOLD_PX ||
+          Math.abs(dy) >= DRAG_THRESHOLD_PX
+        ) {
+          dragStarted = true;
+          // Hand the pointer to the modal — without this, the card
+          // keeps implicit/explicit capture and the modal never gets
+          // pointermove events until release.
+          try {
+            cardEl.releasePointerCapture(pointerId);
+          } catch {}
+          void startMonsterDrag(monster, e);
+          // Stop tracking on the card; modal's document.pointermove /
+          // pointerup take over from here.
+          cleanup();
+        }
+      };
+      const onUp = (ev: PointerEvent) => {
+        if (cleanedUp || ev.pointerId !== pointerId) return;
         cleanup();
-      }
-    };
-    const onUp = (ev: PointerEvent) => {
-      if (cleanedUp || ev.pointerId !== pointerId) return;
-      cleanup();
-      if (dragStarted) {
-        // Drag was started but pointerup arrived back at the card
-        // before the modal mounted (rare — happens on very fast
-        // drags + slow modal load). Suppress the trailing click so
-        // we don't double-spawn at viewport centre.
-        const swallowClick = (cev: Event) => {
-          cev.stopPropagation();
-          cev.preventDefault();
-          document.removeEventListener("click", swallowClick, true);
-        };
-        document.addEventListener("click", swallowClick, true);
-        setTimeout(() => {
-          document.removeEventListener("click", swallowClick, true);
-        }, 50);
-      }
-    };
-    const cleanup = () => {
-      cleanedUp = true;
-      cardEl.removeEventListener("pointermove", onMove);
-      cardEl.removeEventListener("pointerup", onUp);
-      cardEl.removeEventListener("pointercancel", onUp);
-      try { cardEl.releasePointerCapture(pointerId); } catch {}
-    };
-    cardEl.addEventListener("pointermove", onMove);
-    cardEl.addEventListener("pointerup", onUp);
-    cardEl.addEventListener("pointercancel", onUp);
-  }, [monster]);
+        if (dragStarted) {
+          // Drag was started but pointerup arrived back at the card
+          // before the modal mounted (rare — happens on very fast
+          // drags + slow modal load). Suppress the trailing click so
+          // we don't double-spawn at viewport centre.
+          const swallowClick = (cev: Event) => {
+            cev.stopPropagation();
+            cev.preventDefault();
+            document.removeEventListener("click", swallowClick, true);
+          };
+          document.addEventListener("click", swallowClick, true);
+          setTimeout(() => {
+            document.removeEventListener("click", swallowClick, true);
+          }, 50);
+        }
+      };
+      const cleanup = () => {
+        cleanedUp = true;
+        cardEl.removeEventListener("pointermove", onMove);
+        cardEl.removeEventListener("pointerup", onUp);
+        cardEl.removeEventListener("pointercancel", onUp);
+        try {
+          cardEl.releasePointerCapture(pointerId);
+        } catch {}
+      };
+      cardEl.addEventListener("pointermove", onMove);
+      cardEl.addEventListener("pointerup", onUp);
+      cardEl.addEventListener("pointercancel", onUp);
+    },
+    [monster],
+  );
 
   return (
-    <div class="card" onPointerDown={onPointerDown} onClick={() => onSpawn(monster)}>
+    <div
+      class="card"
+      onPointerDown={onPointerDown}
+      onClick={() => onSpawn(monster)}
+    >
       <div class="card-left">
         {!imgErr && monster.tokenUrl ? (
           <img
@@ -816,9 +920,7 @@ function MonsterCard({
             onError={() => setImgErr(true)}
           />
         ) : (
-          <div class="token-placeholder">
-            {monster.name.charAt(0)}
-          </div>
+          <div class="token-placeholder">{monster.name.charAt(0)}</div>
         )}
       </div>
       <div class="card-info">
@@ -840,7 +942,9 @@ function MonsterCard({
           <span class="stat-label">AC</span>
         </div>
         <div class="stat">
-          <span class="stat-val dex">{monster.dexMod >= 0 ? `+${monster.dexMod}` : monster.dexMod}</span>
+          <span class="stat-val dex">
+            {monster.dexMod >= 0 ? `+${monster.dexMod}` : monster.dexMod}
+          </span>
           <span class="stat-label">DEX</span>
         </div>
       </div>
@@ -865,7 +969,12 @@ function PluginGate() {
     });
   }, []);
 
-  if (!ready) return <div class="app"><div class="empty">{_tt("bestiaryLoading")}</div></div>;
+  if (!ready)
+    return (
+      <div class="app">
+        <div class="empty">{_tt("bestiaryLoading")}</div>
+      </div>
+    );
   return <App />;
 }
 
