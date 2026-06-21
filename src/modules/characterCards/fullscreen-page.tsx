@@ -1365,15 +1365,6 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
                 >
                   {T("ccSave")} <b>{fmtMod(saveBonus)}</b>
                 </div>
-                <div
-                  class={`abl-save ${a.save?.proficient ? "is-prof" : ""}`}
-                  onClick={() =>
-                    quickRoll(sExpr, `${ablLabel(k)}${T("ccSaveSuffix")}`)
-                  }
-                  title={`${ablLabel(k)}${T("ccSaveSuffix")} ${sExpr}`}
-                >
-                  {T("ccSave")} <b>{fmtMod(saveBonus)}</b>
-                </div>
               </div>
             );
           })}
