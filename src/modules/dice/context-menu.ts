@@ -93,7 +93,17 @@ async function openMenuPopoverAt(
   });
 }
 
-async function openQuickPopupAt(
+// 2026-06-20 — exported so panel-page.ts can open this exact same
+// quick-pick popup when it receives a "cc-roll-dice" postMessage from
+// cc-fullscreen.html's nested iframe. That iframe is a THIRD-LEVEL
+// document (owlbear.rodeo → cc-panel.html → cc-fullscreen.html) and
+// never completes the OBR SDK postMessage handshake, so it can't call
+// OBR.modal.open itself — it can only ask its immediate parent
+// (cc-panel.html / panel-page.ts, which DOES have a working SDK) to
+// do it on its behalf. Without this export, clicking an ability
+// modifier / saving throw inside the fullscreen card silently does
+// nothing (the postMessage has no listener to forward it).
+export async function openQuickPopupAt(
   args: {
     expression: string;
     label: string;

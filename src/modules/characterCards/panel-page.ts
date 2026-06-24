@@ -4,6 +4,19 @@ import { applyI18nDom, t } from "../../i18n";
 import { getLocalLang, onLangChange } from "../../state";
 import { assetUrl } from "../../asset-base";
 import { reconcileUploadedCardShieldState } from "./xlsx-shield-state";
+// 2026-06-20 — same quick-pick popup info-page.ts uses for its own
+// .rollable clicks. Exported specifically so this file can forward
+// "cc-roll-dice" messages from the nested cc-fullscreen.html iframe,
+// which has no working OBR SDK of its own (third-level iframe — see
+// the message handler below) and so can't open the popup itself.
+import { openQuickPopupAt } from "../dice/context-menu";
+
+// Mirrors fullscreen-page.tsx's own BIND_META_KEY — the token-binding
+// metadata key written by characterCards' bind-page.ts. Used below to
+// resolve which token (if any) is bound to the currently-open card,
+// so a roll fired from the fullscreen iframe anchors/focuses on the
+// right token exactly like a roll fired from info-page.ts would.
+const BIND_META_KEY = "com.character-cards/boundCardId";
 
 let lang = getLocalLang();
 const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
@@ -1740,12 +1753,54 @@ OBR.onReady(async () => {
     if (SCENE_META_KEY in meta) refreshFromScene();
   });
   // Listener per tornare alla lista dal pulsante "←" nella scheda fullscreen
+  // + 2026-06-20: forward "cc-roll-dice" from the SAME nested
+  // cc-fullscreen.html iframe. That document is a third-level iframe
+  // with no working OBR SDK (owlbear.rodeo → cc-panel.html →
+  // cc-fullscreen.html never completes the postMessage handshake), so
+  // fullscreen-page.tsx's quickRoll() can only postMessage its parent
+  // — this IS that parent, and it DOES have a working SDK, so it opens
+  // the exact same quick-pick popup info-page.ts uses for its own
+  // .rollable clicks (劣势/普通/优势 + 重击). Without this handler the
+  // postMessage had no listener and clicking an ability modifier /
+  // saving throw in the fullscreen card silently did nothing.
   window.addEventListener("message", (e) => {
     if (e.data?.type === "cc-back-to-list") {
       current = { type: "empty" };
       const viewer = document.getElementById("viewer") as HTMLDivElement;
       if (viewer) viewer.innerHTML = "";
       render();
+      return;
+    }
+    if (e.data?.type === "cc-roll-dice") {
+      const payload = e.data.payload as
+        | { expression?: string; label?: string }
+        | undefined;
+      const expression = payload?.expression?.trim();
+      if (!expression) return;
+      const label = payload?.label ?? "";
+      void (async () => {
+        // Resolve the token bound to the CURRENTLY OPEN card (if any)
+        // so the roll anchors/focuses exactly like info-page.ts's
+        // resolveBoundToken() would. No bound token (e.g. a card that
+        // isn't linked to any scene token) just rolls un-anchored —
+        // same fallback the quick-pick popup already handles.
+        let itemId: string | null = null;
+        if (current.type === "card") {
+          try {
+            const bound = await OBR.scene.items.getItems(
+              (it: any) =>
+                current.type === "card" &&
+                it.metadata?.[BIND_META_KEY] === current.id,
+            );
+            itemId = bound[0]?.id ?? null;
+          } catch {}
+        }
+        try {
+          await openQuickPopupAt({ expression, label, itemId }, { x: 0, y: 0 });
+        } catch (err) {
+          console.error("[cc-panel] openQuickPopupAt from cc-roll-dice failed", err);
+        }
+      })();
     }
   });
   // Validate restored activeCardId still exists; otherwise clear
