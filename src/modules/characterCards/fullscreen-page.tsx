@@ -1827,11 +1827,13 @@ function CombatSection({ data }: { data: CharacterData }) {
               </div>
               <div
                 class="weap-atk"
-                onClick={() => rollExpr(`${w.name} ${T("ccHit")}`, atkExpr)}
-                onContextMenu={(e: any) => {
-                  e.preventDefault();
-                  rollExpr(`${w.name} ${T("ccHitAdv")}`, atkExpr, "adv");
-                }}
+                onClick={() =>
+                  quickRoll(atkExpr, `${ablLabel(w.name)}${T("ccHit")}`)
+                }
+                // onContextMenu={(e: any) => {
+                //   e.preventDefault();
+                //   rollExpr(`${w.name} ${T("ccHitAdv")}`, atkExpr, "adv");
+                // }}
                 title={`${T("ccRollLR")} · ${atkExpr}`}
               >
                 {w.attack_bonus || `${fmtMod(atkBn)}`}
@@ -1839,9 +1841,9 @@ function CombatSection({ data }: { data: CharacterData }) {
               <div
                 class="weap-dmg"
                 onClick={() =>
-                  rollExpr(
-                    `${w.name} ${T("ccDamage")}${w.damage_type ? `(${w.damage_type})` : ""}`,
+                  quickRoll(
                     dmgExpr,
+                    `${w.name} ${T("ccDamage")}${w.damage_type ? `(${w.damage_type})` : ""}`,
                   )
                 }
                 title={`${w.damage} ${w.damage_type ?? ""}`}
@@ -1860,9 +1862,9 @@ function CombatSection({ data }: { data: CharacterData }) {
                   class="weap-dmg weap-dmg-extra"
                   onClick={(e: any) => {
                     e.stopPropagation();
-                    rollExpr(
-                      `${w.name} ${T("ccExtraDamage")}${w.extra_damage_type ? `(${w.extra_damage_type})` : ""}`,
+                    quickRoll(
                       String(w.extra_damage).replace(/\s+/g, ""),
+                      `${w.name} ${T("ccExtraDamage")}${w.extra_damage_type ? `(${w.extra_damage_type})` : ""}`,
                     );
                   }}
                   title={`${T("ccExtraDmgDie")} ${w.extra_damage}${w.extra_damage_type ? ` · ${w.extra_damage_type}` : ""}`}
