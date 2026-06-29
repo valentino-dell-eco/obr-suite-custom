@@ -1761,59 +1761,221 @@ function CombatSection({ data }: { data: CharacterData }) {
           const dmgMatch = /\d*d\d+([+-]\d+)?/.exec(dmgRaw);
           const dmgExpr = dmgMatch ? dmgMatch[0] : dmgRaw;
           if (editing) {
+            const extraList: Array<{ damage?: string; damage_type?: string }> =
+              Array.isArray(w.extra_damages) ? w.extra_damages : [];
+            const updateExtra = (
+              exIdx: number,
+              patch: Record<string, any>,
+            ) => {
+              const next = [...extraList];
+              next[exIdx] = { ...next[exIdx], ...patch };
+              updateWeapon(idx, { extra_damages: next });
+            };
+            const removeExtra = (exIdx: number) => {
+              updateWeapon(idx, {
+                extra_damages: extraList.filter((_, i) => i !== exIdx),
+              });
+            };
+            const addExtra = () => {
+              updateWeapon(idx, {
+                extra_damages: [...extraList, { damage: "", damage_type: "" }],
+              });
+            };
             return (
-              <div
-                class="weap"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1.4fr 0.7fr 1fr 1fr auto",
-                  gap: "6px",
-                  alignItems: "center",
-                }}
-              >
-                <input
-                  class="cc-edit-text"
-                  type="text"
-                  value={w.name ?? ""}
-                  placeholder={T("ccWeaponNamePh")}
-                  onInput={(e: any) =>
-                    updateWeapon(idx, { name: e.target.value })
-                  }
-                />
-                <input
-                  class="cc-edit-text"
-                  type="text"
-                  value={w.attack_bonus ?? ""}
-                  placeholder="+5"
-                  onInput={(e: any) =>
-                    updateWeapon(idx, { attack_bonus: e.target.value })
-                  }
-                />
-                <input
-                  class="cc-edit-text"
-                  type="text"
-                  value={w.damage ?? ""}
-                  placeholder="1d8+3"
-                  onInput={(e: any) =>
-                    updateWeapon(idx, { damage: e.target.value })
-                  }
-                />
-                <input
-                  class="cc-edit-text"
-                  type="text"
-                  value={w.damage_type ?? ""}
-                  placeholder={T("ccDmgTypePh")}
-                  onInput={(e: any) =>
-                    updateWeapon(idx, { damage_type: e.target.value })
-                  }
-                />
+              <div class="weap weap-edit-row">
+                {/* 2026-06-21 — was a fixed 5-column inline grid
+                    ("1.4fr 0.7fr 1fr 1fr auto"), which overflowed a
+                    narrow character card: <input> grid items don't
+                    shrink below their intrinsic content width, so the
+                    fr units couldn't actually compress the row. Layout
+                    now lives in CSS (.weap-edit-row / .weap-edit-grid
+                    in cc-fullscreen.html) behind an @container query:
+                    a tabular row above ~480px of section width, a
+                    stacked mini-card with one label per field below
+                    it — so every input stays legible and editable no
+                    matter how narrow the panel gets. The × button sits
+                    outside .weap-edit-grid so it never gets swept into
+                    the responsive column set. */}
+                <div class="weap-edit-top">
+                <div class="weap-edit-grid">
+                  <div class="weap-edit-field weap-edit-field-wide">
+                    <span class="weap-edit-field-label">
+                      {T("ccWeaponNamePh")}
+                    </span>
+                    <div class="weap-edit-name-row">
+                      <input
+                        class="cc-edit-text"
+                        type="text"
+                        value={w.name ?? ""}
+                        placeholder={T("ccWeaponNamePh")}
+                        onInput={(e: any) =>
+                          updateWeapon(idx, { name: e.target.value })
+                        }
+                      />
+                      {/* 2026-06-21 — proficiency checkbox. Drives the
+                          "熟练" badge shown in view mode (w.proficient)
+                          — no derived math here (attack_bonus / damage
+                          stay manual text fields the player types
+                          directly), this just records the flag. */}
+                      <label
+                        class="weap-prof-check"
+                        title={T("ccProfShort") || "Proficient"}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!w.proficient}
+                          onChange={(e: any) =>
+                            updateWeapon(idx, {
+                              proficient: !!e.target.checked,
+                            })
+                          }
+                        />
+                        <span>{T("ccProfShort") || "熟练"}</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="weap-edit-field">
+                    <span class="weap-edit-field-label">
+                      {T("ccHit")}
+                    </span>
+                    <input
+                      class="cc-edit-text"
+                      type="text"
+                      value={w.attack_bonus ?? ""}
+                      placeholder="+5"
+                      onInput={(e: any) =>
+                        updateWeapon(idx, { attack_bonus: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div class="weap-edit-field">
+                    <span class="weap-edit-field-label">
+                      {T("ccDamage")}
+                    </span>
+                    <input
+                      class="cc-edit-text"
+                      type="text"
+                      value={w.damage ?? ""}
+                      placeholder="1d8+3"
+                      onInput={(e: any) =>
+                        updateWeapon(idx, { damage: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div class="weap-edit-field">
+                    <span class="weap-edit-field-label">
+                      {T("ccDmgTypePh")}
+                    </span>
+                    <input
+                      class="cc-edit-text"
+                      type="text"
+                      value={w.damage_type ?? ""}
+                      placeholder={T("ccDmgTypePh")}
+                      onInput={(e: any) =>
+                        updateWeapon(idx, { damage_type: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div class="weap-edit-field weap-edit-field-wide">
+                    <span class="weap-edit-field-label">
+                      {T("ccPropertiesPh") || "Properties"}
+                    </span>
+                    <input
+                      class="cc-edit-text"
+                      type="text"
+                      value={w.properties ?? ""}
+                      placeholder={
+                        T("ccPropertiesPh") ||
+                        "e.g. Versatile (1d8), Finesse"
+                      }
+                      onInput={(e: any) =>
+                        updateWeapon(idx, { properties: e.target.value })
+                      }
+                    />
+                  </div>
+                  {/* 2026-06-21 — special_properties: a separate,
+                      longer free-text field for magical effects /
+                      homebrew rules / lore text on the weapon — kept
+                      apart from `properties` (which holds short
+                      standard tags like "Versatile (1d8)") because
+                      this one can run to several sentences. textarea
+                      instead of input so multi-line text doesn't get
+                      clipped while typing. */}
+                  <div class="weap-edit-field weap-edit-field-wide">
+                    <span class="weap-edit-field-label">
+                      {T("ccSpecialPropertiesPh") || "Special properties"}
+                    </span>
+                    <textarea
+                      class="cc-edit-text weap-special-props-input"
+                      value={w.special_properties ?? ""}
+                      placeholder={
+                        T("ccSpecialPropertiesPh") ||
+                        "e.g. magical effects, custom rules, lore…"
+                      }
+                      onInput={(e: any) =>
+                        updateWeapon(idx, {
+                          special_properties: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
                 <button
-                  class="cc-tag-x"
+                  class="cc-tag-x weap-edit-remove"
                   onClick={() => removeWeapon(idx)}
                   title={T("ccDelWeaponTitle")}
                 >
                   ×
                 </button>
+                </div>
+                {/* 2026-06-21 — extra damage TYPES (plural). The
+                    weapon's base damage stays in `damage`/`damage_type`
+                    above; `extra_damages[]` holds any ADDITIONAL damage
+                    dice that land alongside the base hit (e.g. a
+                    flaming weapon: 1d8 slashing + 1d6 fire). This is
+                    separate from the older singular `extra_damage` /
+                    `extra_damage_type` fields (still read in view mode
+                    below for backward compatibility with weapons saved
+                    before this existed) — new edits always write to
+                    the plural array. */}
+                <div class="weap-extra-list">
+                  {extraList.map((ex, exIdx) => (
+                    <div class="weap-extra-row">
+                      <input
+                        class="cc-edit-text"
+                        type="text"
+                        value={ex.damage ?? ""}
+                        placeholder="1d6"
+                        onInput={(e: any) =>
+                          updateExtra(exIdx, { damage: e.target.value })
+                        }
+                      />
+                      <input
+                        class="cc-edit-text"
+                        type="text"
+                        value={ex.damage_type ?? ""}
+                        placeholder={T("ccDmgTypePh")}
+                        onInput={(e: any) =>
+                          updateExtra(exIdx, { damage_type: e.target.value })
+                        }
+                      />
+                      <button
+                        class="cc-tag-x"
+                        onClick={() => removeExtra(exIdx)}
+                        title={T("ccDelete")}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    class="cc-add-tag weap-extra-add"
+                    onClick={addExtra}
+                    title={T("ccAddExtraDmgTitle") || "Add extra damage type"}
+                  >
+                    + {T("ccExtraDamage") || "Extra damage"}
+                  </button>
+                </div>
               </div>
             );
           }
@@ -1857,28 +2019,57 @@ function CombatSection({ data }: { data: CharacterData }) {
                   ""
                 )}
               </div>
-              {w.extra_damage && (
-                <div
-                  class="weap-dmg weap-dmg-extra"
-                  onClick={(e: any) => {
-                    e.stopPropagation();
-                    quickRoll(
-                      String(w.extra_damage).replace(/\s+/g, ""),
-                      `${w.name} ${T("ccExtraDamage")}${w.extra_damage_type ? `(${w.extra_damage_type})` : ""}`,
-                    );
-                  }}
-                  title={`${T("ccExtraDmgDie")} ${w.extra_damage}${w.extra_damage_type ? ` · ${w.extra_damage_type}` : ""}`}
-                >
-                  +{w.extra_damage}{" "}
-                  {w.extra_damage_type ? (
-                    <span style={{ opacity: 0.7, fontSize: "10px" }}>
-                      {w.extra_damage_type}
-                    </span>
-                  ) : (
-                    ""
+              {/* 2026-06-21 — extra_damages[] (plural) is the new
+                  field; extra_damage/extra_damage_type (singular) is
+                  kept as a fallback so weapons saved before this
+                  change still show their bonus die. We never show
+                  both at once for the same weapon — if the plural
+                  array has entries, it's the authoritative source. */}
+              {Array.isArray(w.extra_damages) && w.extra_damages.length > 0
+                ? w.extra_damages.map((ex: any, exIdx: number) => (
+                    <div
+                      class="weap-dmg weap-dmg-extra"
+                      onClick={(e: any) => {
+                        e.stopPropagation();
+                        quickRoll(
+                          String(ex.damage ?? "").replace(/\s+/g, ""),
+                          `${w.name} ${T("ccExtraDamage")}${ex.damage_type ? `(${ex.damage_type})` : ""}`,
+                        );
+                      }}
+                      title={`${T("ccExtraDmgDie")} ${ex.damage}${ex.damage_type ? ` · ${ex.damage_type}` : ""}`}
+                    >
+                      +{ex.damage}{" "}
+                      {ex.damage_type ? (
+                        <span style={{ opacity: 0.7, fontSize: "10px" }}>
+                          {ex.damage_type}
+                        </span>
+                      ) : (
+                        ""
+                      )}
+                    </div>
+                  ))
+                : w.extra_damage && (
+                    <div
+                      class="weap-dmg weap-dmg-extra"
+                      onClick={(e: any) => {
+                        e.stopPropagation();
+                        quickRoll(
+                          String(w.extra_damage).replace(/\s+/g, ""),
+                          `${w.name} ${T("ccExtraDamage")}${w.extra_damage_type ? `(${w.extra_damage_type})` : ""}`,
+                        );
+                      }}
+                      title={`${T("ccExtraDmgDie")} ${w.extra_damage}${w.extra_damage_type ? ` · ${w.extra_damage_type}` : ""}`}
+                    >
+                      +{w.extra_damage}{" "}
+                      {w.extra_damage_type ? (
+                        <span style={{ opacity: 0.7, fontSize: "10px" }}>
+                          {w.extra_damage_type}
+                        </span>
+                      ) : (
+                        ""
+                      )}
+                    </div>
                   )}
-                </div>
-              )}
               {(w.properties || w.weight != null || w.ammo_type) && (
                 <div class="weap-props">
                   {[
@@ -1888,6 +2079,16 @@ function CombatSection({ data }: { data: CharacterData }) {
                   ]
                     .filter(Boolean)
                     .join(" · ")}
+                </div>
+              )}
+              {/* 2026-06-21 — special_properties view: rendered as its
+                  OWN block (not folded into the .weap-props line above)
+                  because this text can run long (magical effects /
+                  homebrew rules / lore) — a " · "-joined single line
+                  would either truncate it or blow out the row. */}
+              {w.special_properties && (
+                <div class="weap-props weap-special-props">
+                  {w.special_properties}
                 </div>
               )}
             </div>
@@ -3278,14 +3479,15 @@ function InventorySection({ data }: { data: CharacterData }) {
               {T("ccBackpack")}
             </div>
 
-            {/* Header solo in edit mode */}
+            {/* Header solo in edit mode — hidden under the @container
+                narrow breakpoint (cc-fullscreen.html), since stacked
+                mini-cards below that width carry their own per-field
+                labels and a column-caption header has nothing to
+                align against any more. */}
             {editing && (
               <div
-                class="weap"
+                class="weap inv-edit-header"
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1.35fr 0.55fr 0.45fr 0.75fr auto",
-                  gap: "6px",
                   fontWeight: "bold",
                   color: "var(--gold)",
                   borderBottom: "1px solid var(--border)",
@@ -3293,10 +3495,10 @@ function InventorySection({ data }: { data: CharacterData }) {
                   marginBottom: "8px",
                 }}
               >
-                <div>Nome Oggetto</div>
-                <div>Peso</div>
+                <div>{T("ccItemNamePh") || "Nome Oggetto"}</div>
+                <div>{T("ccWeightPh") || "Peso"}</div>
                 <div>Qtà</div>
-                <div>Posizione</div>
+                <div>{T("ccLocationPh") || "Posizione"}</div>
                 <div></div>
               </div>
             )}
@@ -3309,57 +3511,76 @@ function InventorySection({ data }: { data: CharacterData }) {
 
               if (editing) {
                 return (
-                  <div
-                    class="weap"
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1.35fr 0.55fr 0.45fr 0.75fr auto",
-                      gap: "6px",
-                      alignItems: "center",
-                    }}
-                  >
-                    <input
-                      class="cc-edit-text"
-                      type="text"
-                      value={it.name ?? ""}
-                      placeholder="Nome oggetto"
-                      onInput={(e: any) =>
-                        updateItem(idx, { name: e.target.value })
-                      }
-                    />
-                    <input
-                      class="cc-edit-num"
-                      type="number"
-                      step="0.1"
-                      value={it.weight ?? ""}
-                      placeholder="0.0"
-                      onInput={(e: any) => {
-                        const v = e.target.value;
-                        updateItem(idx, {
-                          weight: v === "" ? null : parseFloat(v),
-                        });
-                      }}
-                    />
-                    <input
-                      class="cc-edit-num"
-                      type="number"
-                      min="1"
-                      value={it.quantity ?? 1}
-                      onInput={(e: any) => {
-                        const n = parseInt(e.target.value, 10);
-                        if (Number.isFinite(n))
-                          updateItem(idx, { quantity: Math.max(1, n) });
-                      }}
-                    />
-                    <input
-                      class="cc-edit-text"
-                      type="text"
-                      value={it.location ?? ""}
-                      placeholder="Posizione"
-                      onInput={(e: any) =>
-                        updateItem(idx, { location: e.target.value })
-                      }
-                    />
+                  <div class="weap inv-edit-row">
+                    {/* 2026-06-21 — same fix as the weapon-edit row
+                        above: fixed grid columns overflowed a narrow
+                        card. Layout now lives in CSS behind the
+                        @container query (.inv-edit-row / .inv-edit-
+                        grid in cc-fullscreen.html) — tabular row when
+                        there's room, stacked mini-card with one label
+                        per field when there isn't. */}
+                    <div class="inv-edit-grid">
+                      <div class="inv-edit-field">
+                        <span class="inv-edit-field-label">
+                          {T("ccItemNamePh") || "Nome oggetto"}
+                        </span>
+                        <input
+                          class="cc-edit-text"
+                          type="text"
+                          value={it.name ?? ""}
+                          placeholder="Nome oggetto"
+                          onInput={(e: any) =>
+                            updateItem(idx, { name: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div class="inv-edit-field">
+                        <span class="inv-edit-field-label">
+                          {T("ccWeightPh") || "Peso"}
+                        </span>
+                        <input
+                          class="cc-edit-num"
+                          type="number"
+                          step="0.1"
+                          value={it.weight ?? ""}
+                          placeholder="0.0"
+                          onInput={(e: any) => {
+                            const v = e.target.value;
+                            updateItem(idx, {
+                              weight: v === "" ? null : parseFloat(v),
+                            });
+                          }}
+                        />
+                      </div>
+                      <div class="inv-edit-field">
+                        <span class="inv-edit-field-label">Qtà</span>
+                        <input
+                          class="cc-edit-num"
+                          type="number"
+                          min="1"
+                          value={it.quantity ?? 1}
+                          onInput={(e: any) => {
+                            const n = parseInt(e.target.value, 10);
+                            if (Number.isFinite(n))
+                              updateItem(idx, { quantity: Math.max(1, n) });
+                          }}
+                        />
+                      </div>
+                      <div class="inv-edit-field">
+                        <span class="inv-edit-field-label">
+                          {T("ccLocationPh") || "Posizione"}
+                        </span>
+                        <input
+                          class="cc-edit-text"
+                          type="text"
+                          value={it.location ?? ""}
+                          placeholder="Posizione"
+                          onInput={(e: any) =>
+                            updateItem(idx, { location: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
                     <button
                       class="cc-tag-x"
                       onClick={() => removeItem(idx)}

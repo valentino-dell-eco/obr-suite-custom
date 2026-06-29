@@ -719,14 +719,6 @@ function render(
 
   const rawUrl = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`;
 
-  // Stat banner — the shared `mountStatBanner` component (the SAME one
-  // the standalone DM resource tracker mounts). It owns the HP / temp HP
-  // / AC / lock UI plus all the edit + scene-sync logic, so render() just
-  // drops a host element here; the post-innerHTML step below mounts the
-  // component into it. `statFallback` supplies the card-data HP/AC for
-  // any field the bound token has no bubbles metadata for yet; the
-  // already-fetched `live` snapshot is passed as initialLive for a
-  // flicker-free first paint.
   const hp = cs.hp || {};
   const statFallback: Partial<Record<keyof BubblesData, number>> = {
     health: typeof hp.current === "number" ? hp.current : 0,
@@ -741,7 +733,6 @@ function render(
   const statBanner = `<div class="cc-stat-mount" id="cc-stat-mount"></div>`;
 
   const initExpr = `1d20${cs.initiative >= 0 ? `+${cs.initiative}` : cs.initiative}`;
-  // The remaining read-only chips (HP/AC moved to stat-rows above).
   const chips = `
     <div class="chip init" ><span class="k">${tt("ccInit")}</span><span class="v rollable" data-expr="${initExpr}" data-label="${tt("ccFullInit")}">${fmtMod(cs.initiative)}</span></div>
     <div class="chip"><span class="k">${tt("ccSpeed")}</span><span class="v">${escapeHtml(speedStr)}</span></div>
@@ -751,8 +742,6 @@ function render(
     <div class="chip"><span class="k">${tt("ccSpellcastingAbility")}</span><span class="v">${escapeHtml(castAbility)}</span></div>
   `;
 
-  // Group skills by their ability key — each ability card embeds its own
-  // list of associated skills (e.g. DEX card shows 特技/巧手/隐匿).
   const skills = Array.isArray(d.skills) ? d.skills : [];
   const skillsByAbil: Record<string, any[]> = {};
   for (const s of skills) {
@@ -782,12 +771,9 @@ function render(
     const prof = !!a.save?.proficient;
     const skList = skillsByAbil[k] ?? [];
     const skHtml = skList.map(renderSkillRow).join("");
-    // Ability check: 1d20+modifier. Saving-throw uses the same
-    // modifier unless the save has its own bonus stored separately.
     const aMod = typeof a.modifier === "number" ? a.modifier : 0;
     const aExpr = `1d20${aMod >= 0 ? `+${aMod}` : aMod}`;
     const aLbl = `${FULL[k] ?? ABBR[k] ?? k}${t(getLocalLang(), "ccInfoSkillSuffix")}`;
-    // Saving throw — different label, may have its own bonus.
     const saveBonus =
       typeof a.save?.bonus === "number"
         ? a.save.bonus
@@ -808,119 +794,153 @@ function render(
 
   const weaponRows: string[] = [];
 
-  // Spell attack row (first so it's easy to find). Only if character casts.
   if (sp.attack_bonus) {
     const bonus = extractBonus(sp.attack_bonus);
     const bn = parseInt(bonus.replace(/[^\d-]/g, ""), 10) || 0;
     const atkExpr = `1d20${bn >= 0 ? `+${bn}` : bn}`;
     const atkLbl = tt("ccSpellAttack");
     weaponRows.push(`<div class="wp spell">
-      <span class="n">${tt("ccMeleeRangedSpellAttack")}</span>
-      <span class="atk rollable" data-expr="${atkExpr}" data-label="${escapeHtml(atkLbl)}" title="${escapeHtml(atkLbl)} ${atkExpr}">${escapeHtml(bonus)}</span>
-      <span class="dmg">DC ${escapeHtml(sp.save_dc ?? cs.dc ?? "?")}</span>
+      <div class="wp-left">
+        <span class="n">${tt("ccMeleeRangedSpellAttack")}</span>
+      </div>
+      <div class="wp-right">
+        <div class="wp-main-atk-dmg">
+          <span class="atk rollable" data-expr="${atkExpr}" data-label="${escapeHtml(atkLbl)}" title="${escapeHtml(atkLbl)} ${atkExpr}">${escapeHtml(bonus)}</span>
+          <span class="dmg">DC ${escapeHtml(sp.save_dc ?? cs.dc ?? "?")}</span>
+        </div>
+      </div>
     </div>`);
   }
 
   if (Array.isArray(cb.weapons)) {
     for (const w of cb.weapons) {
-      // Weapon properties (e.g. "灵巧, 轻型, 精通：缓速") render as
-      // individual clickable chips. Splits on the most common
-      // delimiters (Chinese / ASCII commas, slash, and the explicit
-      // "精通：" prefix) so each tag becomes its own search query.
-      //
-      // 2026-05-15 — also pull `w.mastery` (the parser's dedicated
-      // mastery column, AN32 in the 2024 layout). When present, fold
-      // it into the chip list with the "精通：" prefix so it renders
-      // identically to mastery written inline in the properties text.
-      // Description (AP32 effect) is NOT carried into the chip —
-      // global search resolves the rule line on click.
+      const wpName = w.name ?? "?";
+
+      // Properties + Special
       const propsRaw = String(w.properties ?? "");
       const masteryName = String((w as any).mastery ?? "").trim();
       const lang = getLocalLang();
       const masteryPrefix = masteryName
         ? `${t(lang, "ccInfoMasteryPrefix")}${masteryName}`
         : "";
-      // Merge into one string. If the raw props already contains a
-      // mastery tag (legacy cards), don't double-add the dedicated one.
+
       const propsCombined =
         masteryPrefix && !/精通[：:]/.test(propsRaw)
           ? propsRaw
             ? `${propsRaw}, ${masteryPrefix}`
             : masteryPrefix
           : propsRaw;
-      const prop = propsCombined
-        ? renderWeaponPropertyChips(propsCombined)
-        : "";
-      const dmgRaw = [w.damage, w.damage_type].filter(Boolean).join(" ");
-      const wpName = w.name ?? "?";
-      // Attack roll: parse the leading sign+number from attack_bonus.
+
+      // Array che conterrà tutti i singoli chip HTML
+      const individualChips: string[] = [];
+
+      // 1. Elaborazione delle proprietà standard (se presenti)
+      if (propsCombined.trim()) {
+        // Divide la stringa usando come separatore una virgola, un punto e virgola o un punto, rimuovendo gli spazi extra
+        const splitProps = propsCombined
+          .split(/[,;.]+/)
+          .map((p) => p.trim())
+          .filter(Boolean);
+
+        for (const prop of splitProps) {
+          individualChips.push(`
+            <span class="prop-chip" data-search="${escapeHtml(prop)}" title="${escapeHtml(prop)}">
+              ${escapeHtml(prop)}
+            </span>
+          `);
+        }
+      }
+
+      // 2. Elaborazione della proprietà Special (se presente)
+      if (w.special_properties && String(w.special_properties).trim()) {
+        const spText = String(w.special_properties).trim();
+        individualChips.push(`
+          <span class="prop-chip prop-special" 
+                data-search="Special"
+                title="${escapeHtml(spText)}">
+            Special
+          </span>
+        `);
+      }
+
+      // 3. Unione di tutti i chip dentro lo stesso identico wrapper .prop-row
+      const propHtml =
+        individualChips.length > 0
+          ? `<div class="prop-row">${individualChips.join("")}</div>`
+          : "";
+
+      // Attack & Damage variables
+      // ... (Resto del codice di calcolo attacchi, danni e push in weaponRows rimane identico) ...
+
+      // Attack & Damage variables
       const atkBonusStr = String(w.attack_bonus ?? "").trim();
       const atkM = /([+-]?\s*\d+)/.exec(atkBonusStr);
       const atkBn = atkM ? parseInt(atkM[1].replace(/\s+/g, ""), 10) : 0;
       const atkExpr = `1d20${atkBn >= 0 ? `+${atkBn}` : atkBn}`;
       const atkLbl = `${wpName}${t(getLocalLang(), "ccInfoHitSuffix")}`;
-      // Damage: extract the raw dice expression from `w.damage`. Most
-      // entries are like "1d8+3" or "2d6+4" — pass through directly.
+
+      const dmgRaw = [w.damage, w.damage_type].filter(Boolean).join(" ");
       const dmgExprRaw = String(w.damage ?? "").replace(/\s+/g, "");
       const dmgExprMatch = /\d*d\d+([+-]\d+)?/.exec(dmgExprRaw);
       const dmgExpr = dmgExprMatch ? dmgExprMatch[0] : dmgExprRaw;
       const dmgLbl = `${wpName}${t(getLocalLang(), "ccInfoDmgSuffix")}${w.damage_type ? `(${w.damage_type})` : ""}`;
-      // 附加伤害骰 — bonus dice (sneak attack, divine smite, etc.).
-      // Server attaches `extra_damage` (e.g. "1d8") and
-      // `extra_damage_type` (e.g. "辐光").
-      //
-      // 2026-05-23 — merged into a SINGLE rollable button: clicking
-      // the damage now rolls `base + extra` in one go (e.g. 1d6+4+1d6),
-      // since the small character panel is a quick-action surface and
-      // splitting the click into two felt wrong. The displayed text
-      // still shows the extra portion separately (with its damage
-      // type) so the player can read what's contributing, but only
-      // one chip is clickable. (Note: when base + extra are different
-      // damage types, the combined roll is a sum — dice rolling
-      // doesn't carry per-die typing; the label still lists both
-      // types for the GM.)
-      const extraExprRaw = w.extra_damage
-        ? String(w.extra_damage).replace(/\s+/g, "")
-        : "";
-      const combinedExpr =
-        dmgExpr && extraExprRaw
-          ? `${dmgExpr}+${extraExprRaw}`
-          : dmgExpr || extraExprRaw;
-      const combinedLbl = extraExprRaw
-        ? `${wpName} 伤害${w.damage_type ? `(${w.damage_type})` : ""}${w.extra_damage_type ? ` + ${w.extra_damage_type}` : t(getLocalLang(), "ccInfoExtraDmg")}`
-        : dmgLbl;
-      const extraDisplay = extraExprRaw
-        ? [w.extra_damage, w.extra_damage_type].filter(Boolean).join(" ")
-        : "";
-      const extraSuffix = extraExprRaw
-        ? ` <span class="dmg-extra-label">+${escapeHtml(extraDisplay)}</span>`
-        : "";
-      const dmgClickable = combinedExpr
-        ? `<span class="rollable" data-expr="${escapeHtml(combinedExpr)}" data-label="${escapeHtml(combinedLbl)}" title="${escapeHtml(combinedLbl)} ${escapeHtml(combinedExpr)}">${escapeHtml(dmgRaw || "?")}${extraSuffix}</span>`
+
+      let mainDmgHtml = dmgExpr
+        ? `<span class="rollable" data-expr="${escapeHtml(dmgExpr)}" data-label="${escapeHtml(dmgLbl)}" title="${escapeHtml(dmgLbl)} ${escapeHtml(dmgExpr)}">${escapeHtml(dmgRaw || "?")}</span>`
         : escapeHtml(dmgRaw || "?");
-      weaponRows.push(`<div class="wp">
-        <span class="n">${escapeHtml(wpName)}</span>
-        <span class="atk rollable" data-expr="${atkExpr}" data-label="${escapeHtml(atkLbl)}" title="${escapeHtml(atkLbl)} ${atkExpr}">${escapeHtml(w.attack_bonus ?? "?")}</span>
-        <span class="dmg">${dmgClickable}</span>
-        ${prop}
-      </div>`);
+
+      // Extra Damages adattati per incolonnarsi a destra
+      const extraRows: string[] = [];
+      const extras =
+        Array.isArray(w.extra_damages) && w.extra_damages.length > 0
+          ? w.extra_damages
+          : w.extra_damage
+            ? [{ damage: w.extra_damage, damage_type: w.extra_damage_type }]
+            : [];
+
+      for (const ex of extras) {
+        if (!ex?.damage) continue;
+        const exDmgRaw = String(ex.damage).replace(/\s+/g, "");
+        const exType = ex.damage_type ? ` (${ex.damage_type})` : "";
+        const exLbl = `${wpName} Extra Damage${exType}`;
+        extraRows.push(`
+          <div>
+            <span class="rollable" 
+                  data-expr="${escapeHtml(exDmgRaw)}" 
+                  data-label="${escapeHtml(exLbl)}" 
+                  title="${escapeHtml(exLbl)} ${escapeHtml(exDmgRaw)}"
+                  style="color:#ffb088; font-size:11px;">
+              +${escapeHtml(ex.damage)}${ex.damage_type ? ` <span style="opacity:0.8;font-size:9.5px">${escapeHtml(ex.damage_type)}</span>` : ""}
+            </span>
+          </div>
+        `);
+      }
+
+      // Push della nuova struttura allineata all'evidenziazione di image_e762a4.png
+      weaponRows.push(`
+        <div class="wp">
+          <div class="wp-left">
+            <span class="n">${escapeHtml(wpName)}</span>
+            ${propHtml ? propHtml : ""}
+          </div>
+          
+          <div class="wp-right">
+            <div class="wp-main-atk-dmg">
+              <span class="atk rollable" data-expr="${atkExpr}" data-label="${escapeHtml(atkLbl)}" title="${escapeHtml(atkLbl)} ${atkExpr}">${escapeHtml(w.attack_bonus ?? "?")}</span>
+              <span class="dmg">${mainDmgHtml}</span>
+            </div>
+            ${extraRows.join("")}
+          </div>
+        </div>
+      `);
     }
   }
-
   const weps = weaponRows.length
     ? weaponRows.join("")
     : `<div class="empty">${t(getLocalLang(), "ccInfoEmpty")}</div>`;
 
-  // ── Searchable chips: features / feats / spells ────────────────
-  // Each chip is a tiny compact name-only box. Clicking fills the
-  // cluster's search input with that name (BC_SEARCH_QUERY) so the
-  // 5etools search popover opens with matching results — letting
-  // the player look up a feature definition without leaving OBR.
   const featuresHtml = renderSearchChips(d);
 
-  // Combined attribute pane content (chips / abilities / weapons /
-  // features). On stable: render flat (no tabs, no slide). On dev:
-  // wrap in a sliding rt-clip alongside the resource pane.
   const attrInner = `
     <div class="row">${chips}</div>
     <div class="abil">${abl}</div>
@@ -928,8 +948,7 @@ function render(
     ${weps}
     ${featuresHtml}
   `;
-  // 2026-05-13 — resource-tracker graduated from dev to stable;
-  // tab strip + rt-clip render unconditionally now.
+
   const stickyTop = `${statBanner}${renderRtTabStrip()}`;
   const contentBlock = `
     <div class="rt-clip" data-active="${activeRtTab}">
@@ -939,13 +958,10 @@ function render(
       </div>
     </div>
   `;
-  // 2026-05-10: pin button — when toggled ON, the panel doesn't
-  // auto-close on selection clear / mismatch. Data still updates
-  // when a different bound token is selected. Per-client state in
-  // localStorage; bg module reads the same key + listens for the
-  // broadcast.
+
   const pinned = readPanelPinned();
   const syncCloud = renderSyncCloudMarkup(cardId, syncLoading);
+
   root.innerHTML = `
     <div class="hdr">
       <button class="reset-btn" id="bubbles-reset-btn" type="button"
@@ -987,15 +1003,10 @@ function render(
     ${stickyTop}
     ${contentBlock}
   `;
-  // 2026-05-13 — resource-tracker graduated to stable; always set up.
+
   setupRtTabSwitching();
   void ensureRtResourceMount();
-  // Mount the shared stat banner into its host element. Unmount any
-  // prior instance first — render() runs on every card switch, so
-  // without this the component's scene.items.onChange subscription
-  // would leak one listener per switch. `initialLive` is the freshly
-  // fetched bubbles snapshot, so the banner paints synchronously with
-  // the right values (no refresh() round-trip needed).
+
   const statMount = root.querySelector<HTMLElement>("#cc-stat-mount");
   if (statMount) {
     ccStatHandle?.unmount();
@@ -1007,14 +1018,13 @@ function render(
       initialLive: live,
     });
   }
-  // The drag handle DOM element is recreated on every render() (we
-  // assigned root.innerHTML), so the existing pointer-event bindings
-  // on the previous element are gone. Re-bind for the new node.
+
   const handle = root.querySelector<HTMLDivElement>("#drag-handle");
   if (handle) {
     if (currentDragUnbind) currentDragUnbind();
     currentDragUnbind = bindPanelDrag(handle, PANEL_IDS.ccInfo);
   }
+
   const pinBtn = root.querySelector<HTMLButtonElement>("#panel-pin-btn");
   if (pinBtn) {
     pinBtn.addEventListener("click", (e) => {
@@ -1023,10 +1033,7 @@ function render(
       togglePanelPinned();
     });
   }
-  // 2026-05-11 — bubble reset button (mirror of monster-info). LOCAL
-  // broadcast tells the bubbles bg to drop the cached entry for the
-  // bound token + sweep its local items + re-render. Fixes the
-  // "blood bar drifted off-anchor" bug.
+
   const resetBtn = root.querySelector<HTMLButtonElement>("#bubbles-reset-btn");
   if (resetBtn && boundItemId) {
     resetBtn.addEventListener("click", (e) => {
@@ -1045,7 +1052,9 @@ function render(
       setTimeout(() => resetBtn.classList.remove("flash"), 400);
     });
   }
+
   setupSyncControls(cardId);
+
   const nameBtn = root.querySelector<HTMLButtonElement>(
     ".name-btn[data-name-text]",
   );
@@ -1058,8 +1067,7 @@ function render(
       );
     });
   }
-  // 2026-05-15 — fit the popover to the freshly-rendered content. Runs
-  // after every card switch / re-render. See queueAdjustHeight comment.
+
   queueAdjustHeight();
 }
 

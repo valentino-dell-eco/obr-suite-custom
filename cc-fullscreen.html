@@ -1,14 +1,28 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
-<title>角色卡 / Character Card</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="upgrade-insecure-requests"
+    />
+    <title>角色卡 / Character Card</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+          sans-serif;
+      }
 
-/* === Owl Suite signature palette ===
+      /* === Owl Suite signature palette ===
    Matches the rest of the suite UI (cluster, settings, dice panel,
    etc.) — dark cool navy charcoal canvas, suite signature amber
    #f5a623 for character names + section headers, warm gold #f5d76e
@@ -18,72 +32,105 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
    the same rgba whites that the rest of the suite uses, so this
    panel reads as "more of the same suite" rather than "third-party
    parchment notebook". */
-:root{
-  --bg:           #1c2030;       /* suite signature dark navy */
-  --bg-soft:      #1f2230;
-  --surface:      #262a3a;       /* card bg, matches cluster */
-  --surface-2:    #2d3144;
-  --surface-3:    #353a52;
-  --ink:          #e6e8ee;
-  --ink-strong:   #fff;
-  --ink-dim:      #9aa0b3;
-  --ink-mute:     #6b7080;
-  --amber:        #f5a623;       /* signature suite warm orange — character names, h-titles */
-  --amber-soft:   #c7811a;
-  --gold:         #f5d76e;       /* suite TimeStop yellow — stat values + highlights */
-  --gold-soft:    #c7a847;
-  --ember:        #e8675e;       /* HP/damage — softened red so it doesn't clash with amber */
-  --ember-soft:   #b34a42;
-  --teal:         #6dac8a;       /* save profs / success — muted teal sage */
-  --teal-soft:    #4d7a64;
-  --bronze:       #d4a056;       /* AC shield (between gold + amber) */
-  --azure:        #5dade2;       /* clickable affordance — used sparingly */
-  --azure-soft:   #4884b3;
-  --border:       rgba(255,255,255,0.10);
-  --border-strong:rgba(255,255,255,0.18);
-  --shadow:       0 2px 6px rgba(0,0,0,0.45);
-  --shadow-lg:    0 8px 28px rgba(0,0,0,0.5);
-}
+      :root {
+        --bg: #1c2030; /* suite signature dark navy */
+        --bg-soft: #1f2230;
+        --surface: #262a3a; /* card bg, matches cluster */
+        --surface-2: #2d3144;
+        --surface-3: #353a52;
+        --ink: #e6e8ee;
+        --ink-strong: #fff;
+        --ink-dim: #9aa0b3;
+        --ink-mute: #6b7080;
+        --amber: #f5a623; /* signature suite warm orange — character names, h-titles */
+        --amber-soft: #c7811a;
+        --gold: #f5d76e; /* suite TimeStop yellow — stat values + highlights */
+        --gold-soft: #c7a847;
+        --ember: #e8675e; /* HP/damage — softened red so it doesn't clash with amber */
+        --ember-soft: #b34a42;
+        --teal: #6dac8a; /* save profs / success — muted teal sage */
+        --teal-soft: #4d7a64;
+        --bronze: #d4a056; /* AC shield (between gold + amber) */
+        --azure: #5dade2; /* clickable affordance — used sparingly */
+        --azure-soft: #4884b3;
+        --border: rgba(255, 255, 255, 0.1);
+        --border-strong: rgba(255, 255, 255, 0.18);
+        --shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+        --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.5);
+      }
 
-/* 2026-05-14 (#14 f2) — html/body are now TRANSPARENT. The loaded
+      /* 2026-05-14 (#14 f2) — html/body are now TRANSPARENT. The loaded
    character sheet stays fully opaque because every band that fills
    the viewport (.cc-head / .cc-stats / .cc-tabs / .cc-body) carries
    its own solid background — see each rule below. With a transparent
    body, the no-card states (.cc-translucent) let the OBR canvas read
    through behind a soft navy wash. */
-html,body{background:transparent;color:var(--ink)}
-body{
-  font-size:13px;line-height:1.5;
-}
+      html,
+      body {
+        background: transparent;
+        color: var(--ink);
+      }
+      body {
+        font-size: 13px;
+        line-height: 1.5;
+      }
 
-#app{height:100%;overflow:hidden;display:flex;flex-direction:column}
+      #app {
+        height: 100%;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
 
-/* === Header bar === */
-.cc-head{
-  flex:0 0 auto;
-  display:flex;align-items:stretch;
-  background:linear-gradient(180deg, var(--surface-2), var(--surface));
-  border-bottom:1px solid var(--border-strong);
-  box-shadow:var(--shadow);
-  position:relative;
-}
-.cc-head::after{
-  content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
-  background:linear-gradient(90deg, transparent, var(--amber-soft) 30%, var(--amber-soft) 70%, transparent);
-  opacity:0.6;
-}
-.cc-head-left{
-  flex:1;min-width:0;
-  padding:14px 20px;
-  display:flex;flex-direction:column;gap:2px;
-}
-.cc-head-name{
-  font-size:22px;font-weight:700;color:var(--amber);
-  letter-spacing:0.4px;
-  font-family:"Noto Serif SC",-apple-system,"Microsoft YaHei",serif;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  text-shadow:0 1px 2px rgba(0,0,0,0.4);
-  /* 2026-05-18 — `word-break: keep-all` + `min-width: 0` defensive
+      /* === Header bar === */
+      .cc-head {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: stretch;
+        background: linear-gradient(180deg, var(--surface-2), var(--surface));
+        border-bottom: 1px solid var(--border-strong);
+        box-shadow: var(--shadow);
+        position: relative;
+      }
+      .cc-head::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -1px;
+        height: 1px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          var(--amber-soft) 30%,
+          var(--amber-soft) 70%,
+          transparent
+        );
+        opacity: 0.6;
+      }
+      .cc-head-left {
+        flex: 1;
+        min-width: 0;
+        padding: 14px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .cc-head-name {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--amber);
+        letter-spacing: 0.4px;
+        font-family:
+          "Noto Serif SC",
+          -apple-system,
+          "Microsoft YaHei",
+          serif;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+        /* 2026-05-18 — `word-break: keep-all` + `min-width: 0` defensive
      against the "末字自动换行" report. Without keep-all, CJK ideographs
      can be inserted into a line-break opportunity at almost any
      position even with `nowrap` set on certain ancestor / inline-flex
@@ -91,198 +138,318 @@ body{
      `min-width:0` ensures this block can actually shrink narrower than
      its content (so ellipsis kicks in cleanly instead of pushing the
      last char to a soft-wrap that overflow:hidden then clips). */
-  word-break:keep-all;
-  line-break:strict;
-  min-width:0;
-}
-.cc-head-name .en{
-  font-size:13px;color:var(--ink-dim);
-  margin-left:10px;font-family:Georgia,"Noto Serif",serif;font-weight:400;font-style:italic;
-  white-space:nowrap;
-}
-.cc-head-meta{
-  display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;
-  font-size:12px;color:var(--ink-dim);
-  min-width:0;
-}
-.cc-head-meta .pip{
-  display:inline-flex;align-items:center;gap:4px;
-  /* 2026-05-18 — keep each pip's content on one line; the flex parent
+        word-break: keep-all;
+        line-break: strict;
+        min-width: 0;
+      }
+      .cc-head-name .en {
+        font-size: 13px;
+        color: var(--ink-dim);
+        margin-left: 10px;
+        font-family: Georgia, "Noto Serif", serif;
+        font-weight: 400;
+        font-style: italic;
+        white-space: nowrap;
+      }
+      .cc-head-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 14px;
+        font-size: 12px;
+        color: var(--ink-dim);
+        min-width: 0;
+      }
+      .cc-head-meta .pip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        /* 2026-05-18 — keep each pip's content on one line; the flex parent
      above already wraps whole pips to a second line when total width
      overflows, but WITHOUT this each pip's own text could break mid-
      phrase ("战士（裁决者）" → "战士（裁\n决者）"). */
-  white-space:nowrap;
-}
-.cc-head-meta .pip b{color:var(--ink);font-weight:600}
+        white-space: nowrap;
+      }
+      .cc-head-meta .pip b {
+        color: var(--ink);
+        font-weight: 600;
+      }
 
-.cc-head-right{
-  flex-shrink:0;
-  display:flex;align-items:center;gap:6px;
-  padding:10px 16px;
-  border-left:1px solid var(--border);
-  background:var(--bg-soft);
-}
-/* 2026-05-14 (#14 follow-up) — modernized button shape per user
+      .cc-head-right {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 16px;
+        border-left: 1px solid var(--border);
+        background: var(--bg-soft);
+      }
+      /* 2026-05-14 (#14 follow-up) — modernized button shape per user
    feedback: less rounded, larger hit area, lighter font weight so
    the button reads as "control surface" not "decorative pill". */
-.cc-btn{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:8px 14px;
-  background:var(--surface-2);
-  border:1px solid var(--border-strong);
-  border-radius:3px;
-  color:var(--ink);font-family:inherit;font-size:12.5px;font-weight:500;
-  cursor:pointer;
-  transition:background .12s, border-color .12s, color .12s;
-  white-space:nowrap;
-  letter-spacing:0.2px;
-}
-.cc-btn:hover{background:var(--surface-3);border-color:var(--border-strong);color:var(--ink-strong)}
-/* 2026-05-14 (#14 f2) — primary buttons (编辑中 / 保存) now use a
+      .cc-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        background: var(--surface-2);
+        border: 1px solid var(--border-strong);
+        border-radius: 3px;
+        color: var(--ink);
+        font-family: inherit;
+        font-size: 12.5px;
+        font-weight: 500;
+        cursor: pointer;
+        transition:
+          background 0.12s,
+          border-color 0.12s,
+          color 0.12s;
+        white-space: nowrap;
+        letter-spacing: 0.2px;
+      }
+      .cc-btn:hover {
+        background: var(--surface-3);
+        border-color: var(--border-strong);
+        color: var(--ink-strong);
+      }
+      /* 2026-05-14 (#14 f2) — primary buttons (编辑中 / 保存) now use a
    white-bright accent instead of gold. Per user spec, gold is
    reserved for DATA values; chrome controls stay in the white/ink
    range so the panel reads as "枭熊 suite" not "amber notebook". */
-.cc-btn.primary{
-  background:rgba(255,255,255,0.12);
-  border-color:var(--ink-dim);color:var(--ink-strong);
-}
-.cc-btn.primary:hover{background:rgba(255,255,255,0.2);border-color:var(--ink);color:#fff}
-.cc-btn.danger:hover{border-color:var(--ember);color:#ffa093;background:rgba(232,103,94,0.18)}
-.cc-btn .ic{font-size:14px;line-height:1;display:inline-flex;align-items:center}
-.cc-btn .ic svg{display:block}
-/* 2026-05-14 (#14 f2) — fused button group: a main button + an
+      .cc-btn.primary {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: var(--ink-dim);
+        color: var(--ink-strong);
+      }
+      .cc-btn.primary:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: var(--ink);
+        color: #fff;
+      }
+      .cc-btn.danger:hover {
+        border-color: var(--ember);
+        color: #ffa093;
+        background: rgba(232, 103, 94, 0.18);
+      }
+      .cc-btn .ic {
+        font-size: 14px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+      }
+      .cc-btn .ic svg {
+        display: block;
+      }
+      /* 2026-05-14 (#14 f2) — fused button group: a main button + an
    icon-only sub-button sharing one seamless outline. Used for
    导出JSON|复制 and 导入JSON|粘贴. The main button loses its right
    radius, the sub-button loses its left radius + left border, so
    the pair reads as a single control with a divider. */
-.cc-btn-group{display:inline-flex}
-.cc-btn-group > .cc-btn:first-child{
-  border-top-right-radius:0;border-bottom-right-radius:0;
-}
-.cc-btn-sub{
-  border-top-left-radius:0;border-bottom-left-radius:0;
-  border-left:1px solid var(--border);
-  padding:8px 9px;
-  color:var(--ink-dim);
-}
-.cc-btn-sub:hover{color:var(--ink-strong)}
+      .cc-btn-group {
+        display: inline-flex;
+      }
+      .cc-btn-group > .cc-btn:first-child {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+      .cc-btn-sub {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        border-left: 1px solid var(--border);
+        padding: 8px 9px;
+        color: var(--ink-dim);
+      }
+      .cc-btn-sub:hover {
+        color: var(--ink-strong);
+      }
 
-/* === Stat banner — under header === */
-/* 2026-05-14 (#14 follow-up) — flatter cards, sharper corners,
+      /* === Stat banner — under header === */
+      /* 2026-05-14 (#14 follow-up) — flatter cards, sharper corners,
    bigger numbers. HP / AC / 先攻 lose their gradient backgrounds —
    color now lives on the NUMBER itself, not on the card surface.
    The label is smaller and quieter so the value dominates. */
-.cc-stats{
-  flex:0 0 auto;
-  display:flex;align-items:stretch;
-  gap:8px;padding:14px 20px 14px;
-  background:var(--bg);
-  border-bottom:1px solid var(--border);
-}
-.stat-cell{
-  flex:1;min-width:0;
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:4px;
-  padding:10px 14px 9px;
-  display:flex;flex-direction:column;justify-content:center;
-  position:relative;
-}
-.stat-cell.hp{border-color:rgba(232,103,94,0.35)}
-.stat-cell.ac{border-color:rgba(212,160,86,0.35)}
-.stat-cell.init{border-color:rgba(109,172,138,0.30)}
-.stat-cell-label{
-  font-size:10.5px;color:var(--ink-dim);font-weight:500;letter-spacing:0.6px;
-  margin-bottom:3px;
-}
-.stat-cell-val{
-  display:flex;align-items:baseline;gap:5px;
-  font-family:inherit;
-  color:var(--ink-strong);
-  font-weight:600;
-  font-variant-numeric:tabular-nums;
-}
-.stat-cell-val .big{font-size:26px;line-height:1.0}
-.stat-cell-val .slash{color:var(--ink-mute);font-weight:400;font-size:18px;margin:0 1px}
-.stat-cell-val .small{font-size:15px;color:var(--ink-dim);font-weight:500}
-.stat-cell-val .unit{font-size:11px;color:var(--ink-dim);font-weight:400;margin-left:3px}
-.stat-cell.hp .stat-cell-val .big{color:#ffa093}
-.stat-cell.ac .stat-cell-val .big{color:#e6c07a}
-.stat-cell.init .stat-cell-val .big{color:var(--teal)}
+      .cc-stats {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+        padding: 14px 20px 14px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+      }
+      .stat-cell {
+        flex: 1;
+        min-width: 0;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 10px 14px 9px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        position: relative;
+      }
+      .stat-cell.hp {
+        border-color: rgba(232, 103, 94, 0.35);
+      }
+      .stat-cell.ac {
+        border-color: rgba(212, 160, 86, 0.35);
+      }
+      .stat-cell.init {
+        border-color: rgba(109, 172, 138, 0.3);
+      }
+      .stat-cell-label {
+        font-size: 10.5px;
+        color: var(--ink-dim);
+        font-weight: 500;
+        letter-spacing: 0.6px;
+        margin-bottom: 3px;
+      }
+      .stat-cell-val {
+        display: flex;
+        align-items: baseline;
+        gap: 5px;
+        font-family: inherit;
+        color: var(--ink-strong);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .stat-cell-val .big {
+        font-size: 26px;
+        line-height: 1;
+      }
+      .stat-cell-val .slash {
+        color: var(--ink-mute);
+        font-weight: 400;
+        font-size: 18px;
+        margin: 0 1px;
+      }
+      .stat-cell-val .small {
+        font-size: 15px;
+        color: var(--ink-dim);
+        font-weight: 500;
+      }
+      .stat-cell-val .unit {
+        font-size: 11px;
+        color: var(--ink-dim);
+        font-weight: 400;
+        margin-left: 3px;
+      }
+      .stat-cell.hp .stat-cell-val .big {
+        color: #ffa093;
+      }
+      .stat-cell.ac .stat-cell-val .big {
+        color: #e6c07a;
+      }
+      .stat-cell.init .stat-cell-val .big {
+        color: var(--teal);
+      }
 
-.stat-input{
-  background:transparent;border:0;outline:none;
-  color:inherit;font:inherit;
-  width:auto;min-width:1.5em;max-width:3em;text-align:right;
-  padding:0;
-  border-bottom:1px dashed transparent;
-  transition:border-color .12s;
-}
-.stat-input:focus{border-bottom-color:var(--gold)}
+      .stat-input {
+        background: transparent;
+        border: 0;
+        outline: none;
+        color: inherit;
+        font: inherit;
+        width: auto;
+        min-width: 1.5em;
+        max-width: 3em;
+        text-align: right;
+        padding: 0;
+        border-bottom: 1px dashed transparent;
+        transition: border-color 0.12s;
+      }
+      .stat-input:focus {
+        border-bottom-color: var(--gold);
+      }
 
-/* === Tabs === */
-/* 2026-05-14 (#14 follow-up) — bigger tab labels (was 13 → 15 px),
+      /* === Tabs === */
+      /* 2026-05-14 (#14 follow-up) — bigger tab labels (was 13 → 15 px),
    medium weight not bold. Underline indicator stays but slimmer. */
-.cc-tabs{
-  flex:0 0 auto;
-  display:flex;
-  /* 2026-05-14 (#14 f2) — solid bg required: body is transparent now,
+      .cc-tabs {
+        flex: 0 0 auto;
+        display: flex;
+        /* 2026-05-14 (#14 f2) — solid bg required: body is transparent now,
      so without this the tab strip would let the canvas bleed through
      between header and content. */
-  background:var(--bg);
-  border-bottom:1px solid var(--border);
-  padding:0 20px;
-  gap:4px;
-  overflow-x:auto;
-  scrollbar-width:none;
-}
-.cc-tabs::-webkit-scrollbar{display:none}
-.cc-tab{
-  flex-shrink:0;
-  padding:12px 18px;
-  background:transparent;
-  border:0;border-bottom:2px solid transparent;
-  color:var(--ink-dim);
-  font-family:inherit;font-size:15px;font-weight:500;
-  cursor:pointer;
-  letter-spacing:0.3px;
-  transition:color .12s, border-color .12s;
-}
-.cc-tab:hover{color:var(--ink)}
-.cc-tab.is-on{color:var(--gold);border-bottom-color:var(--gold);font-weight:600}
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        padding: 0 20px;
+        gap: 4px;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .cc-tabs::-webkit-scrollbar {
+        display: none;
+      }
+      .cc-tab {
+        flex-shrink: 0;
+        padding: 12px 18px;
+        background: transparent;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        color: var(--ink-dim);
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 500;
+        cursor: pointer;
+        letter-spacing: 0.3px;
+        transition:
+          color 0.12s,
+          border-color 0.12s;
+      }
+      .cc-tab:hover {
+        color: var(--ink);
+      }
+      .cc-tab.is-on {
+        color: var(--gold);
+        border-bottom-color: var(--gold);
+        font-weight: 600;
+      }
 
-/* === Content area === */
-/* 2026-05-15 — wide-screen layout: left main + right vertical-tabs
+      /* === Content area === */
+      /* 2026-05-15 — wide-screen layout: left main + right vertical-tabs
    sidebar, neither cc-body nor the page scrolls; only .cc-main and
    .cc-tabs-side scroll independently. Narrow viewports keep the
    legacy single-column overflow-y on cc-body so phones / small
    windows stay readable. The breakpoint (1100 px) leaves enough
    horizontal room for the 220 px sidebar plus a comfortable main
    column on common 13-15" laptop screens. */
-.cc-body{
-  flex:1;min-height:0;
-  background:var(--bg);
-  /* Defaults are NARROW (single-column overflow) — overridden in the
+      .cc-body {
+        flex: 1;
+        min-height: 0;
+        background: var(--bg);
+        /* Defaults are NARROW (single-column overflow) — overridden in the
      wide @media block below. */
-  overflow-y:auto;
-  padding:18px 20px 30px;
-}
-.cc-body::-webkit-scrollbar{width:8px;height:8px}
-.cc-body::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
-.cc-body::-webkit-scrollbar-track{background:transparent}
+        overflow-y: auto;
+        padding: 18px 20px 30px;
+      }
+      .cc-body::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      .cc-body::-webkit-scrollbar-thumb {
+        background: var(--border-strong);
+        border-radius: 4px;
+      }
+      .cc-body::-webkit-scrollbar-track {
+        background: transparent;
+      }
 
-/* The main content column. In narrow mode this just renders inline
+      /* The main content column. In narrow mode this just renders inline
    inside cc-body (which scrolls). In wide mode below, it becomes a
    flex:1 child of cc-body with its own scrollbar. */
-.cc-main{
-  min-width:0;
-}
+      .cc-main {
+        min-width: 0;
+      }
 
-/* Right vertical-tabs sidebar. Hidden in narrow mode (top horizontal
+      /* Right vertical-tabs sidebar. Hidden in narrow mode (top horizontal
    tab strip takes over). */
-.cc-tabs-side{display:none}
+      .cc-tabs-side {
+        display: none;
+      }
 
-/* 2026-05-16 — breakpoint lowered 1100 → 600 px. cc-fullscreen is
+      /* 2026-05-16 — breakpoint lowered 1100 → 600 px. cc-fullscreen is
    typically rendered inside cc-panel's .viewer iframe, which is
    ~500-900 px wide depending on the user's OBR viewport. The old
    1100 px threshold meant wide-mode (sidebar + no outer scroll)
@@ -291,72 +458,97 @@ body{
    内容溢出 → 滚动条". 600 px is the iPad-portrait split: anything
    wider gets the no-outer-scroll sidebar layout, narrower drops to
    the legacy top-tabs path. */
-@media (min-width:600px){
-  /* Top horizontal tabs hidden in wide mode — the right sidebar is
+      @media (min-width: 600px) {
+        /* Top horizontal tabs hidden in wide mode — the right sidebar is
      the canonical tab navigation here. */
-  .cc-tabs.cc-tabs-top{display:none}
+        .cc-tabs.cc-tabs-top {
+          display: none;
+        }
 
-  /* cc-body becomes a flex row that fills cc-shell's available
+        /* cc-body becomes a flex row that fills cc-shell's available
      height and never scrolls itself. */
-  .cc-body{
-    display:flex;
-    flex-direction:row;
-    overflow:hidden;
-    padding:0;
-  }
-  .cc-body > .cc-main{
-    flex:1 1 0;
-    min-width:0;
-    height:100%;
-    overflow-y:auto;
-    padding:18px 20px 30px;
-  }
-  .cc-body > .cc-main::-webkit-scrollbar{width:8px;height:8px}
-  .cc-body > .cc-main::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
-  .cc-body > .cc-main::-webkit-scrollbar-track{background:transparent}
+        .cc-body {
+          display: flex;
+          flex-direction: row;
+          overflow: hidden;
+          padding: 0;
+        }
+        .cc-body > .cc-main {
+          flex: 1 1 0;
+          min-width: 0;
+          height: 100%;
+          overflow-y: auto;
+          padding: 18px 20px 30px;
+        }
+        .cc-body > .cc-main::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        .cc-body > .cc-main::-webkit-scrollbar-thumb {
+          background: var(--border-strong);
+          border-radius: 4px;
+        }
+        .cc-body > .cc-main::-webkit-scrollbar-track {
+          background: transparent;
+        }
 
-  .cc-tabs-side{
-    display:flex;
-    flex:0 0 220px;
-    flex-direction:column;
-    gap:2px;
-    height:100%;
-    overflow-y:auto;
-    background:var(--surface);
-    border-left:1px solid var(--border);
-    padding:14px 0;
-  }
-  .cc-tabs-side::-webkit-scrollbar{width:8px}
-  .cc-tabs-side::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
-  .cc-tabs-side::-webkit-scrollbar-track{background:transparent}
-  .cc-tab-side{
-    flex-shrink:0;
-    text-align:left;
-    padding:12px 18px;
-    background:transparent;
-    border:0;
-    border-left:3px solid transparent;
-    color:var(--ink-dim);
-    font-family:inherit;font-size:14px;font-weight:500;
-    cursor:pointer;
-    letter-spacing:0.3px;
-    transition:color .12s, background .12s, border-color .12s;
-  }
-  .cc-tab-side:hover{color:var(--ink);background:rgba(255,255,255,0.03)}
-  .cc-tab-side.is-on{
-    color:var(--gold);
-    border-left-color:var(--gold);
-    background:rgba(245,166,35,0.10);
-    font-weight:600;
-  }
-}
+        .cc-tabs-side {
+          display: flex;
+          flex: 0 0 220px;
+          flex-direction: column;
+          gap: 2px;
+          height: 100%;
+          overflow-y: auto;
+          background: var(--surface);
+          border-left: 1px solid var(--border);
+          padding: 14px 0;
+        }
+        .cc-tabs-side::-webkit-scrollbar {
+          width: 8px;
+        }
+        .cc-tabs-side::-webkit-scrollbar-thumb {
+          background: var(--border-strong);
+          border-radius: 4px;
+        }
+        .cc-tabs-side::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .cc-tab-side {
+          flex-shrink: 0;
+          text-align: left;
+          padding: 12px 18px;
+          background: transparent;
+          border: 0;
+          border-left: 3px solid transparent;
+          color: var(--ink-dim);
+          font-family: inherit;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          letter-spacing: 0.3px;
+          transition:
+            color 0.12s,
+            background 0.12s,
+            border-color 0.12s;
+        }
+        .cc-tab-side:hover {
+          color: var(--ink);
+          background: rgba(255, 255, 255, 0.03);
+        }
+        .cc-tab-side.is-on {
+          color: var(--gold);
+          border-left-color: var(--gold);
+          background: rgba(245, 166, 35, 0.1);
+          font-weight: 600;
+        }
+      }
 
-.cc-grid{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:18px;
-}
-/* 2026-05-16 — without `min-width: 0` on grid items, each track's
+      .cc-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+      /* 2026-05-16 — without `min-width: 0` on grid items, each track's
    intrinsic min-content keeps the grid from honouring `1fr 1fr`.
    In edit mode the Defenses section grows tag chips / inputs with
    `white-space:nowrap` content, so the right column would push to
@@ -365,544 +557,1190 @@ body{
    导致左边的属性豁免技能被裁剪了."
    `min-width: 0` lets each track shrink past its content's intrinsic
    min, restoring the equal 1fr split. */
-.cc-grid > * { min-width: 0; }
-@media (max-width:900px){
-  .cc-grid{grid-template-columns:1fr}
-}
+      .cc-grid > * {
+        min-width: 0;
+      }
+      @media (max-width: 900px) {
+        .cc-grid {
+          grid-template-columns: 1fr;
+        }
+      }
 
-/* === Section card === */
-/* 2026-05-14 (#14 follow-up) — minimalist refresh per user spec.
+      /* === Section card === */
+      /* 2026-05-14 (#14 follow-up) — minimalist refresh per user spec.
    Removed: gradient background on header, gold left rail decoration,
    serif font + uppercase + 1px letter-spacing on titles. Replaced
    with: flat surface, sharper corners, lighter borders. Information
    leads, style steps back. */
-.sec{
-  background:var(--surface);
-  border:1px solid var(--border);
-  border-radius:4px;
-  overflow:hidden;
-  margin-bottom:16px;
-}
-.sec:last-child{margin-bottom:0}
-.sec-h{
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:12px 16px 10px;
-  background:transparent;
-  border-bottom:1px solid var(--border);
-}
-.sec-h-title{
-  font-family:inherit;
-  font-size:15px;font-weight:600;color:var(--ink-strong);
-  letter-spacing:0.4px;
-}
-.sec-h-meta{font-size:12px;color:var(--ink-dim);font-weight:400}
-.sec-body{padding:14px 16px}
-.sec-body.dense{padding:10px 12px}
+      .sec {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-bottom: 16px;
+      }
+      .sec:last-child {
+        margin-bottom: 0;
+      }
+      .sec-h {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 16px 10px;
+        background: transparent;
+        border-bottom: 1px solid var(--border);
+      }
+      .sec-h-title {
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--ink-strong);
+        letter-spacing: 0.4px;
+      }
+      .sec-h-meta {
+        font-size: 12px;
+        color: var(--ink-dim);
+        font-weight: 400;
+      }
+      .sec-body {
+        padding: 14px 16px;
+      }
+      .sec-body.dense {
+        padding: 10px 12px;
+      }
 
-/* === Abilities grid === */
-/* 2026-05-14 (#14 follow-up) — bigger ability score (was 24 → 32 px),
+      /* === Abilities grid === */
+      /* 2026-05-14 (#14 follow-up) — bigger ability score (was 24 → 32 px),
    sharper card edges, drop the decorative serif on the totals
    (Noto Serif SC stays only on character name + page-level headers).
    "Information first, style steps back." */
-.abl-grid{
-  display:grid;
-  grid-template-columns:repeat(3, 1fr);
-  gap:8px;
-}
-.abl{
-  background:var(--bg-soft);
-  border:1px solid var(--border);
-  border-radius:4px;
-  padding:12px 8px 10px;
-  text-align:center;
-  position:relative;
-}
-.abl-name{
-  font-size:11px;color:var(--ink-dim);font-weight:600;
-  letter-spacing:0.6px;
-  font-family:inherit;
-}
-.abl-total{
-  font-size:32px;font-weight:600;color:var(--ink-strong);
-  line-height:1.0;margin-top:4px;
-  font-family:inherit;
-  font-variant-numeric:tabular-nums;
-}
-.abl-mod{
-  display:inline-block;
-  margin-top:6px;
-  padding:2px 10px;
-  background:transparent;
-  border:1px solid var(--border-strong);
-  border-radius:3px;
-  font-size:12px;color:var(--gold);font-weight:600;
-  font-family:inherit;
-  font-variant-numeric:tabular-nums;
-  cursor:pointer;
-  transition:background .12s, color .12s, border-color .12s;
-}
-.abl-mod:hover{background:var(--gold-soft);color:var(--ink-strong);border-color:var(--gold-soft)}
-.abl-save{
-  margin-top:5px;font-size:10px;color:var(--ink-mute);font-weight:600;
-  display:flex;align-items:center;justify-content:center;gap:3px;
-  cursor:pointer;
-}
-.abl-save:hover{color:var(--ink)}
-.abl-save.is-prof{color:var(--teal)}
-.abl-save.is-prof::before{
-  content:"●";font-size:9px;
-}
-.abl-save:not(.is-prof)::before{
-  content:"○";font-size:9px;
-}
-.abl-save b{font-weight:700;font-family:Georgia,serif}
-/* 2026-05-14 (#14 f2) — edit-mode save row uses its OWN class
+      .abl-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .abl {
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 12px 8px 10px;
+        text-align: center;
+        position: relative;
+      }
+      .abl-name {
+        font-size: 11px;
+        color: var(--ink-dim);
+        font-weight: 600;
+        letter-spacing: 0.6px;
+        font-family: inherit;
+      }
+      .abl-total {
+        font-size: 32px;
+        font-weight: 600;
+        color: var(--ink-strong);
+        line-height: 1;
+        margin-top: 4px;
+        font-family: inherit;
+        font-variant-numeric: tabular-nums;
+      }
+      .abl-mod {
+        display: inline-block;
+        margin-top: 6px;
+        padding: 2px 10px;
+        background: transparent;
+        border: 1px solid var(--border-strong);
+        border-radius: 3px;
+        font-size: 12px;
+        color: var(--gold);
+        font-weight: 600;
+        font-family: inherit;
+        font-variant-numeric: tabular-nums;
+        cursor: pointer;
+        transition:
+          background 0.12s,
+          color 0.12s,
+          border-color 0.12s;
+      }
+      .abl-mod:hover {
+        background: var(--gold-soft);
+        color: var(--ink-strong);
+        border-color: var(--gold-soft);
+      }
+      .abl-save {
+        margin-top: 5px;
+        font-size: 10px;
+        color: var(--ink-mute);
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        cursor: pointer;
+      }
+      .abl-save:hover {
+        color: var(--ink);
+      }
+      .abl-save.is-prof {
+        color: var(--teal);
+      }
+      .abl-save.is-prof::before {
+        content: "●";
+        font-size: 9px;
+      }
+      .abl-save:not(.is-prof)::before {
+        content: "○";
+        font-size: 9px;
+      }
+      .abl-save b {
+        font-weight: 700;
+        font-family: Georgia, serif;
+      }
+      /* 2026-05-14 (#14 f2) — edit-mode save row uses its OWN class
    (`abl-save-edit`) so the `.abl-save::before` pseudo (which
    auto-draws a ●/○) never applies. The explicit `.abl-save-dot`
    span is the only proficiency dot in edit mode. The earlier
    `:has(input)` override didn't take effect in OBR's iframe
    runtime — a separate class sidesteps the issue entirely. */
-.abl-save-edit{
-  margin-top:5px;
-  display:flex;align-items:center;justify-content:center;gap:5px;
-  color:var(--ink-mute);
-}
-.abl-save-edit.is-prof{color:var(--teal)}
-.abl-save-dot{
-  font-size:11px;cursor:pointer;user-select:none;
-  transition:transform .1s;
-}
-.abl-save-dot:hover{transform:scale(1.25)}
+      .abl-save-edit {
+        margin-top: 5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        color: var(--ink-mute);
+      }
+      .abl-save-edit.is-prof {
+        color: var(--teal);
+      }
+      .abl-save-dot {
+        font-size: 11px;
+        cursor: pointer;
+        user-select: none;
+        transition: transform 0.1s;
+      }
+      .abl-save-dot:hover {
+        transform: scale(1.25);
+      }
 
-/* === Skills list === */
-.sk-list{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:2px 10px;
-}
-.sk{
-  display:flex;align-items:center;justify-content:space-between;gap:6px;
-  padding:4px 8px;
-  border-radius:4px;
-  font-size:11.5px;
-  cursor:pointer;
-  transition:background .12s;
-}
-.sk:hover{background:var(--surface-3)}
-.sk-prof{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:14px;flex-shrink:0;
-  font-size:9px;color:var(--ink-mute);
-}
-.sk.prof .sk-prof{color:var(--teal)}
-.sk.exp .sk-prof{color:var(--gold)}
-.sk-name{flex:1;min-width:0;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sk-abil{font-size:9px;color:var(--ink-mute);font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
-.sk-val{font-family:Georgia,serif;font-weight:700;color:var(--gold);min-width:2.5em;text-align:right}
+      /* === Skills list === */
+      .sk-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2px 10px;
+      }
+      .sk {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11.5px;
+        cursor: pointer;
+        transition: background 0.12s;
+      }
+      .sk:hover {
+        background: var(--surface-3);
+      }
+      .sk-prof {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 14px;
+        flex-shrink: 0;
+        font-size: 9px;
+        color: var(--ink-mute);
+      }
+      .sk.prof .sk-prof {
+        color: var(--teal);
+      }
+      .sk.exp .sk-prof {
+        color: var(--gold);
+      }
+      .sk-name {
+        flex: 1;
+        min-width: 0;
+        color: var(--ink);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .sk-abil {
+        font-size: 9px;
+        color: var(--ink-mute);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .sk-val {
+        font-family: Georgia, serif;
+        font-weight: 700;
+        color: var(--gold);
+        min-width: 2.5em;
+        text-align: right;
+      }
 
-/* === Generic kv list === */
-.kv{
-  display:grid;
-  grid-template-columns:auto 1fr;
-  column-gap:10px;row-gap:5px;
-  font-size:12px;
-}
-.kv dt{color:var(--ink-dim);font-weight:600}
-.kv dd{color:var(--ink)}
+      /* === Generic kv list === */
+      .kv {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        column-gap: 10px;
+        row-gap: 5px;
+        font-size: 12px;
+      }
+      .kv dt {
+        color: var(--ink-dim);
+        font-weight: 600;
+      }
+      .kv dd {
+        color: var(--ink);
+      }
 
-/* === Combat: weapons === */
-/* 2026-05-14 (#14 follow-up) — bigger row padding (was 7 → 9 px),
+      /* === Combat: weapons === */
+      /* 2026-05-14 (#14 follow-up) — bigger row padding (was 7 → 9 px),
    square corners, drop the Georgia serif on numbers. */
-.weap{
-  display:grid;
-  grid-template-columns:1fr auto auto;
-  gap:8px 12px;align-items:center;
-  padding:9px 12px;
-  border:1px solid var(--border);border-radius:4px;
-  background:var(--bg-soft);
-  margin-bottom:6px;
-}
-.weap-name{font-weight:600;color:var(--ink);font-size:13.5px;display:flex;align-items:center;gap:6px}
-.weap-prof{
-  font-size:10px;color:var(--teal);background:var(--teal-soft);
-  padding:1px 6px;border-radius:2px;font-weight:500;
-}
-.weap-prof.is-off{color:var(--ink-dim);background:rgba(255,255,255,0.06)}
-.weap-atk{
-  font-family:inherit;font-weight:600;color:var(--gold);
-  cursor:pointer;font-size:14px;
-  padding:3px 9px;border:1px solid var(--gold-soft);border-radius:3px;
-  background:transparent;
-  font-variant-numeric:tabular-nums;
-}
-.weap-atk:hover{background:rgba(212,160,86,0.18)}
-.weap-dmg{
-  font-family:inherit;font-weight:600;color:var(--ember);
-  cursor:pointer;font-size:13.5px;
-  padding:3px 9px;border:1px solid var(--ember-soft);border-radius:3px;
-  background:transparent;
-  font-variant-numeric:tabular-nums;
-}
-.weap-dmg:hover{background:rgba(192,57,43,0.18)}
-.weap-props{
-  grid-column:1/-1;font-size:11.5px;color:var(--ink-mute);
-  font-style:normal;line-height:1.5;
-}
+      .weap {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 8px 12px;
+        align-items: center;
+        padding: 9px 12px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--bg-soft);
+        margin-bottom: 6px;
+      }
+      .weap-name {
+        font-weight: 600;
+        color: var(--ink);
+        font-size: 13.5px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .weap-prof {
+        font-size: 10px;
+        color: var(--teal);
+        background: var(--teal-soft);
+        padding: 1px 6px;
+        border-radius: 2px;
+        font-weight: 500;
+      }
+      .weap-prof.is-off {
+        color: var(--ink-dim);
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .weap-atk {
+        font-family: inherit;
+        font-weight: 600;
+        color: var(--gold);
+        cursor: pointer;
+        font-size: 14px;
+        padding: 3px 9px;
+        border: 1px solid var(--gold-soft);
+        border-radius: 3px;
+        background: transparent;
+        font-variant-numeric: tabular-nums;
+      }
+      .weap-atk:hover {
+        background: rgba(212, 160, 86, 0.18);
+      }
+      .weap-dmg {
+        font-family: inherit;
+        font-weight: 600;
+        color: var(--ember);
+        cursor: pointer;
+        font-size: 13.5px;
+        padding: 3px 9px;
+        border: 1px solid var(--ember-soft);
+        border-radius: 3px;
+        background: transparent;
+        font-variant-numeric: tabular-nums;
+      }
+      .weap-dmg:hover {
+        background: rgba(192, 57, 43, 0.18);
+      }
+      .weap-props {
+        grid-column: 1/-1;
+        font-size: 11.5px;
+        color: var(--ink-mute);
+        font-style: normal;
+        line-height: 1.5;
+      }
 
-/* === Spells === */
-.spell-slots{
-  display:grid;
-  grid-template-columns:repeat(9, 1fr);
-  gap:5px;margin-bottom:10px;
-}
-@media (max-width:600px){
-  .spell-slots{grid-template-columns:repeat(5, 1fr)}
-}
-.slot{
-  text-align:center;
-  background:var(--bg-soft);
-  border:1px solid var(--border);
-  border-radius:5px;
-  padding:5px 4px;
-}
-.slot.has-slots{border-color:var(--gold-soft);background:rgba(245,215,110,0.07)}
-.slot-lv{font-size:9.5px;color:var(--ink-dim);font-weight:700;letter-spacing:0.5px}
-.slot-cur{
-  font-family:Georgia,serif;font-weight:700;color:var(--gold);
-  font-size:14px;
-}
-.slot-max{font-size:10px;color:var(--ink-mute)}
+      /* === Spells === */
+      .spell-slots {
+        display: grid;
+        grid-template-columns: repeat(9, 1fr);
+        gap: 5px;
+        margin-bottom: 10px;
+      }
+      @media (max-width: 600px) {
+        .spell-slots {
+          grid-template-columns: repeat(5, 1fr);
+        }
+      }
+      .slot {
+        text-align: center;
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 5px 4px;
+      }
+      .slot.has-slots {
+        border-color: var(--gold-soft);
+        background: rgba(245, 215, 110, 0.07);
+      }
+      .slot-lv {
+        font-size: 9.5px;
+        color: var(--ink-dim);
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+      .slot-cur {
+        font-family: Georgia, serif;
+        font-weight: 700;
+        color: var(--gold);
+        font-size: 14px;
+      }
+      .slot-max {
+        font-size: 10px;
+        color: var(--ink-mute);
+      }
 
-.spell-group{margin-top:8px}
-.spell-group-h{
-  font-size:11px;color:var(--gold);font-weight:700;
-  letter-spacing:0.6px;text-transform:uppercase;
-  padding:3px 0 2px;border-bottom:1px solid var(--border);
-  margin-bottom:5px;
-}
-.spell{
-  display:flex;align-items:baseline;gap:6px;
-  padding:3px 6px;border-radius:4px;
-  font-size:12px;cursor:pointer;
-  line-height:1.4;
-}
-.spell:hover{background:var(--surface-3)}
-.spell-lv{
-  display:inline-block;width:1.6em;
-  text-align:center;font-size:10px;color:var(--ink-mute);font-weight:700;
-}
-.spell-lv.cantrip{color:var(--teal)}
-.spell-name{flex:1;color:var(--ink);min-width:0}
-.spell-tag{font-size:9.5px;color:var(--ink-mute);font-style:italic}
-.spell-tag.conc::before{content:"⊕ ";color:var(--teal)}
-.spell-tag.ritual::before{content:"⌘ ";color:var(--gold)}
+      .spell-group {
+        margin-top: 8px;
+      }
+      .spell-group-h {
+        font-size: 11px;
+        color: var(--gold);
+        font-weight: 700;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        padding: 3px 0 2px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 5px;
+      }
+      .spell {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+        cursor: pointer;
+        line-height: 1.4;
+      }
+      .spell:hover {
+        background: var(--surface-3);
+      }
+      .spell-lv {
+        display: inline-block;
+        width: 1.6em;
+        text-align: center;
+        font-size: 10px;
+        color: var(--ink-mute);
+        font-weight: 700;
+      }
+      .spell-lv.cantrip {
+        color: var(--teal);
+      }
+      .spell-name {
+        flex: 1;
+        color: var(--ink);
+        min-width: 0;
+      }
+      .spell-tag {
+        font-size: 9.5px;
+        color: var(--ink-mute);
+        font-style: italic;
+      }
+      .spell-tag.conc::before {
+        content: "⊕ ";
+        color: var(--teal);
+      }
+      .spell-tag.ritual::before {
+        content: "⌘ ";
+        color: var(--gold);
+      }
 
-/* Click-to-search affordance: the spell-name and feat-name spans
+      /* Click-to-search affordance: the spell-name and feat-name spans
    each get a `.srch-name` inner wrapper. Clicking the inner wrapper
    stops propagation and fires BC_SEARCH_QUERY (autoPin:true) so the
    global-search popover opens with that name pre-filled and auto-
    pinned. The outer .spell / .feat-h still expands on click. Blue
    hover makes the inner click target visually distinct. */
-.srch-name{
-  cursor:pointer;
-  padding:0 3px;margin:0 -3px;
-  border-radius:3px;
-  transition:background .12s, color .12s;
-}
-.srch-name:hover{
-  background:rgba(93,173,226,0.18);
-  color:#7ec8f0;
-}
+      .srch-name {
+        cursor: pointer;
+        padding: 0 3px;
+        margin: 0 -3px;
+        border-radius: 3px;
+        transition:
+          background 0.12s,
+          color 0.12s;
+      }
+      .srch-name:hover {
+        background: rgba(93, 173, 226, 0.18);
+        color: #7ec8f0;
+      }
 
-.spell-detail{
-  margin-top:5px;padding:8px 10px;
-  background:var(--bg);
-  border-left:2px solid var(--gold-soft);
-  border-radius:0 4px 4px 0;
-  font-size:11.5px;color:var(--ink-dim);
-  line-height:1.6;white-space:pre-wrap;
-}
-.spell-detail .meta{
-  display:flex;flex-wrap:wrap;gap:3px 12px;
-  font-size:10px;color:var(--ink-mute);
-  margin-bottom:4px;font-style:italic;
-}
+      .spell-detail {
+        margin-top: 5px;
+        padding: 8px 10px;
+        background: var(--bg);
+        border-left: 2px solid var(--gold-soft);
+        border-radius: 0 4px 4px 0;
+        font-size: 11.5px;
+        color: var(--ink-dim);
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+      .spell-detail .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px 12px;
+        font-size: 10px;
+        color: var(--ink-mute);
+        margin-bottom: 4px;
+        font-style: italic;
+      }
 
-/* === Features === */
-.feat{
-  background:var(--bg-soft);
-  border:1px solid var(--border);
-  border-radius:6px;
-  margin-bottom:5px;
-  overflow:hidden;
-}
-.feat-h{
-  display:flex;align-items:baseline;justify-content:space-between;gap:8px;
-  padding:7px 10px 6px;cursor:pointer;
-  transition:background .12s;
-}
-.feat-h:hover{background:var(--surface-3)}
-.feat-name{font-weight:700;color:var(--ink);font-size:12.5px}
-.feat-name .lv{
-  display:inline-block;
-  margin-left:6px;padding:0 5px;
-  font-size:9.5px;color:var(--gold-soft);
-  background:rgba(245,215,110,0.10);border:1px solid var(--gold-soft);
-  border-radius:99px;font-weight:700;
-}
-.feat-toggle{
-  font-size:11px;color:var(--ink-mute);
-  transition:transform .12s;
-}
-.feat.is-open .feat-toggle{transform:rotate(180deg)}
-.feat-body{
-  padding:0 10px 8px;
-  display:none;
-  font-size:11.5px;color:var(--ink-dim);
-  line-height:1.6;white-space:pre-wrap;
-}
-.feat.is-open .feat-body{display:block}
+      /* === Features === */
+      .feat {
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        margin-bottom: 5px;
+        overflow: hidden;
+      }
+      .feat-h {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 7px 10px 6px;
+        cursor: pointer;
+        transition: background 0.12s;
+      }
+      .feat-h:hover {
+        background: var(--surface-3);
+      }
+      .feat-name {
+        font-weight: 700;
+        color: var(--ink);
+        font-size: 12.5px;
+      }
+      .feat-name .lv {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 0 5px;
+        font-size: 9.5px;
+        color: var(--gold-soft);
+        background: rgba(245, 215, 110, 0.1);
+        border: 1px solid var(--gold-soft);
+        border-radius: 99px;
+        font-weight: 700;
+      }
+      .feat-toggle {
+        font-size: 11px;
+        color: var(--ink-mute);
+        transition: transform 0.12s;
+      }
+      .feat.is-open .feat-toggle {
+        transform: rotate(180deg);
+      }
+      .feat-body {
+        padding: 0 10px 8px;
+        display: none;
+        font-size: 11.5px;
+        color: var(--ink-dim);
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+      .feat.is-open .feat-body {
+        display: block;
+      }
 
-/* === Background panel === */
-.bio-grid{
-  display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;
-}
-@media (max-width:700px){.bio-grid{grid-template-columns:1fr}}
-.bio-block{
-  padding:8px 10px;
-  background:var(--bg-soft);
-  border:1px solid var(--border);
-  border-radius:5px;
-  font-size:12px;
-}
-.bio-block-h{
-  font-size:10px;color:var(--gold-soft);font-weight:700;
-  letter-spacing:0.8px;text-transform:uppercase;
-  margin-bottom:3px;
-}
-.bio-block-body{color:var(--ink-dim);line-height:1.55;white-space:pre-wrap}
+      /* === Background panel === */
+      .bio-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px 14px;
+      }
+      @media (max-width: 700px) {
+        .bio-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .bio-block {
+        padding: 8px 10px;
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        font-size: 12px;
+      }
+      .bio-block-h {
+        font-size: 10px;
+        color: var(--gold-soft);
+        font-weight: 700;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        margin-bottom: 3px;
+      }
+      .bio-block-body {
+        color: var(--ink-dim);
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
 
-/* === Inventory === */
-.coin-row{
-  display:grid;grid-template-columns:repeat(5, 1fr);gap:6px;
-  margin-bottom:8px;
-}
-.coin{
-  text-align:center;
-  background:var(--bg-soft);
-  border:1px solid var(--border);
-  border-radius:5px;
-  padding:6px 4px 4px;
-}
-.coin-name{font-size:9.5px;color:var(--ink-mute);font-weight:700;letter-spacing:0.5px}
-.coin-val{font-family:Georgia,serif;font-weight:700;font-size:14px;color:var(--gold);margin-top:1px}
-.coin.gp .coin-val{color:#e6c07a}
-.coin.pp .coin-val{color:#cdd9ec}
-.coin.ep .coin-val{color:#a8e9c2}
-.coin.sp .coin-val{color:#cdd9d9}
-.coin.cp .coin-val{color:#c9947b}
+      /* === Inventory === */
+      .coin-row {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .coin {
+        text-align: center;
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 6px 4px 4px;
+      }
+      .coin-name {
+        font-size: 9.5px;
+        color: var(--ink-mute);
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+      .coin-val {
+        font-family: Georgia, serif;
+        font-weight: 700;
+        font-size: 14px;
+        color: var(--gold);
+        margin-top: 1px;
+      }
+      .coin.gp .coin-val {
+        color: #e6c07a;
+      }
+      .coin.pp .coin-val {
+        color: #cdd9ec;
+      }
+      .coin.ep .coin-val {
+        color: #a8e9c2;
+      }
+      .coin.sp .coin-val {
+        color: #cdd9d9;
+      }
+      .coin.cp .coin-val {
+        color: #c9947b;
+      }
 
-.enc-bar{
-  display:grid;grid-template-columns:repeat(4,1fr);gap:5px;
-  font-size:10.5px;color:var(--ink-dim);
-}
-.enc-cell{text-align:center;padding:4px;background:var(--bg-soft);border:1px solid var(--border);border-radius:4px}
-.enc-cell .v{font-weight:700;color:var(--ink);font-family:Georgia,serif;font-size:13px}
+      .enc-bar {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 5px;
+        font-size: 10.5px;
+        color: var(--ink-dim);
+      }
+      .enc-cell {
+        text-align: center;
+        padding: 4px;
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+      }
+      .enc-cell .v {
+        font-weight: 700;
+        color: var(--ink);
+        font-family: Georgia, serif;
+        font-size: 13px;
+      }
 
-/* === Defenses === */
-.def-row{
-  display:flex;flex-wrap:wrap;align-items:center;gap:5px;
-  margin-bottom:6px;
-}
-.def-label{
-  font-size:10px;color:var(--ink-dim);font-weight:700;
-  letter-spacing:0.5px;text-transform:uppercase;
-  min-width:3.5em;
-}
-.def-tag{
-  display:inline-block;padding:1px 7px;
-  background:var(--surface-3);border:1px solid var(--border-strong);
-  border-radius:99px;
-  font-size:11px;color:var(--ink);
-}
-.def-tag.res{border-color:var(--teal-soft);color:var(--teal)}
-.def-tag.imm{border-color:var(--gold-soft);color:var(--gold)}
-.def-tag.adv{border-color:var(--teal-soft);color:var(--teal)}
-.def-tag.dis{border-color:var(--ember-soft);color:#ff8d76}
+      /* === Defenses === */
+      .def-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 5px;
+        margin-bottom: 6px;
+      }
+      .def-label {
+        font-size: 10px;
+        color: var(--ink-dim);
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        min-width: 3.5em;
+      }
+      .def-tag {
+        display: inline-block;
+        padding: 1px 7px;
+        background: var(--surface-3);
+        border: 1px solid var(--border-strong);
+        border-radius: 99px;
+        font-size: 11px;
+        color: var(--ink);
+      }
+      .def-tag.res {
+        border-color: var(--teal-soft);
+        color: var(--teal);
+      }
+      .def-tag.imm {
+        border-color: var(--gold-soft);
+        color: var(--gold);
+      }
+      .def-tag.adv {
+        border-color: var(--teal-soft);
+        color: var(--teal);
+      }
+      .def-tag.dis {
+        border-color: var(--ember-soft);
+        color: #ff8d76;
+      }
 
-/* 2026-05-14 (#14 follow-up) — minimalist tag overrides. The .def-row
+      /* 2026-05-14 (#14 follow-up) — minimalist tag overrides. The .def-row
    defaults still apply; we just sharpen the corners (was 99px pill →
    3px square) and lift the type size slightly. */
-.def-tag{
-  border-radius:3px;
-  font-size:12px;
-  padding:3px 9px;
-}
-.def-label{
-  font-size:11.5px;font-weight:500;
-}
+      .def-tag {
+        border-radius: 3px;
+        font-size: 12px;
+        padding: 3px 9px;
+      }
+      .def-label {
+        font-size: 11.5px;
+        font-weight: 500;
+      }
 
-/* === 2026-05-14 (#14) — Edit mode controls ============================ */
-.cc-edit-num,.cc-edit-text{
-  background:var(--bg, #161513);
-  color:var(--ink, #e8e3d8);
-  border:1px solid var(--border-strong, #4a4640);
-  border-radius:4px;
-  padding:3px 6px;
-  font-family:inherit;
-  font-size:12px;
-  outline:none;
-  transition:border-color .12s;
-}
-.cc-edit-num{width:60px;text-align:center;font-variant-numeric:tabular-nums}
-.cc-edit-text{width:auto}
-.cc-edit-num:focus,.cc-edit-text:focus{border-color:var(--gold, #d4a056)}
-/* Hide spinner arrows so the number input looks like the static spans
+      /* === 2026-05-14 (#14) — Edit mode controls ============================ */
+      .cc-edit-num,
+      .cc-edit-text {
+        background: var(--bg, #161513);
+        color: var(--ink, #e8e3d8);
+        border: 1px solid var(--border-strong, #4a4640);
+        border-radius: 4px;
+        padding: 3px 6px;
+        font-family: inherit;
+        font-size: 12px;
+        outline: none;
+        transition: border-color 0.12s;
+      }
+      .cc-edit-num {
+        width: 60px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+      }
+      .cc-edit-text {
+        width: auto;
+      }
+      .cc-edit-num:focus,
+      .cc-edit-text:focus {
+        border-color: var(--gold, #d4a056);
+      }
+      /* Hide spinner arrows so the number input looks like the static spans
    it's replacing — keeps the stat banner / abilities grid visually
    stable when toggling between view and edit. */
-.cc-edit-num::-webkit-inner-spin-button,
-.cc-edit-num::-webkit-outer-spin-button{
-  -webkit-appearance:none;margin:0;
-}
-/* Tiny "×" delete button used on tags / weapon rows / item rows.
+      .cc-edit-num::-webkit-inner-spin-button,
+      .cc-edit-num::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      /* Tiny "×" delete button used on tags / weapon rows / item rows.
    2026-05-14 (#14 f2) — square corners to match the rest of the
    modernized control set. Stays ember (delete = destructive cue). */
-.cc-tag-x{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:18px;height:18px;
-  margin-left:4px;
-  background:transparent;
-  border:1px solid var(--ember-soft, rgba(232,103,94,0.4));
-  border-radius:3px;
-  color:#ff8d76;
-  font-size:12px;font-weight:600;line-height:1;
-  cursor:pointer;
-  transition:background .12s,color .12s;
-  padding:0;
-}
-.cc-tag-x:hover{
-  background:rgba(232,103,94,0.2);
-  color:#ffa093;
-}
-/* "+" add button — category headers + tag rows.
+      .cc-tag-x {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin-left: 4px;
+        background: transparent;
+        border: 1px solid var(--ember-soft, rgba(232, 103, 94, 0.4));
+        border-radius: 3px;
+        color: #ff8d76;
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1;
+        cursor: pointer;
+        transition:
+          background 0.12s,
+          color 0.12s;
+        padding: 0;
+      }
+      .cc-tag-x:hover {
+        background: rgba(232, 103, 94, 0.2);
+        color: #ffa093;
+      }
+      /* "+" add button — category headers + tag rows.
    2026-05-14 (#14 f2) — was a gold rounded pill; user feedback said
    it read as "丑陋 + 不符合风格". Now: square corners, white/ink
    palette (gold reserved for DATA VALUES, not chrome), flat. */
-.cc-add-tag{
-  display:inline-flex;align-items:center;justify-content:center;
-  height:22px;padding:0 10px;
-  background:rgba(255,255,255,0.06);
-  border:1px solid var(--border-strong, rgba(255,255,255,0.18));
-  border-radius:3px;
-  color:var(--ink, #e6e8ee);
-  font-size:12px;font-weight:500;line-height:1;
-  cursor:pointer;
-  transition:background .12s,color .12s,border-color .12s;
-  font-family:inherit;
-}
-.cc-add-tag:hover{
-  background:rgba(255,255,255,0.14);
-  border-color:var(--ink-dim, #9aa0b3);
-  color:var(--ink-strong, #fff);
-}
+      .cc-add-tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 22px;
+        padding: 0 10px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.18));
+        border-radius: 3px;
+        color: var(--ink, #e6e8ee);
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1;
+        cursor: pointer;
+        transition:
+          background 0.12s,
+          color 0.12s,
+          border-color 0.12s;
+        font-family: inherit;
+      }
+      .cc-add-tag:hover {
+        background: rgba(255, 255, 255, 0.14);
+        border-color: var(--ink-dim, #9aa0b3);
+        color: var(--ink-strong, #fff);
+      }
 
-/* === 2026-05-14 (#14 f2) — SpellPickModal =========================== */
-.cc-modal-backdrop{
-  position:fixed;inset:0;z-index:9999;
-  background:rgba(0,0,0,0.55);
-  display:flex;align-items:center;justify-content:center;
-  padding:40px;
-}
-.cc-modal{
-  width:min(460px,92vw);max-height:78vh;
-  display:flex;flex-direction:column;
-  background:var(--surface,#262a3a);
-  border:1px solid var(--border-strong,rgba(255,255,255,0.18));
-  border-radius:5px;
-  box-shadow:var(--shadow-lg,0 8px 28px rgba(0,0,0,0.5));
-  padding:16px 16px 14px;
-}
-.cc-modal-h{
-  display:flex;align-items:baseline;gap:10px;justify-content:space-between;
-  margin-bottom:10px;
-}
-.cc-modal-h h3{
-  margin:0;font-size:15px;font-weight:600;color:var(--ink-strong,#fff);
-}
-.cc-modal-hint{font-size:11px;color:var(--ink-mute,#6b7080)}
-.cc-modal-list{
-  flex:1;min-height:0;overflow-y:auto;
-  display:flex;flex-direction:column;gap:2px;
-  border:1px solid var(--border,rgba(255,255,255,0.10));
-  border-radius:3px;padding:4px;
-  background:var(--bg,#1c2030);
-}
-.cc-modal-list::-webkit-scrollbar{width:7px}
-.cc-modal-list::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
-.cc-modal-row{
-  text-align:left;
-  padding:7px 10px;
-  background:transparent;border:0;border-radius:3px;
-  color:var(--ink,#e6e8ee);font-family:inherit;font-size:13px;
-  cursor:pointer;
-  transition:background .1s;
-  display:flex;align-items:baseline;gap:8px;
-}
-.cc-modal-row:hover{background:rgba(255,255,255,0.08)}
-/* English sub-name shown dim to the right of the Chinese label. */
-.cc-modal-row-en{
-  font-size:11px;color:var(--ink-mute,#6b7080);
-  font-family:Georgia,"Noto Serif",serif;font-style:italic;
-}
-.cc-modal-row-free{
-  color:var(--ink-strong,#fff);font-weight:600;
-  border-bottom:1px solid var(--border);
-  margin-bottom:2px;
-}
-.cc-modal-msg{
-  padding:14px 10px;text-align:center;
-  color:var(--ink-mute,#6b7080);font-size:12.5px;
-}
-.cc-modal-foot{
-  display:flex;justify-content:flex-end;gap:8px;
-  margin-top:10px;
-}
+      /* === 2026-05-14 (#14 f2) — SpellPickModal =========================== */
+      .cc-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: rgba(0, 0, 0, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 40px;
+      }
+      .cc-modal {
+        width: min(460px, 92vw);
+        max-height: 78vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--surface, #262a3a);
+        border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.18));
+        border-radius: 5px;
+        box-shadow: var(--shadow-lg, 0 8px 28px rgba(0, 0, 0, 0.5));
+        padding: 16px 16px 14px;
+      }
+      .cc-modal-h {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .cc-modal-h h3 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--ink-strong, #fff);
+      }
+      .cc-modal-hint {
+        font-size: 11px;
+        color: var(--ink-mute, #6b7080);
+      }
+      .cc-modal-list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+        border-radius: 3px;
+        padding: 4px;
+        background: var(--bg, #1c2030);
+      }
+      .cc-modal-list::-webkit-scrollbar {
+        width: 7px;
+      }
+      .cc-modal-list::-webkit-scrollbar-thumb {
+        background: var(--border-strong);
+        border-radius: 4px;
+      }
+      .cc-modal-row {
+        text-align: left;
+        padding: 7px 10px;
+        background: transparent;
+        border: 0;
+        border-radius: 3px;
+        color: var(--ink, #e6e8ee);
+        font-family: inherit;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background 0.1s;
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .cc-modal-row:hover {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      /* English sub-name shown dim to the right of the Chinese label. */
+      .cc-modal-row-en {
+        font-size: 11px;
+        color: var(--ink-mute, #6b7080);
+        font-family: Georgia, "Noto Serif", serif;
+        font-style: italic;
+      }
+      .cc-modal-row-free {
+        color: var(--ink-strong, #fff);
+        font-weight: 600;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 2px;
+      }
+      .cc-modal-msg {
+        padding: 14px 10px;
+        text-align: center;
+        color: var(--ink-mute, #6b7080);
+        font-size: 12.5px;
+      }
+      .cc-modal-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 10px;
+      }
 
-/* === Empty / error === */
-.cc-empty,.cc-loading,.cc-error{
-  flex:1;display:flex;align-items:center;justify-content:center;
-  flex-direction:column;gap:8px;
-  color:var(--ink-mute);font-size:15px;
-  padding:40px;text-align:center;
-}
-.cc-loading::before{
-  content:"⏳";font-size:32px;
-  animation:cc-pulse 1.4s ease-in-out infinite;
-}
-@keyframes cc-pulse{0%,100%{opacity:.4}50%{opacity:1}}
-.cc-error{color:#ff8d76}
-.cc-error::before{content:"⚠";font-size:32px}
-/* 2026-05-14 (#14 f2) — no-card states (loading / error) get a
+      /* === Empty / error === */
+      .cc-empty,
+      .cc-loading,
+      .cc-error {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 8px;
+        color: var(--ink-mute);
+        font-size: 15px;
+        padding: 40px;
+        text-align: center;
+      }
+      .cc-loading::before {
+        content: "⏳";
+        font-size: 32px;
+        animation: cc-pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes cc-pulse {
+        0%,
+        100% {
+          opacity: 0.4;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      .cc-error {
+        color: #ff8d76;
+      }
+      .cc-error::before {
+        content: "⚠";
+        font-size: 32px;
+      }
+      /* 2026-05-14 (#14 f2) — no-card states (loading / error) get a
    translucent navy wash so the OBR canvas reads through behind them.
    `position:fixed; inset:0` because these render in place of the
    whole panel (App returns just this div when !data), and the body
    is transparent now. The loaded sheet stays solid (its own bands
    carry opaque backgrounds). 0.62 alpha = clearly "枭熊 navy" but
    you can still see what's underneath. */
-.cc-translucent{
-  position:fixed;inset:0;
-  background:rgba(28,32,48,0.62);
-  backdrop-filter:blur(2px);
-  -webkit-backdrop-filter:blur(2px);
-}
+      .cc-translucent {
+        position: fixed;
+        inset: 0;
+        background: rgba(28, 32, 48, 0.62);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+      }
 
-/* === Hidden file input for import === */
-.cc-file-input{display:none}
-</style>
-</head>
-<body>
-<div id="app"></div>
-<input type="file" class="cc-file-input" id="ccFileInput" accept=".json,application/json,.xlsx" multiple>
-<script type="module" src="/src/modules/characterCards/fullscreen-page.tsx"></script>
-</body>
+      /* === Hidden file input for import === */
+      .cc-file-input {
+        display: none;
+      }
+
+      /* === 2026-06-21 — Container-query responsive edit rows =================
+   Weapon-edit and inventory-edit rows used fixed grid-template-columns
+   via inline style (e.g. "1.4fr 0.7fr 1fr 1fr auto"). On a narrow
+   character card (the fullscreen panel can be resized independently
+   of the browser window — it's rendered inside cc-panel's iframe,
+   which itself can be as narrow as ~400px), <input> grid items don't
+   shrink below their intrinsic content width (default min-width:auto
+   on a grid item ≈ min-content), so the row overflowed the section
+   instead of staying inside it.
+
+   Fix: `.sec-body` becomes a query container (container-type:
+   inline-size). Above WEAP_BP the row keeps its tabular grid layout
+   (fast horizontal scanning — what you want on a roomy panel). Below
+   it, each row becomes its own vertical mini-card: every field gets
+   its OWN label above the input, stacked top-to-bottom, so nothing is
+   ever clipped or unreadable regardless of how narrow the surrounding
+   character card gets. This applies uniformly to both the weapon-edit
+   rows (CombatSection) and the inventory-edit rows (InventorySection)
+   — they share the same narrow-card problem and the same fix. */
+
+      .sec-body {
+        container-type: inline-size;
+        container-name: cc-sec;
+      }
+
+      /* ---- Weapon edit row (CombatSection, editing===true) ---- */
+      .weap-edit-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .weap-edit-grid {
+        display: grid;
+        grid-template-columns: 1.4fr 0.7fr 1fr 1fr;
+        gap: 6px;
+        align-items: center;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .weap-edit-grid .cc-edit-text,
+      .weap-edit-grid .cc-edit-num {
+        width: 100%;
+        min-width: 0;
+      }
+      .weap-edit-field {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .weap-edit-field-label {
+        display: none; /* shown only in the stacked (narrow) layout below */
+        font-size: 9.5px;
+        color: var(--ink-mute);
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+      }
+
+      /* ---- Inventory edit row (InventorySection, editing===true) ---- */
+      .inv-edit-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .inv-edit-grid {
+        display: grid;
+        grid-template-columns: 1.35fr 0.55fr 0.45fr 0.75fr;
+        gap: 6px;
+        align-items: center;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .inv-edit-grid .cc-edit-text,
+      .inv-edit-grid .cc-edit-num {
+        width: 100%;
+        min-width: 0;
+      }
+      .inv-edit-field {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .inv-edit-field-label {
+        display: none;
+        font-size: 9.5px;
+        color: var(--ink-mute);
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+      }
+      /* Header row (column captions) above the inventory list — only makes
+   sense in the tabular (wide) layout, since stacked mini-cards carry
+   their own per-field labels instead. */
+      .inv-edit-header {
+        display: grid;
+        grid-template-columns: 1.35fr 0.55fr 0.45fr 0.75fr auto;
+      }
+
+      /* ---- Narrow container: switch both edit rows to stacked mini-cards ---- */
+      @container cc-sec (max-width: 480px) {
+        .weap-edit-row,
+        .inv-edit-row {
+          align-items: stretch;
+        }
+        .weap-edit-grid,
+        .inv-edit-grid {
+          grid-template-columns: 1fr;
+        }
+        .weap-edit-field-label,
+        .inv-edit-field-label {
+          display: block;
+        }
+        /* The header's column captions are meaningless once each row stacks
+     vertically with its own inline labels — hide it so the list reads
+     as a sequence of mini-cards instead of an unaligned ghost table. */
+        .inv-edit-header {
+          display: none;
+        }
+        .weap-edit-row,
+        .inv-edit-row {
+          background: var(--surface-2);
+          border: 1px solid var(--border-strong);
+          border-radius: 5px;
+          padding: 8px;
+          margin-bottom: 8px;
+        }
+      }
+
+      /* Browsers without @container support (older WebViews some users may
+   still run inside an embedded OBR client) silently ignore the block
+   above and keep the tabular grid at every width — input min-width:0
+   above still lets fields shrink to fit a moderately narrow panel,
+   so the fallback degrades gracefully rather than overflowing badly. */
+      /* === 2026-06-21 — Weapon editor: proficiency / properties / multi-
+   damage additions =========================================
+   New structure for the weapon-edit row (see fullscreen-page.tsx,
+   CombatSection):
+
+     .weap-edit-row          (column stack: top fields-row, then
+                               the extra-damages list below)
+       .weap-edit-top        (the field grid + the weapon-delete ×,
+                               side by side — same row regardless of
+                               how many extra-damage rows follow)
+         .weap-edit-grid      (the existing field grid — name/atk/
+                               dmg/type/properties)
+         .weap-edit-remove    (the weapon × — was a sibling of the
+                               grid before; now lives next to it
+                               inside .weap-edit-top instead of
+                               trailing after the extra-damages list)
+       .weap-extra-list       (one row per extra_damages[] entry +
+                               the "+ Extra damage" button)
+*/
+
+      .weap-edit-row {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .weap-edit-top {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+      }
+      .weap-edit-remove {
+        flex: 0 0 auto;
+        margin-top: 2px; /* nudge to align with the grid's first input row */
+      }
+
+      /* Name field doubles up with the proficiency checkbox on the same
+   line — input first, checkbox label right after it. */
+      .weap-edit-name-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .weap-edit-name-row .cc-edit-text {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .weap-prof-check {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex: 0 0 auto;
+        font-size: 11px;
+        color: var(--ink-dim);
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        white-space: nowrap;
+        cursor: pointer;
+        user-select: none;
+      }
+      .weap-prof-check input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+        accent-color: var(--teal, #6dac8a);
+        cursor: pointer;
+      }
+
+      /* Fields that should claim a full row on their own when the section
+   is wide enough to show more than one column (name + properties are
+   the two free-text fields most likely to hold longer values). Under
+   the @container narrow breakpoint this has no effect — every field
+   is already its own full-width stacked row there. */
+      .weap-edit-field-wide {
+        grid-column: 1 / -1;
+      }
+
+      /* ---- Extra damage types (extra_damages[]) ---- */
+      .weap-extra-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .weap-extra-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .weap-extra-row .cc-edit-text {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+      .weap-extra-row .cc-edit-text:first-child {
+        flex: 0 1 90px; /* damage dice expression stays compact, e.g. "1d6" */
+      }
+      .weap-extra-add {
+        align-self: flex-start;
+      }
+
+      /* Narrow-card stacking (same @container as the base weap-edit-grid /
+   inv-edit-grid rules) — the wide-field override above is harmless
+   here since every field is already full-width, and the extra-damage
+   row's compact first input also relaxes to full width so it's not
+   squeezed under 90px on a stacked layout. */
+      @container cc-sec (max-width: 480px) {
+        .weap-edit-field-wide {
+          grid-column: auto;
+        }
+        .weap-extra-row {
+          flex-wrap: wrap;
+        }
+        .weap-extra-row .cc-edit-text:first-child {
+          flex: 1 1 100%;
+        }
+      }
+      .weap-special-props-input {
+        min-height: 54px;
+        resize: vertical;
+        width: 100%;
+        font-family: inherit;
+        line-height: 1.45;
+        white-space: pre-wrap;
+      }
+
+      /* View mode: its own block under the standard .weap-props line (which
+   stays a single " · "-joined row for short tags) — special_properties
+   can run several sentences, so it gets full-width wrapped text
+   instead of being squeezed into that line. */
+      .weap-special-props {
+        white-space: pre-wrap;
+        line-height: 1.55;
+        margin-top: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <input
+      type="file"
+      class="cc-file-input"
+      id="ccFileInput"
+      accept=".json,application/json,.xlsx"
+      multiple
+    />
+    <script
+      type="module"
+      src="/src/modules/characterCards/fullscreen-page.tsx"
+    ></script>
+  </body>
 </html>
