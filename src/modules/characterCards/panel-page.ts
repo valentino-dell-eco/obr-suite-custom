@@ -24,12 +24,9 @@ import {
 import { readResources, updateResource } from "../resourceTracker/storage";
 import { PLUGIN_ID } from "../resourceTracker/types";
 import {
-  dieInfoToDiceType,
-  rollDieInfo,
   BC_OPEN_EDIT,
   broadcastChanged,
 } from "../resourceTracker/panel";
-import { broadcastDiceRoll } from "../dice";
 import {
   showLrExtraConfirm,
   showChargesRollModal,
@@ -1304,6 +1301,35 @@ window.addEventListener("message", (event) => {
       if (!itemId || typeof msg.resourceId !== "string") break;
       const delta = Number(msg.delta) || 0;
       void (async () => {
+        // 2026-07 — dieRoll CONSUMPTION (delta < 0) no longer writes
+        // immediately + auto-rolls silently. Instead it opens the same
+        // quick-roll popup panel.ts's own applyChange now uses (see the
+        // big comment there) and returns WITHOUT touching the resource
+        // — the decrement only happens once the roll actually fires,
+        // via dice/index.ts's BC_QUICK_ROLL handler. Recharging
+        // (delta >= 0) and every other resource type are unaffected.
+        if (delta < 0) {
+          const items = await OBR.scene.items.getItems([itemId]);
+          const r = readResources(items[0] ?? null).find(
+            (x) => x.id === msg.resourceId,
+          );
+          if (r?.type === "dieRoll" && r.dieInfo) {
+            try {
+              await openQuickPopupAt(
+                {
+                  expression: r.dieInfo,
+                  label: `${r.name || "?"} ${t(getLocalLang(), "rpDieRollLabel")}`,
+                  itemId,
+                  resourceConsume: { itemId, resourceId: r.id, delta },
+                },
+                { x: 0, y: 0 },
+              );
+            } catch (e) {
+              console.warn("[cc-panel] dieRoll consume popup failed", e);
+            }
+            return;
+          }
+        }
         let prevCurrent = 0;
         const updated = await updateResource(itemId, msg.resourceId, (r) => {
           prevCurrent = r.current;
@@ -1312,29 +1338,6 @@ window.addEventListener("message", (event) => {
             current: Math.max(0, Math.min(r.max, r.current + delta)),
           };
         });
-        // Same "roll a die per point spent" behaviour as the real pip
-        // widget (panel.ts's applyChange) — a dieRoll resource being
-        // DECREASED rolls one die per point, broadcast through the
-        // existing dice-roll toast so it's indistinguishable from
-        // clicking the pip directly in the Resources tab elsewhere.
-        if (updated && updated.type === "dieRoll" && delta < 0 && updated.dieInfo) {
-          const uses = Math.min(Math.abs(delta), 10);
-          const dice = Array.from({ length: uses }, () => ({
-            type: dieInfoToDiceType(updated.dieInfo as string),
-            value: rollDieInfo(updated.dieInfo as string),
-          }));
-          try {
-            await broadcastDiceRoll({
-              itemId,
-              dice,
-              winnerIdx: -1,
-              label: `${updated.name || "?"} ${t(getLocalLang(), "rpDieRollLabel")}`,
-              rollerId: itemId,
-            });
-          } catch (e) {
-            console.warn("[cc-panel] dieRoll consume broadcast failed", e);
-          }
-        }
         // The "used/gained a resource" bottom-center toast (same one
         // clicking a pip in info-page.ts's real panel triggers) — reuses
         // panel.ts's own broadcastChanged so the payload shape/animation

@@ -36,9 +36,14 @@ function normaliseResource(raw: unknown): Resource | null {
   const cur = Number(r.current);
   const max = Number(r.max);
   if (!Number.isFinite(cur) || !Number.isFinite(max)) return null;
-  const dieInfo = typeof r.dieInfo === "string" && /^(D2|D4|D6|D8|D10|D12|D20|D100)$/.test(r.dieInfo)
-    ? (r.dieInfo as any)
-    : undefined;
+  // 2026-07 — was a strict D2..D100 enum check; dieInfo is now a
+  // free-form dice formula (same validation as chargesFormula below:
+  // any non-empty string, parsed later by evaluateFormula when the
+  // quick-roll popup actually fires).
+  const dieInfo =
+    typeof r.dieInfo === "string" && r.dieInfo.trim().length > 0
+      ? r.dieInfo.trim()
+      : undefined;
   // Older saved resources predate the recovery/chargesFormula fields —
   // both are optional and default to "untouched by SR/LR/DW/DS", which
   // is exactly the old (implicit) behaviour, so this stays backward

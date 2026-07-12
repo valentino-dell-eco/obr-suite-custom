@@ -78,6 +78,19 @@ export interface QuickRollRequest {
   advMode?: "adv" | "dis";
   // Right-click "重击" — double every dice term's count.
   critMode?: boolean;
+  // 2026-07 — set when this quick-roll IS a dieRoll resource's
+  // consumption roll (see resourceTracker/panel.ts's applyChange and
+  // characterCards/panel-page.ts's cc-toggle-resource-pip relay).
+  // After the roll actually fires, dice/index.ts's BC_QUICK_ROLL
+  // handler applies `delta` to the resource and broadcasts
+  // BC_RESOURCE_CHANGED — the resource is NOT touched until the roll
+  // completes, so closing the popup without rolling leaves it
+  // untouched (unlike the old silent-auto-roll behaviour).
+  resourceConsume?: {
+    itemId: string;
+    resourceId: string;
+    delta: number;
+  };
 }
 
 export function fireQuickRoll(req: QuickRollRequest): void {

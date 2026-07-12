@@ -5,6 +5,8 @@ import { DiceType, DIE_SIDES, DieResult, rollDie, sidesOf } from "./types";
 import { readSkinsForPlayer } from "./dice-skins";
 import { assetUrl } from "../../asset-base";
 import { onViewportResize } from "../../utils/viewportAnchor";
+import { updateResource } from "../resourceTracker/storage";
+import { broadcastChanged } from "../resourceTracker/panel";
 import {
   PANEL_IDS,
   getPanelOffset,
@@ -184,6 +186,16 @@ export interface QuickRollRequest {
   // expression has its count doubled (1d8 → 2d8, 2d6 → 4d6) while the
   // modifier stays unchanged. Mirrors D&D 5e crit damage rules.
   critMode?: boolean;
+  // 2026-07 — set when this quick-roll is a dieRoll resource's
+  // consumption roll. Consumed by the BC_QUICK_ROLL handler below
+  // (after the roll actually fires) to apply `delta` to the resource
+  // and broadcast BC_RESOURCE_CHANGED. See tags.ts's copy of this
+  // interface for the fuller rationale.
+  resourceConsume?: {
+    itemId: string;
+    resourceId: string;
+    delta: number;
+  };
 }
 
 // --- Broadcast payload schema (extended for multi-type dice) ---
@@ -1009,6 +1021,29 @@ export async function setupDice(): Promise<void> {
       }
       try {
         await handleQuickRoll(effectiveReq);
+        // 2026-07 — dieRoll resource consumption. The resource is only
+        // touched HERE, after the roll actually fired — closing the
+        // popup without rolling (or a roll that throws above) leaves
+        // it untouched. See tags.ts's QuickRollRequest.resourceConsume
+        // for the full rationale.
+        if (effectiveReq.resourceConsume) {
+          const { itemId, resourceId, delta } = effectiveReq.resourceConsume;
+          try {
+            let prevCurrent = 0;
+            const updated = await updateResource(itemId, resourceId, (r) => {
+              prevCurrent = r.current;
+              return {
+                ...r,
+                current: Math.max(0, Math.min(r.max, r.current + delta)),
+              };
+            });
+            if (updated && delta !== 0) {
+              void broadcastChanged(itemId, updated, delta, prevCurrent);
+            }
+          } catch (e) {
+            console.warn("[obr-suite/dice] resourceConsume apply failed", e);
+          }
+        }
       } catch (e) {
         console.error("[obr-suite/dice] quick-roll failed", e);
       }

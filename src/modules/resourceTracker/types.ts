@@ -53,15 +53,15 @@ export type IconId =
   | "d20"       // 二十面体骰
   | "d100";     // 百面体/百分骰
 
-export type DieInfo =
-  | "D2"
-  | "D4"
-  | "D6"
-  | "D8"
-  | "D10"
-  | "D12"
-  | "D20"
-  | "D100"
+/** 2026-07 — was a fixed enum (D2..D100); dieRoll resources now carry a
+ *  free-form dice formula instead (same grammar as `chargesFormula`
+ *  below: "1d6", "2d4+1", etc.), edited via a text input rather than a
+ *  select. Kept as a plain string alias (not removed outright) so old
+ *  call sites reads like `Resource["dieInfo"]` still resolve to
+ *  something sensible; the actual validation now lives in
+ *  storage.ts's normaliseResource (any non-empty string, same as
+ *  chargesFormula) rather than an enum check. */
+export type DieInfo = string;
 
 /** When a resource is fully restored. Undefined/"none" means no
  *  recovery button ever touches it automatically — the resource
@@ -79,7 +79,12 @@ export interface Resource {
   current: number;
   max: number;
   icon: IconId;
-  /** Optional die roll configuration used only by `dieRoll` resources. */
+  /** Dice formula used only by `dieRoll` resources (e.g. "1d6",
+   *  "2d4+1") — rolled via the quick-roll popup on CONSUME (delta <
+   *  0), never automatically. The popup pre-fills this formula and
+   *  lets the player tweak it for that one roll before firing; the
+   *  resource's `current` only decrements once the roll actually
+   *  happens (see dice/index.ts's BC_QUICK_ROLL handler). */
   dieInfo?: DieInfo | null;
   /** When this resource gets automatically topped up. Absent/"none"
    *  = never touched by the SR/LR/DW/DS recovery buttons. */

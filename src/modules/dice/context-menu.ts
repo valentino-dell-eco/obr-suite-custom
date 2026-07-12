@@ -108,6 +108,10 @@ export async function openQuickPopupAt(
     expression: string;
     label: string;
     itemId: string | null;
+    // 2026-07 — see QuickRollRequest.resourceConsume in tags.ts /
+    // dice/index.ts for the full rationale. Passed through as a URL
+    // param since the popup is a genuinely separate document/modal.
+    resourceConsume?: { itemId: string; resourceId: string; delta: number };
   },
   _viewportPos: { x: number; y: number },
 ): Promise<void> {
@@ -115,6 +119,9 @@ export async function openQuickPopupAt(
   params.set("expr", args.expression);
   params.set("label", args.label);
   if (args.itemId) params.set("itemId", args.itemId);
+  if (args.resourceConsume) {
+    params.set("resourceConsume", JSON.stringify(args.resourceConsume));
+  }
 
   // 2026-05-13 — was a viewport-anchored popover; now a fullscreen
   // modal that renders the iframe in the center of the screen via

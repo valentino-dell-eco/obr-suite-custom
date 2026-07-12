@@ -39,6 +39,7 @@ import { Resource, IconId, PLUGIN_ID } from "./types";
 import { ICON_LIBRARY } from "./icons";
 import { readResources, updateResource, writeResources } from "./storage";
 import { broadcastDiceRoll } from "../dice";
+import { openQuickPopupAt } from "../dice/context-menu";
 import { type DieResult } from "../dice/types";
 import { t } from "../../i18n";
 import { getLocalLang } from "../../state";
@@ -959,6 +960,32 @@ export function mountResourcePanel(opts: MountOptions): {
     pulseEl: HTMLElement | null,
   ): Promise<void> {
     if (next === r.current) return;
+    // 2026-07 — dieRoll CONSUMPTION (delta < 0) no longer auto-rolls
+    // silently. Instead it opens the same quick-roll popup used for
+    // ability checks/saving throws/weapon attacks (pre-filled with
+    // this resource's formula, editable for that one roll) and
+    // returns WITHOUT touching the resource at all — the actual
+    // decrement only happens once the roll fires, handled by
+    // dice/index.ts's BC_QUICK_ROLL listener via `resourceConsume`.
+    // Closing the popup without rolling leaves the resource
+    // untouched. Recharging (delta >= 0) is unaffected — still an
+    // immediate, silent write, same as every other resource type.
+    if (r.type === "dieRoll" && delta < 0 && r.dieInfo) {
+      try {
+        await openQuickPopupAt(
+          {
+            expression: r.dieInfo,
+            label: `${r.name || T("rtUnnamed")} ${T("rpDieRollLabel")}`,
+            itemId,
+            resourceConsume: { itemId, resourceId: r.id, delta },
+          },
+          { x: 0, y: 0 },
+        );
+      } catch (e) {
+        console.warn("[resource-tracker] dieRoll consume popup failed", e);
+      }
+      return;
+    }
     // 1. Optimistically update local state.
     const idx = currentRender.findIndex((x) => x.id === r.id);
     if (idx < 0) return;
@@ -974,20 +1001,6 @@ export function mountResourcePanel(opts: MountOptions): {
     // 3. Notifier hook + room-wide toast broadcast.
     onChange?.({ resourceName: r.name || T("rtUnnamed"), delta, current: next, max: r.max });
     void broadcastChanged(itemId, nextRow, delta, r.current);
-    if (r.type === "dieRoll" && delta < 0 && r.dieInfo) {
-      const uses = Math.min(Math.abs(delta), 10);
-      const dice: DieResult[] = [];
-      for (let i = 0; i < uses; i++) {
-        dice.push({ type: dieInfoToDiceType(r.dieInfo), value: rollDieInfo(r.dieInfo) });
-      }
-      void broadcastDiceRoll({
-        itemId,
-        dice,
-        winnerIdx: -1,
-        label: `${r.name || T("rtUnnamed")} ${T("rpDieRollLabel")}`,
-        rollerId: itemId,
-      });
-    }
     // 4. Persist. items.onChange echoes back; refresh() runs but
     //    skips render() because we're in the suppress window.
     await updateResource(itemId, r.id, () => nextRow);

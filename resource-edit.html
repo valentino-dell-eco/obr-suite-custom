@@ -255,17 +255,8 @@ label.field, .field{
     </div>
 
     <label class="field" id="dieInfoField" style="display:none">
-      <span data-i18n="reLblDieInfo">骰子类型</span>
-      <select id="dieInfo">
-        <option value="D2">D2</option>
-        <option value="D4">D4</option>
-        <option value="D6">D6</option>
-        <option value="D8">D8</option>
-        <option value="D10">D10</option>
-        <option value="D12">D12</option>
-        <option value="D20">D20</option>
-        <option value="D100">D100</option>
-      </select>
+      <span data-i18n="reLblDieInfo">骰子公式</span>
+      <input type="text" id="dieInfo" maxlength="40" placeholder="如：1d6，消耗时会弹出可编辑的投骰窗口" data-i18n-placeholder="reDieFormulaPh" />
     </label>
 
     <label class="field" id="chargesFormulaField" style="display:none">

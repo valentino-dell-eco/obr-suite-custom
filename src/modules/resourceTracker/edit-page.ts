@@ -72,7 +72,7 @@ const iconGrid = $("iconGrid");
 const previewIconEl = $("previewIcon");
 const previewLabelEl = $("previewLabel");
 const dieInfoField = $("dieInfoField");
-const dieInfoSelect = $i("dieInfo");
+const dieInfoInput = $i("dieInfo");
 const chargesFormulaField = $("chargesFormulaField");
 const chargesFormulaInput = $i("chargesFormula");
 const recoverySelect = $i("recovery") as unknown as HTMLSelectElement;
@@ -85,7 +85,7 @@ const chipsPresets = $("chipsPresets");
 const cardEl = document.querySelector<HTMLElement>(".card");
 
 let selectedIcon: IconId = "gem";
-let selectedDieInfo: DieInfo = "D6";
+let selectedDieInfo: DieInfo = "1d6";
 let selectedRecovery: RecoveryType = "none";
 let editingResourceId: string | null = null;
 let itemId = "";
@@ -150,7 +150,7 @@ function applyPresetIntoForm(p: ResourcePreset): void {
   inpName.value = p.name;
   selectedType = p.type;
   selectedIcon = p.icon;
-  selectedDieInfo = p.dieInfo || "D6";
+  selectedDieInfo = p.dieInfo || "1d6";
   if (chargesFormulaInput) chargesFormulaInput.value = p.chargesFormula || "";
   inpMax.value = String(p.max);
   // For "count" type the new resource starts FULL by convention; for
@@ -296,8 +296,8 @@ function applyPayload(p: HashPayload): void {
     inpCurrent.value = String(p.resource.current);
     inpMax.value = String(p.resource.max);
     selectedIcon = p.resource.icon;
-    selectedDieInfo = p.resource.dieInfo || "D6";
-    if (dieInfoSelect) dieInfoSelect.value = selectedDieInfo;
+    selectedDieInfo = p.resource.dieInfo || "1d6";
+    if (dieInfoInput) dieInfoInput.value = selectedDieInfo;
     selectedRecovery = (p.resource.recovery as RecoveryType) || "none";
     if (recoverySelect) recoverySelect.value = selectedRecovery;
     if (chargesFormulaInput) chargesFormulaInput.value = p.resource.chargesFormula || "";
@@ -312,6 +312,8 @@ function applyPayload(p: HashPayload): void {
     inpCurrent.value = "2";
     inpMax.value = "2";
     selectedIcon = "gem";
+    selectedDieInfo = "1d6";
+    if (dieInfoInput) dieInfoInput.value = "1d6";
     selectedRecovery = "none";
     if (recoverySelect) recoverySelect.value = "none";
     if (chargesFormulaInput) chargesFormulaInput.value = "";
@@ -329,9 +331,9 @@ function applyPayload(p: HashPayload): void {
 [inpName, inpCurrent, inpMax].forEach((el) => {
   el.addEventListener("input", updatePreview);
 });
-if (dieInfoSelect) {
-  dieInfoSelect.addEventListener("change", () => {
-    selectedDieInfo = dieInfoSelect.value as DieInfo;
+if (dieInfoInput) {
+  dieInfoInput.addEventListener("input", () => {
+    selectedDieInfo = dieInfoInput.value as DieInfo;
     updatePreview();
   });
 }

@@ -712,6 +712,15 @@
       const initialExpr = params.get("expr") ?? "";
       const initialLabel = params.get("label") ?? "";
       const itemId = params.get("itemId") || null;
+      // 2026-07 — dieRoll resource consumption marker, JSON-encoded by
+      // openQuickPopupAt. Relayed verbatim in the BC_QUICK_ROLL payload
+      // below; the actual resource decrement happens in dice/index.ts
+      // AFTER the roll fires, not here.
+      let resourceConsume = null;
+      try {
+        const raw = params.get("resourceConsume");
+        if (raw) resourceConsume = JSON.parse(raw);
+      } catch {}
 
       const exprInput = document.getElementById("exprInput");
       const labelInput = document.getElementById("labelInput");
@@ -865,6 +874,7 @@
               hidden: !!opts.hidden,
               ...(opts.advMode ? { advMode: opts.advMode } : {}),
               ...(opts.critMode ? { critMode: true } : {}),
+              ...(resourceConsume ? { resourceConsume } : {}),
             },
             { destination: "LOCAL" },
           );

@@ -913,7 +913,11 @@ const TR: Dict = {
   reTypeBar: { zh: "进度", en: "Bar" },
   reTypeNumber: { zh: "数字", en: "Number" },
   reTypeDieRoll: { zh: "骰子", en: "Die Roll" },
-  reLblDieInfo: { zh: "骰子类型", en: "Die Type" },
+  reLblDieInfo: { zh: "骰子公式", en: "Die Formula" },
+  reDieFormulaPh: {
+    zh: "如：1d6，消耗时会弹出可编辑的投骰窗口",
+    en: "e.g. 1d6 — a popup lets you tweak it before rolling on consume",
+  },
   reLblCurrent: { zh: "当前", en: "Current" },
   reLblMax: { zh: "最大", en: "Max" },
   reLblIcon: { zh: "图标", en: "Icon" },
