@@ -407,6 +407,121 @@
         font-weight: 600;
       }
 
+      /* === Resources tab (2026-07) === */
+      .rt-recovery-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+      .rt-recovery-row button {
+        background: rgba(147, 112, 219, 0.14);
+        border: 1px solid rgba(147, 112, 219, 0.5);
+        color: #c9a6f5;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 8px 0;
+        border-radius: 6px;
+      }
+      .rt-recovery-row button:hover:not(:disabled) {
+        background: rgba(147, 112, 219, 0.28);
+        border-color: rgba(147, 112, 219, 0.8);
+      }
+      .rt-recovery-row button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .rt-lr-confirm,
+      .rt-charges-modal {
+        background: var(--surface);
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-bottom: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .rt-lr-title,
+      .rt-charges-title {
+        font-weight: 700;
+        color: var(--ink-strong);
+        font-size: 13px;
+      }
+      .rt-lr-body {
+        font-size: 12px;
+        color: var(--ink-dim);
+      }
+      .rt-lr-confirm label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .rt-lr-confirm > button,
+      .rt-charges-modal > button:last-child {
+        align-self: flex-end;
+        background: #5865f2;
+        border: 1px solid #5865f2;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 6px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .rt-charges-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        background: rgba(255, 255, 255, 0.04);
+        border-radius: 6px;
+        padding: 6px 8px;
+      }
+      .rt-charges-name {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        font-size: 12px;
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .rt-charges-meta {
+        font-size: 11px;
+        color: var(--ink-dim);
+        font-weight: 400;
+      }
+      .rt-charges-row button {
+        flex: none;
+        background: #5865f2;
+        border: 1px solid #5865f2;
+        color: #fff;
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      .rt-charges-row button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      /* Per-resource-row styling (.rt-row/.rt-pills/.rt-pill/.rt-bar/
+         .rt-num-* etc.) is no longer hand-duplicated here — it comes
+         from panel.ts's own `ensureStyles()`, called on mount by
+         ResourcesSection, so it's pixel-identical to the real
+         resourceTracker panel and stays that way automatically. This
+         wrapper just needs to lay its rows out in a column. */
+      .rt-resource-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
       /* === Content area === */
       /* 2026-05-15 — wide-screen layout: left main + right vertical-tabs
    sidebar, neither cc-body nor the page scrolls; only .cc-main and

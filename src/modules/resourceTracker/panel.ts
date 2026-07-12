@@ -88,7 +88,7 @@ function parseValueExpression(
   return null;
 }
 
-function dieInfoToDiceType(die: string): string {
+export function dieInfoToDiceType(die: string): string {
   switch (die) {
     case "D2": return "d2";
     case "D4": return "d4";
@@ -102,13 +102,13 @@ function dieInfoToDiceType(die: string): string {
   }
 }
 
-function rollDieInfo(die: string): number {
+export function rollDieInfo(die: string): number {
   const diceType = dieInfoToDiceType(die);
   const sides = Number(diceType.slice(1));
   return Math.floor(Math.random() * sides) + 1;
 }
 
-const BC_OPEN_EDIT = `${PLUGIN_ID}/edit-open`;
+export const BC_OPEN_EDIT = `${PLUGIN_ID}/edit-open`;
 // 2026-05-11 — fire on every value commit so the bottom-center
 // toast overlay (resource-toast.html, bg-mounted by index.ts) shows
 // a card. LOCAL+REMOTE so all players in the room see the change.
@@ -160,7 +160,7 @@ export async function resolveTokenDisplayName(itemId: string): Promise<string> {
   return "";
 }
 
-async function broadcastChanged(
+export async function broadcastChanged(
   itemId: string,
   resource: Resource,
   delta: number,
@@ -376,7 +376,8 @@ export function mountResourcePanel(opts: MountOptions): {
     let pillsHtml = "";
     switch (r.type) {
       case "count":
-      case "dieRoll": pillsHtml = renderCountPills(r); break;
+      case "dieRoll":
+      case "charges": pillsHtml = renderCountPills(r); break;
       case "bar":    pillsHtml = renderBarPill(r); break;
       case "number": pillsHtml = renderNumberPill(r); break;
     }
@@ -518,7 +519,7 @@ export function mountResourcePanel(opts: MountOptions): {
     if (!row) return;
     const meta = row.querySelector<HTMLElement>("[data-meta]");
     if (meta) meta.textContent = `${r.current} / ${r.max}`;
-    if (r.type === "count" || r.type === "dieRoll") {
+    if (r.type === "count" || r.type === "dieRoll" || r.type === "charges") {
       const max = Math.max(0, Math.floor(r.max));
       const cur = Math.max(0, Math.min(max, Math.floor(r.current)));
       row.querySelectorAll<HTMLElement>('[data-action="count-toggle"]').forEach((p) => {
@@ -1041,7 +1042,7 @@ function cssEscape(s: string): string {
 // --- styling -----------------------------------------------------------------
 
 let stylesInjected = false;
-function ensureStyles(): void {
+export function ensureStyles(): void {
   if (stylesInjected) return;
   stylesInjected = true;
   const css = `

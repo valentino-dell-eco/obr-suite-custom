@@ -29,6 +29,7 @@ import {
   IconId,
   ResourceType,
   DieInfo,
+  RecoveryType,
   PLUGIN_ID,
 } from "./types";
 import { ICON_LIBRARY, ICON_LABELS, ICON_IDS } from "./icons";
@@ -51,6 +52,7 @@ interface ResourcePreset {
   max: number;
   icon: IconId;
   dieInfo?: DieInfo | null;
+  chargesFormula?: string | null;
 }
 
 const BC_RESOURCE_SAVE = `${PLUGIN_ID}/edit-save`;
@@ -71,6 +73,9 @@ const previewIconEl = $("previewIcon");
 const previewLabelEl = $("previewLabel");
 const dieInfoField = $("dieInfoField");
 const dieInfoSelect = $i("dieInfo");
+const chargesFormulaField = $("chargesFormulaField");
+const chargesFormulaInput = $i("chargesFormula");
+const recoverySelect = $i("recovery") as unknown as HTMLSelectElement;
 const btnX = $("btnX");
 const btnCancel = $("btnCancel");
 const btnSave = $("btnSave");
@@ -81,6 +86,7 @@ const cardEl = document.querySelector<HTMLElement>(".card");
 
 let selectedIcon: IconId = "gem";
 let selectedDieInfo: DieInfo = "D6";
+let selectedRecovery: RecoveryType = "none";
 let editingResourceId: string | null = null;
 let itemId = "";
 
@@ -99,7 +105,7 @@ function readPresets(): ResourcePreset[] {
     // schema drift from older versions of this same key.
     return parsed.filter((p) =>
       p && typeof p.name === "string"
-      && (p.type === "count" || p.type === "bar" || p.type === "number" || p.type === "dieRoll")
+      && (p.type === "count" || p.type === "bar" || p.type === "number" || p.type === "dieRoll" || p.type === "charges")
       && typeof p.max === "number"
       && typeof p.icon === "string"
     );
@@ -127,7 +133,11 @@ function renderPresets(): void {
   // Click chip body → load this preset into the form. Click × → drop it.
   chipsPresets.innerHTML = arr.map((p, idx) => {
     const iconSvg = ICON_LIBRARY[p.icon] ?? ICON_LIBRARY.gem;
-    const extra = p.type === "dieRoll" && p.dieInfo ? ` · ${p.dieInfo}` : "";
+    const extra = p.type === "dieRoll" && p.dieInfo
+      ? ` · ${p.dieInfo}`
+      : p.type === "charges" && p.chargesFormula
+        ? ` · ${p.chargesFormula}`
+        : "";
     return `<span class="chip" data-idx="${idx}" title="${escHtml(p.name)} · ${p.type}${escHtml(extra)} · ${escHtml(T("rePresetMax"))} ${p.max}">
       <span class="ico">${iconSvg}</span>
       <span class="lab">${escHtml(p.name)}</span>
@@ -141,6 +151,7 @@ function applyPresetIntoForm(p: ResourcePreset): void {
   selectedType = p.type;
   selectedIcon = p.icon;
   selectedDieInfo = p.dieInfo || "D6";
+  if (chargesFormulaInput) chargesFormulaInput.value = p.chargesFormula || "";
   inpMax.value = String(p.max);
   // For "count" type the new resource starts FULL by convention; for
   // bar/number we mirror max into current too — the user can tweak after.
@@ -183,6 +194,9 @@ btnAddPreset.addEventListener("click", () => {
     max,
     icon: selectedIcon,
     ...(selectedType === "dieRoll" ? { dieInfo: selectedDieInfo } : {}),
+    ...(selectedType === "charges"
+      ? { chargesFormula: chargesFormulaInput?.value.trim() || null }
+      : {}),
   };
   const arr = readPresets();
   // Replace any existing preset with the same name + type combo so users
@@ -203,12 +217,19 @@ function applyTypeToggleClasses(): void {
   if (dieInfoField) {
     dieInfoField.style.display = selectedType === "dieRoll" ? "block" : "none";
   }
+  if (chargesFormulaField) {
+    chargesFormulaField.style.display = selectedType === "charges" ? "block" : "none";
+  }
 }
 typeToggle?.addEventListener("click", (e) => {
   const t = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-type]");
   if (!t) return;
   const v = t.dataset.type as ResourceType | undefined;
-  if (!v || (v !== "count" && v !== "bar" && v !== "number" && v !== "dieRoll")) return;
+  if (
+    !v ||
+    (v !== "count" && v !== "bar" && v !== "number" && v !== "dieRoll" && v !== "charges")
+  )
+    return;
   selectedType = v;
   applyTypeToggleClasses();
   updatePreview();
@@ -252,7 +273,14 @@ function updatePreview(): void {
   const cur = inpCurrent.value || "0";
   const max = inpMax.value || "0";
   const name = inpName.value.trim() || T("rtUnnamed");
-  const extra = selectedType === "dieRoll" ? ` · ${selectedDieInfo}` : "";
+  let extra = "";
+  if (selectedType === "dieRoll") {
+    extra = ` · ${selectedDieInfo}`;
+  } else if (selectedType === "charges") {
+    const formula = chargesFormulaInput?.value.trim();
+    extra = formula ? ` · ${formula}` : ` · ${T("reChargesFormulaEmpty")}`;
+  }
+  if (selectedRecovery !== "none") extra += ` · ${T(`reRecovery${selectedRecovery}` as Parameters<typeof T>[0])}`;
   previewLabelEl.textContent = `${name} · ${cur} / ${max}${extra}`;
 }
 
@@ -270,6 +298,9 @@ function applyPayload(p: HashPayload): void {
     selectedIcon = p.resource.icon;
     selectedDieInfo = p.resource.dieInfo || "D6";
     if (dieInfoSelect) dieInfoSelect.value = selectedDieInfo;
+    selectedRecovery = (p.resource.recovery as RecoveryType) || "none";
+    if (recoverySelect) recoverySelect.value = selectedRecovery;
+    if (chargesFormulaInput) chargesFormulaInput.value = p.resource.chargesFormula || "";
   } else {
     editingResourceId = null;
     titleEl.textContent = T("reNewTitle");
@@ -281,6 +312,9 @@ function applyPayload(p: HashPayload): void {
     inpCurrent.value = "2";
     inpMax.value = "2";
     selectedIcon = "gem";
+    selectedRecovery = "none";
+    if (recoverySelect) recoverySelect.value = "none";
+    if (chargesFormulaInput) chargesFormulaInput.value = "";
   }
   applyTypeToggleClasses();
   renderIconGrid();
@@ -300,6 +334,15 @@ if (dieInfoSelect) {
     selectedDieInfo = dieInfoSelect.value as DieInfo;
     updatePreview();
   });
+}
+if (recoverySelect) {
+  recoverySelect.addEventListener("change", () => {
+    selectedRecovery = recoverySelect.value as RecoveryType;
+    updatePreview();
+  });
+}
+if (chargesFormulaInput) {
+  chargesFormulaInput.addEventListener("input", updatePreview);
 }
 
 // Click-to-replace: focus on any of the three text/number inputs selects
@@ -357,6 +400,10 @@ btnSave.addEventListener("click", () => {
     max,
     icon: selectedIcon,
     ...(type === "dieRoll" ? { dieInfo: selectedDieInfo } : {}),
+    ...(type === "charges"
+      ? { chargesFormula: chargesFormulaInput?.value.trim() || null }
+      : {}),
+    recovery: selectedRecovery,
   };
   broadcast(BC_RESOURCE_SAVE, { itemId, resource });
 });

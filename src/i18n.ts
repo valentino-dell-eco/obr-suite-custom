@@ -927,6 +927,58 @@ const TR: Dict = {
   reBtnCancel: { zh: "取消", en: "Cancel" },
   reBtnSave: { zh: "保存", en: "Save" },
   reClose: { zh: "关闭", en: "Close" },
+  reTypeCharges: { zh: "充能", en: "Charges" },
+  reLblChargesFormula: { zh: "充能公式", en: "Charges Formula" },
+  reChargesFormulaPh: {
+    zh: "如：2d4+1，留空 = 直接回满",
+    en: "e.g. 2d4+1 — leave blank to restore straight to max",
+  },
+  reChargesFormulaEmpty: { zh: "回满", en: "restore to max" },
+  reLblRecovery: { zh: "恢复时机", en: "Recovery" },
+  reRecoveryNone: { zh: "无", en: "None" },
+  reRecoverySR: { zh: "短休", en: "Short Rest" },
+  reRecoveryLR: { zh: "长休", en: "Long Rest" },
+  reRecoveryDW: { zh: "黎明", en: "Dawn" },
+  reRecoveryDS: { zh: "黄昏", en: "Dusk" },
+
+  // --- Recovery buttons (SR/LR/DW/DS) ------------------------------------
+  rcvBtnSRTitle: { zh: "短休 — 恢复所有短休资源", en: "Short Rest — restore all SR resources" },
+  rcvBtnLRTitle: { zh: "长休 — 恢复短休 + 长休资源", en: "Long Rest — restore SR + LR resources" },
+  rcvBtnDWTitle: { zh: "黎明 — 恢复所有黎明资源", en: "Dawn — restore all Dawn resources" },
+  rcvBtnDSTitle: { zh: "黄昏 — 恢复所有黄昏资源", en: "Dusk — restore all Dusk resources" },
+  rcvBtnRecharge: { zh: "充能", en: "Recharge" },
+  rcvNothingToDo: { zh: "没有需要恢复的资源", en: "Nothing to recover" },
+  rcvDoneToast: { zh: "恢复完成", en: "Recovery complete" },
+  rcvOfflineTag: { zh: "离线", en: "offline" },
+  rcvConfirmDwDsTitle: { zh: "长休", en: "Long Rest" },
+  rcvConfirmDwDsBody: {
+    zh: "是否同时恢复「黎明」和/或「黄昏」资源？",
+    en: "Also restore Dawn and/or Dusk resources?",
+  },
+  rcvConfirmDwDsDawn: { zh: "黎明", en: "Dawn" },
+  rcvConfirmDwDsDusk: { zh: "黄昏", en: "Dusk" },
+  rcvConfirmDwDsConfirm: { zh: "继续", en: "Continue" },
+  rcvChargesModalTitle: { zh: "需要投掷的充能", en: "Charges to Roll" },
+  rcvGmOfflineModalTitle: {
+    zh: "离线玩家的充能（GM 代投）",
+    en: "Offline Players' Charges (GM rolls)",
+  },
+  rcvGmNoticeTitle: { zh: "玩家已恢复资源", en: "Player Recovered Resources" },
+  rcvGmNoticeBody: {
+    zh: "{player} 对卡「{card}」执行了 {type} 恢复。",
+    en: '{player} performed a {type} recovery on card "{card}".',
+  },
+
+  // --- Rest announcements (room-wide toast, one per pressed button) -----
+  rcvAnnounceSR: { zh: "{name} 进行了一次短休。", en: "{name} made a short rest." },
+  rcvAnnounceLR: { zh: "{name} 进行了一次长休。", en: "{name} made a long rest." },
+  rcvAnnounceDW: { zh: "{name} 迎来了新的黎明。", en: "{name} has seen a new Dawn." },
+  rcvAnnounceDS: { zh: "{name} 迎来了新的黄昏。", en: "{name} has seen a new Dusk." },
+  ccResourcesNoToken: {
+    zh: "该卡未绑定任何场景内的代币，无法显示资源。",
+    en: "This card isn't bound to a token in this scene — no resources to show.",
+  },
+  rtNoResources: { zh: "还没有资源", en: "No resources yet" },
 
   // Status tracker — buff edit popup + effect presets (GM-only).
   // (Buff catalog NAMES and category/group names are user data and

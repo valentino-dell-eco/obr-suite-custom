@@ -1,7 +1,16 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { getLocalLang } from "../../state";
+import { t } from "../../i18n";
 import { assetUrl } from "../../asset-base";
 import { onViewportResize } from "../../utils/viewportAnchor";
+import {
+  BC_RECOVERY_TRIGGER,
+  BC_RECOVERY_NOTICE,
+  RecoveryTriggerPayload,
+  RecoveryNoticePayload,
+  rollChargeResource,
+} from "./recovery";
+import { showChargesRollModal, showModal } from "./recovery-ui";
 import {
   PANEL_IDS,
   getPanelOffset,
@@ -148,6 +157,16 @@ function isPanelOpen(): boolean {
 export let ccMyId = "";
 export let ccRole: "GM" | "PLAYER" = "PLAYER";
 export let ccAllPlayers: any[] = [];
+
+function escapeHtml(s: string): string {
+  return String(s).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ]!,
+  );
+}
 
 // Funzioni getter (sicure)
 export function getMyId(): string {
@@ -594,6 +613,92 @@ export async function setupCharacterCards(): Promise<void> {
         }
       },
     ),
+  );
+  // --- Recovery buttons (SR/LR/DW/DS) -----------------------------------
+  //
+  // Registered here (always-loaded action document) rather than in
+  // panel-page.ts / info-page.ts so both listeners fire regardless of
+  // whether the player currently has the sidebar/fullscreen open.
+  //
+  // BC_RECOVERY_TRIGGER — sent by the GM after a GLOBAL recovery pass.
+  // Only PLAYERS act on it (the GM already handled offline owners'
+  // charges locally, and never rolls for an online player). Each
+  // player's client filters the payload down to tokens IT owns and
+  // opens its own local recharge modal for just those.
+  unsubs.push(
+    OBR.broadcast.onMessage(BC_RECOVERY_TRIGGER, async (event) => {
+      if (ccRole !== "PLAYER") return;
+      const payload = event.data as RecoveryTriggerPayload;
+      if (!payload?.items?.length) return;
+      try {
+        const itemIds = payload.items.map((it) => it.itemId);
+        const tokens = await OBR.scene.items.getItems(itemIds);
+        const ownedIds = new Set(
+          tokens
+            .filter((tk) => (tk as any)?.createdUserId === ccMyId)
+            .map((tk) => tk.id),
+        );
+        const rows = payload.items
+          .filter((it) => ownedIds.has(it.itemId))
+          .flatMap((it) =>
+            it.resources.map((r) => ({
+              itemId: it.itemId,
+              resourceId: r.id,
+              name: r.name,
+              current: r.current,
+              max: r.max,
+              formula: r.chargesFormula,
+              onRecharge: async () => {
+                const result = await rollChargeResource(it.itemId, {
+                  id: r.id,
+                  name: r.name,
+                  type: "charges",
+                  current: r.current,
+                  max: r.max,
+                  chargesFormula: r.chargesFormula,
+                  icon: "gem",
+                } as any);
+                if (!result) return null;
+                return {
+                  current: result.resource.current,
+                  max: result.resource.max,
+                  total: result.total,
+                };
+              },
+            })),
+          );
+        if (rows.length === 0) return;
+        const lang = getLocalLang();
+        showChargesRollModal({
+          title: t(lang, "rcvChargesModalTitle"),
+          rechargeLabel: t(lang, "rcvBtnRecharge"),
+          closeLabel: t(lang, "reClose"),
+          groups: [{ rows }],
+        });
+      } catch (e) {
+        console.warn("[obr-suite/character-cards] recovery-trigger handling failed", e);
+      }
+    }),
+  );
+
+  // BC_RECOVERY_NOTICE — sent by a PLAYER's client after they used the
+  // per-card recovery buttons. Purely an FYI toast for the GM.
+  unsubs.push(
+    OBR.broadcast.onMessage(BC_RECOVERY_NOTICE, async (event) => {
+      if (ccRole !== "GM") return;
+      const payload = event.data as RecoveryNoticePayload;
+      if (!payload) return;
+      const lang = getLocalLang();
+      const typesLabel = payload.types.join("+");
+      showModal({
+        title: t(lang, "rcvGmNoticeTitle"),
+        bodyHtml: `<div>${t(lang, "rcvGmNoticeBody")
+          .replace("{player}", escapeHtml(payload.playerName))
+          .replace("{card}", escapeHtml(payload.cardName))
+          .replace("{type}", escapeHtml(typesLabel))}</div>`,
+        buttons: [{ label: t(lang, "reClose"), onClick: () => {} }],
+      });
+    }),
   );
   // The main panel opens/closes on broadcast from the cluster button or
   // from the Shift keyboard shortcut registered below.

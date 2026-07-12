@@ -325,6 +325,33 @@
         border-color: rgba(255, 255, 255, 0.3);
         color: #ddd;
       }
+      /* Global SR/LR/DW/DS recovery buttons — GM-only row above the
+         card list (see panel-page.ts wireRecoveryButtons). */
+      .recovery-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        padding: 8px 12px 0 12px;
+      }
+      .recovery-btn {
+        background: rgba(147, 112, 219, 0.14);
+        border: 1px solid rgba(147, 112, 219, 0.5);
+        color: #c9a6f5;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 6px 0;
+        border-radius: 5px;
+      }
+      .recovery-btn:hover {
+        background: rgba(147, 112, 219, 0.28);
+        border-color: rgba(147, 112, 219, 0.8);
+      }
+      .recovery-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
       .side-hint-sub {
         font-size: 10px;
         color: rgba(122, 170, 170, 0.65);
@@ -652,6 +679,40 @@
         </div>
         <div id="status" class="status" style="display: none"></div>
         <div id="error" class="err" style="display: none"></div>
+        <div class="recovery-row" id="recoveryRow" style="display: none">
+          <button
+            type="button"
+            class="recovery-btn"
+            data-recovery="SR"
+            data-i18n-title="rcvBtnSRTitle"
+          >
+            SR
+          </button>
+          <button
+            type="button"
+            class="recovery-btn"
+            data-recovery="LR"
+            data-i18n-title="rcvBtnLRTitle"
+          >
+            LR
+          </button>
+          <button
+            type="button"
+            class="recovery-btn"
+            data-recovery="DW"
+            data-i18n-title="rcvBtnDWTitle"
+          >
+            DW
+          </button>
+          <button
+            type="button"
+            class="recovery-btn"
+            data-recovery="DS"
+            data-i18n-title="rcvBtnDSTitle"
+          >
+            DS
+          </button>
+        </div>
         <div class="card-list" id="list"></div>
       </aside>
     </div>

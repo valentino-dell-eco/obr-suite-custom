@@ -15,6 +15,14 @@ import { normalizeCombatGearFlags, readBooleanFlag } from "./data-normalize";
 import { reconcileUploadedCardShieldState } from "./xlsx-shield-state";
 import { t } from "../../i18n";
 import { getLocalLang, onLangChange, type Language } from "../../state";
+// Resources tab (2026-07) — reuses the REAL resourceTracker panel's CSS
+// injector + icon set so this iframe's rendering is pixel-identical to
+// info-page.ts's own resource panel, without duplicating either. The
+// actual reads/writes still relay through panel-page.ts (see
+// ResourcesSection below) — only the presentation layer is shared here.
+import { ensureStyles } from "../resourceTracker/panel";
+import { ICON_LIBRARY } from "../resourceTracker/icons";
+import type { IconId } from "../resourceTracker/types";
 
 // [CC-FLOW] Module-evaluation marker for the fullscreen iframe document.
 // Compare the timestamp of this log against "[CC-FLOW] index.ts module
@@ -276,13 +284,21 @@ const ablAbbr = (k: string): string =>
 // inside the 概览 tab below 防御 — overview becomes the
 // "everything-at-a-glance" home, and only the long-form sections
 // (法术 / 特性 / 背景) get their own dedicated tabs.
-type TabKey = "overview" | "spells" | "features" | "background";
+type TabKey =
+  | "overview"
+  | "spells"
+  | "features"
+  | "background"
+  | "resources";
 
 const TABS: { key: TabKey; labelKey: Parameters<typeof t>[1] }[] = [
   { key: "overview", labelKey: "ccTabOverview" },
   { key: "spells", labelKey: "ccTabSpells" },
   { key: "features", labelKey: "ccTabFeatures" },
   { key: "background", labelKey: "ccTabBackground" },
+  // 2026-07 — relayed through panel-page.ts via postMessage (see
+  // ResourcesSection below); this iframe has no OBR SDK of its own.
+  { key: "resources", labelKey: "ccTabResources" },
 ];
 
 // ===== Helpers ===============================================
@@ -4572,7 +4588,22 @@ function App() {
         ))}
       </div>
       <div class="cc-body">
-        <div class="cc-main">{renderTabSection(tab as TabKey, data)}</div>
+        <div class="cc-main">
+          {tab === "resources" ? (
+            <ResourcesSection
+              cardId={cardId}
+              characterName={
+                data?.identity?.display_name ||
+                data?.identity?.character_name ||
+                T("ccUnnamed")
+              }
+              canUse={isGM || canEdit}
+              isGM={isGM}
+            />
+          ) : (
+            renderTabSection(tab as TabKey, data)
+          )}
+        </div>
         <nav class="cc-tabs-side" aria-label={T("ccTabsAria")}>
           {TABS.map((tb) => (
             <button
@@ -4684,6 +4715,429 @@ function App() {
 // 2026-05-15 — section dispatch helper. Extracted so both the primary
 // and secondary panes can share the same switch without duplicating
 // JSX between them.
+// --- Resources tab (relayed through panel-page.ts) ------------------------
+//
+// This iframe has no OBR SDK — every read/write goes through
+// window.parent.postMessage to panel-page.ts's relay listener (see the
+// big comment block above buildCardIframeSrc there for the full
+// protocol). Kept self-contained (own pip rendering, own LR-confirm
+// and charges-roll UI) rather than trying to reuse the DOM-string
+// modal helpers built for the SDK-having pages, since this is a Preact
+// component tree, not a plain-DOM page.
+
+type RtResourceType = "count" | "bar" | "number" | "dieRoll" | "charges";
+
+interface RtResource {
+  id: string;
+  name: string;
+  type: RtResourceType;
+  current: number;
+  max: number;
+  icon?: string;
+  chargesFormula?: string | null;
+  recovery?: string | null;
+}
+
+interface RtRollRow {
+  id: string;
+  name: string;
+  current: number;
+  max: number;
+  formula: string;
+}
+
+function ResourcesSection({
+  cardId,
+  characterName,
+  canUse,
+  isGM,
+}: {
+  cardId: string;
+  characterName: string;
+  canUse: boolean;
+  isGM: boolean;
+}) {
+  // Same exact CSS the real resourceTracker panel (panel.ts) injects into
+  // its own document — imported/called here rather than hand-copied so
+  // this stays pixel-identical automatically if panel.ts's styling ever
+  // changes. Each iframe/document gets its own <style> tag + its own
+  // `stylesInjected` guard (separate module instances per Vite bundle),
+  // so this is safe to call unconditionally on mount.
+  useEffect(() => {
+    ensureStyles();
+  }, []);
+
+  const [resources, setResources] = useState<RtResource[] | null>(null);
+  const [boundItemId, setBoundItemId] = useState<string | null>(null);
+  const [pendingLr, setPendingLr] = useState<{
+    hasDawn: boolean;
+    hasDusk: boolean;
+  } | null>(null);
+  const [lrChoice, setLrChoice] = useState({ dawn: false, dusk: false });
+  const [rollList, setRollList] = useState<RtRollRow[] | null>(null);
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+
+  useEffect(() => {
+    window.parent.postMessage({ type: "cc-request-resources", cardId }, "*");
+    const handler = (event: MessageEvent) => {
+      const msg = event.data;
+      if (!msg || msg.cardId !== cardId) return;
+      switch (msg.type) {
+        case "cc-resources-response":
+          setResources(Array.isArray(msg.resources) ? msg.resources : []);
+          setBoundItemId(msg.boundItemId ?? null);
+          break;
+        case "cc-recovery-needs-lr-confirm":
+          setPendingLr({ hasDawn: !!msg.hasDawn, hasDusk: !!msg.hasDusk });
+          setLrChoice({ dawn: false, dusk: false });
+          break;
+        case "cc-recovery-needs-roll":
+          setRollList(Array.isArray(msg.resources) ? msg.resources : []);
+          setRecoveryBusy(false);
+          break;
+        case "cc-recharge-result": {
+          setBusyIds((prev) => {
+            const next = new Set(prev);
+            next.delete(msg.resourceId);
+            return next;
+          });
+          setRollList((prev) =>
+            prev
+              ? prev.map((r) =>
+                  r.id === msg.resourceId
+                    ? { ...r, current: msg.current, max: msg.max }
+                    : r,
+                )
+              : prev,
+          );
+          break;
+        }
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [cardId]);
+
+  const togglePip = (r: RtResource, targetLevel: number) => {
+    if (!canUse) return;
+    const delta = targetLevel - r.current;
+    if (delta === 0) return;
+    window.parent.postMessage(
+      { type: "cc-toggle-resource-pip", cardId, resourceId: r.id, delta },
+      "*",
+    );
+  };
+
+  const runRecovery = (type: "SR" | "LR" | "DW" | "DS") => {
+    if (!canUse || recoveryBusy) return;
+    setRecoveryBusy(true);
+    window.parent.postMessage(
+      { type: "cc-run-card-recovery", cardId, recoveryType: type },
+      "*",
+    );
+    // cc-recovery-needs-lr-confirm / cc-recovery-needs-roll / a fresh
+    // cc-resources-response all arrive async — recoveryBusy is cleared
+    // by whichever of those actually ends the flow (see handler above
+    // for needs-roll; SR/DW/DS and no-confirm-needed LR clear it via
+    // the resources-response effect below).
+  };
+
+  useEffect(() => {
+    if (resources !== null) setRecoveryBusy(false);
+  }, [resources]);
+
+  const confirmLr = () => {
+    window.parent.postMessage(
+      {
+        type: "cc-recovery-lr-confirmed",
+        cardId,
+        dawn: lrChoice.dawn,
+        dusk: lrChoice.dusk,
+      },
+      "*",
+    );
+    setPendingLr(null);
+  };
+
+  const recharge = (resourceId: string) => {
+    setBusyIds((prev) => new Set(prev).add(resourceId));
+    window.parent.postMessage(
+      { type: "cc-recharge-resource", cardId, resourceId },
+      "*",
+    );
+  };
+
+  // Reuses the REAL resource-edit.html modal (same one panel.ts's own gear
+  // icon / "+ Add resource" button open) via the exact same BC_OPEN_EDIT
+  // broadcast panel-page.ts already relays — no reimplementation, so the
+  // edit UI itself is byte-identical, not just visually similar.
+  const openEditResource = (resourceId: string) => {
+    if (!canUse) return;
+    window.parent.postMessage(
+      { type: "cc-open-resource-edit", cardId, resourceId },
+      "*",
+    );
+  };
+  const openAddResource = () => {
+    if (!canUse) return;
+    window.parent.postMessage(
+      { type: "cc-open-resource-edit", cardId },
+      "*",
+    );
+  };
+
+  if (!boundItemId && resources !== null) {
+    return (
+      <div class="rt-empty" style={{ padding: "16px", opacity: 0.7 }}>
+        {T("ccResourcesNoToken")}
+      </div>
+    );
+  }
+
+  return (
+    <div class="rt-resources-tab">
+      {canUse && (
+        <div class="rt-recovery-row">
+          {(["SR", "LR", "DW", "DS"] as const).map((k) => (
+            <button
+              type="button"
+              disabled={recoveryBusy}
+              onClick={() => runRecovery(k)}
+              title={T(`rcvBtn${k}Title` as any)}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {pendingLr && (
+        <div class="rt-lr-confirm">
+          <div class="rt-lr-title">{T("rcvConfirmDwDsTitle")}</div>
+          <div class="rt-lr-body">{T("rcvConfirmDwDsBody")}</div>
+          {pendingLr.hasDawn && (
+            <label>
+              <input
+                type="checkbox"
+                checked={lrChoice.dawn}
+                onChange={(e) =>
+                  setLrChoice((c) => ({
+                    ...c,
+                    dawn: (e.target as HTMLInputElement).checked,
+                  }))
+                }
+              />
+              {T("rcvConfirmDwDsDawn")}
+            </label>
+          )}
+          {pendingLr.hasDusk && (
+            <label>
+              <input
+                type="checkbox"
+                checked={lrChoice.dusk}
+                onChange={(e) =>
+                  setLrChoice((c) => ({
+                    ...c,
+                    dusk: (e.target as HTMLInputElement).checked,
+                  }))
+                }
+              />
+              {T("rcvConfirmDwDsDusk")}
+            </label>
+          )}
+          <button type="button" onClick={confirmLr}>
+            {T("rcvConfirmDwDsConfirm")}
+          </button>
+        </div>
+      )}
+
+      {rollList && rollList.length > 0 && (
+        <div class="rt-charges-modal">
+          <div class="rt-charges-title">{T("rcvChargesModalTitle")}</div>
+          {rollList.map((r) => (
+            <div class="rt-charges-row" key={r.id}>
+              <div class="rt-charges-name">
+                {r.name}
+                <span class="rt-charges-meta">
+                  {r.current} / {r.max} · {r.formula}
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={busyIds.has(r.id)}
+                onClick={() => recharge(r.id)}
+              >
+                {T("rcvBtnRecharge")}
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setRollList(null)}>
+            {T("reClose")}
+          </button>
+        </div>
+      )}
+
+      <div class="rt-resource-list">
+        {resources === null && (
+          <div style={{ padding: "16px", opacity: 0.6 }}>...</div>
+        )}
+        {resources?.length === 0 && (
+          <div style={{ padding: "16px", opacity: 0.6 }}>
+            {T("rtNoResources")}
+          </div>
+        )}
+        {resources?.map((r) => {
+          const max = Math.max(0, Math.floor(r.max));
+          const cur = Math.max(0, Math.min(max, Math.floor(r.current)));
+          const icon =
+            ICON_LIBRARY[r.icon as IconId] ?? ICON_LIBRARY.gem;
+          return (
+            <div class="rt-row" key={r.id}>
+              <div class="rt-row-head">
+                <div class="rt-row-name" title={r.name}>
+                  {r.name || T("rtUnnamed")}
+                </div>
+                <div class="rt-row-meta">
+                  {r.current} / {r.max}
+                </div>
+                {canUse && (
+                  <button
+                    class="rt-row-edit"
+                    type="button"
+                    title={T("rpEdit")}
+                    onClick={() => openEditResource(r.id)}
+                  >
+                    ⚙
+                  </button>
+                )}
+              </div>
+              <div class="rt-pills">
+                {(r.type === "count" ||
+                  r.type === "dieRoll" ||
+                  r.type === "charges") &&
+                  (max > 0 ? (
+                    Array.from({ length: max }).map((_, idx) => {
+                      const pos = idx + 1;
+                      const filled = pos <= cur;
+                      return (
+                        <span
+                          key={pos}
+                          class={`rt-pill rt-pill-icon ${filled ? "full" : "spent"}`}
+                          style={{ cursor: canUse ? "pointer" : "default" }}
+                          title={`${r.name} ${pos}`}
+                          onClick={() =>
+                            canUse && togglePip(r, pos === cur ? pos - 1 : pos)
+                          }
+                          dangerouslySetInnerHTML={{ __html: icon }}
+                        />
+                      );
+                    })
+                  ) : (
+                    <span class="rt-pill-empty">{T("rpMaxZero")}</span>
+                  ))}
+                {r.type === "bar" && (
+                  <>
+                    <div class="rt-bar-num">
+                      {cur} / {Math.max(1, r.max)}
+                    </div>
+                    <div
+                      class="rt-bar"
+                      style={{ cursor: canUse ? "pointer" : "default" }}
+                      onClick={(e) => {
+                        if (!canUse) return;
+                        const target = e.currentTarget as HTMLDivElement;
+                        const rect = target.getBoundingClientRect();
+                        const t = Math.max(
+                          0,
+                          Math.min(1, (e.clientX - rect.left) / rect.width),
+                        );
+                        togglePip(
+                          r,
+                          Math.round(t * Math.max(1, r.max)),
+                        );
+                      }}
+                    >
+                      <div
+                        class="rt-bar-fill"
+                        style={{
+                          width: `${((cur / Math.max(1, r.max)) * 100).toFixed(1)}%`,
+                        }}
+                      />
+                      <span
+                        class="rt-bar-thumb"
+                        style={{
+                          left: `${((cur / Math.max(1, r.max)) * 100).toFixed(2)}%`,
+                        }}
+                        dangerouslySetInnerHTML={{ __html: icon }}
+                      />
+                    </div>
+                  </>
+                )}
+                {r.type === "number" && (
+                  <div class="rt-num-bar">
+                    <button
+                      class="rt-num-end"
+                      type="button"
+                      disabled={!canUse}
+                      onClick={() => togglePip(r, 0)}
+                    >
+                      0
+                    </button>
+                    <button
+                      class="rt-num-step rt-num-minus"
+                      type="button"
+                      disabled={!canUse}
+                      onClick={() => togglePip(r, Math.max(0, r.current - 1))}
+                    >
+                      −
+                    </button>
+                    <span class="rt-num-orb" title={`${r.name} ${cur}/${r.max}`}>
+                      <span
+                        class="rt-num-orb-icon"
+                        dangerouslySetInnerHTML={{ __html: icon }}
+                      />
+                      <span class="rt-num-orb-val">{cur}</span>
+                    </span>
+                    <button
+                      class="rt-num-step rt-num-plus"
+                      type="button"
+                      disabled={!canUse}
+                      onClick={() =>
+                        togglePip(r, Math.min(r.max, r.current + 1))
+                      }
+                    >
+                      +
+                    </button>
+                    <button
+                      class="rt-num-end"
+                      type="button"
+                      disabled={!canUse}
+                      onClick={() => togglePip(r, r.max)}
+                    >
+                      {r.max}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {canUse && (
+        <button
+          type="button"
+          class="rt-add"
+          onClick={openAddResource}
+        >
+          {T("rpAdd")}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function renderTabSection(key: TabKey, data: CharacterData) {
   switch (key) {
     case "overview":

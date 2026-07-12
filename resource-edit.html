@@ -83,7 +83,7 @@ label.field, .field{
 
 /* ===== type toggle (个数 / 进度 / 数字) ===== */
 .type-toggle{
-  display:grid;grid-template-columns:repeat(4, 1fr);
+  display:grid;grid-template-columns:repeat(5, 1fr);
   height:32px;
   background:var(--bg-strong);
   border:1px solid var(--border);
@@ -250,6 +250,7 @@ label.field, .field{
         <button type="button" data-type="bar" data-i18n="reTypeBar">进度</button>
         <button type="button" data-type="number" data-i18n="reTypeNumber">数字</button>
         <button type="button" data-type="dieRoll" data-i18n="reTypeDieRoll">骰子</button>
+        <button type="button" data-type="charges" data-i18n="reTypeCharges">充能</button>
       </div>
     </div>
 
@@ -264,6 +265,22 @@ label.field, .field{
         <option value="D12">D12</option>
         <option value="D20">D20</option>
         <option value="D100">D100</option>
+      </select>
+    </label>
+
+    <label class="field" id="chargesFormulaField" style="display:none">
+      <span data-i18n="reLblChargesFormula">充能公式</span>
+      <input type="text" id="chargesFormula" maxlength="40" placeholder="如：2d4+1，留空 = 直接回满" data-i18n-placeholder="reChargesFormulaPh" />
+    </label>
+
+    <label class="field">
+      <span data-i18n="reLblRecovery">恢复时机</span>
+      <select id="recovery">
+        <option value="none" data-i18n="reRecoveryNone">无</option>
+        <option value="SR" data-i18n="reRecoverySR">短休</option>
+        <option value="LR" data-i18n="reRecoveryLR">长休</option>
+        <option value="DW" data-i18n="reRecoveryDW">黎明</option>
+        <option value="DS" data-i18n="reRecoveryDS">黄昏</option>
       </select>
     </label>
 

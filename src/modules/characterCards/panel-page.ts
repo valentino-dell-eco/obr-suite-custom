@@ -10,6 +10,31 @@ import { reconcileUploadedCardShieldState } from "./xlsx-shield-state";
 // which has no working OBR SDK of its own (third-level iframe — see
 // the message handler below) and so can't open the popup itself.
 import { openQuickPopupAt } from "../dice/context-menu";
+import {
+  RecoveryType,
+  RecoveryTriggerItem,
+  BC_RECOVERY_TRIGGER,
+  BC_RECOVERY_NOTICE,
+  expandRecoveryTypes,
+  tokensHaveRecoveryType,
+  writeRecoveryPassForTokens,
+  rollChargeResource,
+  announceRest,
+} from "./recovery";
+import { readResources, updateResource } from "../resourceTracker/storage";
+import { PLUGIN_ID } from "../resourceTracker/types";
+import {
+  dieInfoToDiceType,
+  rollDieInfo,
+  BC_OPEN_EDIT,
+  broadcastChanged,
+} from "../resourceTracker/panel";
+import { broadcastDiceRoll } from "../dice";
+import {
+  showLrExtraConfirm,
+  showChargesRollModal,
+  ChargesGroup,
+} from "./recovery-ui";
 
 // Mirrors fullscreen-page.tsx's own BIND_META_KEY — the token-binding
 // metadata key written by characterCards' bind-page.ts. Used below to
@@ -92,6 +117,11 @@ interface CardEntry {
    *  sidebars" use case. */
   visibility?: "public" | "dm" | "owners";
   owner_ids?: string[];
+  /** Kept in sync by bind-page.ts (see the matching field there for
+   *  the full rationale). Server responses never include this key,
+   *  so every `{ ...old, ...serverResponse }` merge in this file
+   *  naturally preserves it — nothing extra to do on refresh/create. */
+  boundedTokenId?: string | null;
 }
 
 function canSeeCard(card: CardEntry, isGM: boolean, playerId: string): boolean {
@@ -293,6 +323,170 @@ function showStatus(msg: string) {
     setTimeout(() => {
       statusEl.style.display = "none";
     }, 3000);
+}
+
+// --- Global recovery buttons (SR/LR/DW/DS) --------------------------------
+//
+// GM-only row above the card list. Touches every card in `cards` that
+// has a `boundedTokenId` — see bind-page.ts for how that field is kept
+// in sync, and resourceTracker/storage.ts's "Recovery" section for the
+// low-level per-token write this builds on top of.
+
+function wireRecoveryButtonsVisibility(): void {
+  const row = document.getElementById("recoveryRow") as HTMLDivElement | null;
+  if (!row) return;
+  row.style.display = isGM ? "grid" : "none";
+}
+
+function wireRecoveryButtonClicks(): void {
+  const row = document.getElementById("recoveryRow") as HTMLDivElement | null;
+  if (!row) return;
+  row.addEventListener("click", (e) => {
+    if (!isGM) return; // defensive — row is hidden for players anyway
+    const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(
+      "button[data-recovery]",
+    );
+    if (!btn || btn.disabled) return;
+    const type = btn.dataset.recovery as RecoveryType | undefined;
+    if (!type) return;
+    const buttons = Array.from(
+      row.querySelectorAll<HTMLButtonElement>("button[data-recovery]"),
+    );
+    for (const b of buttons) b.disabled = true;
+    runGlobalRecovery(type).finally(() => {
+      for (const b of buttons) b.disabled = false;
+    });
+  });
+}
+
+async function runGlobalRecovery(pressed: RecoveryType): Promise<void> {
+  const bound = cards.filter(
+    (c): c is CardEntry & { boundedTokenId: string } => !!c.boundedTokenId,
+  );
+  if (bound.length === 0) {
+    showStatus(escapeHtml(tt("rcvNothingToDo")));
+    return;
+  }
+  const allItemIds = bound.map((c) => c.boundedTokenId);
+
+  let dawn = false;
+  let dusk = false;
+  if (pressed === "LR") {
+    const [hasDawn, hasDusk] = await Promise.all([
+      tokensHaveRecoveryType(allItemIds, "DW"),
+      tokensHaveRecoveryType(allItemIds, "DS"),
+    ]);
+    if (hasDawn || hasDusk) {
+      const choice = await showLrExtraConfirm({
+        hasDawn,
+        hasDusk,
+        title: tt("rcvConfirmDwDsTitle"),
+        bodyText: tt("rcvConfirmDwDsBody"),
+        dawnLabel: tt("rcvConfirmDwDsDawn"),
+        duskLabel: tt("rcvConfirmDwDsDusk"),
+        continueLabel: tt("rcvConfirmDwDsConfirm"),
+      });
+      dawn = choice.dawn;
+      dusk = choice.dusk;
+    }
+  }
+  const types = expandRecoveryTypes(pressed, dawn, dusk);
+
+  // One announcement per bound card, using the PRESSED button — never
+  // the expanded types (an LR never also announces "made a short
+  // rest" even though SR resources are restored under the hood).
+  for (const c of bound) announceRest(c.name, pressed);
+
+  let ownerByItem = new Map<string, string | undefined>();
+  try {
+    const tokens = await OBR.scene.items.getItems(allItemIds);
+    ownerByItem = new Map(
+      tokens.map((tk) => [tk.id, (tk as any).createdUserId as string | undefined]),
+    );
+  } catch (e) {
+    console.warn("[cc-panel] recovery: failed to resolve token owners", e);
+  }
+  const connectedIds = new Set(allPlayers.map((p) => p.id));
+
+  const needsRollByItem = await writeRecoveryPassForTokens(allItemIds, types);
+
+  // If the card currently open in .viewer (the fullscreen iframe) is one
+  // of the ones this recovery pass just touched, push it a fresh
+  // resources snapshot so it visually updates without the player having
+  // to close/reopen the card.
+  if (current.type === "card") {
+    const openCardId = current.id;
+    if (bound.some((c) => c.id === openCardId)) void sendFreshResources(openCardId);
+  }
+
+  if (needsRollByItem.size === 0) {
+    showStatus(escapeHtml(tt("rcvDoneToast")));
+    return;
+  }
+
+  const onlineItems: RecoveryTriggerItem[] = [];
+  const offlineGroups: ChargesGroup[] = [];
+  for (const [itemId, resources] of needsRollByItem.entries()) {
+    const ownerId = ownerByItem.get(itemId);
+    const isOnline = !!ownerId && connectedIds.has(ownerId);
+    const cardName =
+      bound.find((c) => c.boundedTokenId === itemId)?.name || itemId;
+    if (isOnline) {
+      onlineItems.push({
+        itemId,
+        resources: resources.map((r) => ({
+          id: r.id,
+          name: r.name,
+          current: r.current,
+          max: r.max,
+          chargesFormula: r.chargesFormula || "",
+        })),
+      });
+    } else {
+      offlineGroups.push({
+        label: `${cardName} (${tt("rcvOfflineTag")})`,
+        rows: resources.map((r) => ({
+          itemId,
+          resourceId: r.id,
+          name: r.name,
+          current: r.current,
+          max: r.max,
+          formula: r.chargesFormula || "",
+          onRecharge: async () => {
+            const result = await rollChargeResource(itemId, r);
+            if (!result) return null;
+            return {
+              current: result.resource.current,
+              max: result.resource.max,
+              total: result.total,
+            };
+          },
+        })),
+      });
+    }
+  }
+
+  if (onlineItems.length > 0) {
+    try {
+      OBR.broadcast.sendMessage(
+        BC_RECOVERY_TRIGGER,
+        { types, items: onlineItems },
+        { destination: "REMOTE" },
+      );
+    } catch (e) {
+      console.warn("[cc-panel] recovery: broadcast failed", e);
+    }
+  }
+  if (offlineGroups.length > 0) {
+    showChargesRollModal({
+      title: tt("rcvGmOfflineModalTitle"),
+      rechargeLabel: tt("rcvBtnRecharge"),
+      closeLabel: tt("reClose"),
+      groups: offlineGroups,
+    });
+  } else {
+    showStatus(escapeHtml(tt("rcvDoneToast")));
+  }
 }
 
 function minimize() {
@@ -954,6 +1148,272 @@ function selectResource(slug: string) {
  *  role / playerName ride along in the query string — same pattern
  *  index.ts already uses for cc-panel.html's own URL — so fullscreen
  *  has them immediately on load with zero broadcast round-trip. */
+// --- Resources tab relay (fullscreen-page.tsx <-> this window) ------------
+//
+// fullscreen-page.tsx has no OBR SDK (nested iframe, isReady never true —
+// same reason cc-request-core-data/cc-roll-dice already relay through
+// this window). Registered ONCE at module init — NOT inside selectCard(),
+// which re-adds a listener on every card click (pre-existing bug, out of
+// scope here; this new listener deliberately avoids the same mistake).
+//
+// Protocol (all messages carry `cardId` so responses can be matched by
+// the iframe even though only one card iframe is ever live at a time):
+//   -> cc-request-resources        { cardId }
+//   <- cc-resources-response       { cardId, boundItemId, resources }
+//   -> cc-toggle-resource-pip      { cardId, resourceId, delta }
+//   <- cc-resources-response       (fresh snapshot after the write)
+//   -> cc-run-card-recovery        { cardId, recoveryType }
+//   <- cc-recovery-needs-lr-confirm{ cardId, hasDawn, hasDusk }  (LR only,
+//      only when relevant — otherwise recovery just proceeds straight to
+//      the write, see runFullscreenCardRecovery below)
+//   -> cc-recovery-lr-confirmed    { cardId, dawn, dusk }
+//   <- cc-recovery-needs-roll      { cardId, resources }  (charges w/
+//      formula still needing a roll — omitted entirely when there are
+//      none, matching the local-modal behaviour elsewhere)
+//   -> cc-recharge-resource        { cardId, resourceId }
+//   <- cc-recharge-result          { cardId, resourceId, current, max, total }
+
+let pendingLrConfirm: {
+  cardId: string;
+  itemId: string;
+  resolve: (choice: { dawn: boolean; dusk: boolean }) => void;
+} | null = null;
+
+function postToFullscreenIframe(msg: Record<string, unknown>): void {
+  const iframe = document.querySelector<HTMLIFrameElement>(
+    'iframe[src*="cc-fullscreen.html"]',
+  );
+  iframe?.contentWindow?.postMessage(msg, "*");
+}
+
+async function sendFreshResources(cardId: string): Promise<void> {
+  const card = cards.find((c) => c.id === cardId);
+  const itemId = card?.boundedTokenId ?? null;
+  let resources: any[] = [];
+  if (itemId) {
+    try {
+      const items = await OBR.scene.items.getItems([itemId]);
+      resources = readResources(items[0] ?? null);
+    } catch (e) {
+      console.warn("[cc-panel] sendFreshResources failed", e);
+    }
+  }
+  postToFullscreenIframe({
+    type: "cc-resources-response",
+    cardId,
+    boundItemId: itemId,
+    resources,
+  });
+}
+
+async function runFullscreenCardRecovery(
+  cardId: string,
+  pressed: RecoveryType,
+): Promise<void> {
+  const card = cards.find((c) => c.id === cardId);
+  const itemId = card?.boundedTokenId;
+  if (!card || !itemId) return;
+
+  let dawn = false;
+  let dusk = false;
+  if (pressed === "LR") {
+    const [hasDawn, hasDusk] = await Promise.all([
+      tokensHaveRecoveryType([itemId], "DW"),
+      tokensHaveRecoveryType([itemId], "DS"),
+    ]);
+    if (hasDawn || hasDusk) {
+      const choice = await new Promise<{ dawn: boolean; dusk: boolean }>(
+        (resolve) => {
+          pendingLrConfirm = { cardId, itemId, resolve };
+          postToFullscreenIframe({
+            type: "cc-recovery-needs-lr-confirm",
+            cardId,
+            hasDawn,
+            hasDusk,
+          });
+        },
+      );
+      dawn = choice.dawn;
+      dusk = choice.dusk;
+    }
+  }
+  const types = expandRecoveryTypes(pressed, dawn, dusk);
+  announceRest(card.name, pressed);
+  const needsRollByItem = await writeRecoveryPassForTokens([itemId], types);
+  await sendFreshResources(cardId);
+
+  const resources = needsRollByItem.get(itemId) ?? [];
+  if (resources.length > 0) {
+    postToFullscreenIframe({
+      type: "cc-recovery-needs-roll",
+      cardId,
+      resources: resources.map((r) => ({
+        id: r.id,
+        name: r.name,
+        current: r.current,
+        max: r.max,
+        formula: r.chargesFormula || "",
+      })),
+    });
+  }
+
+  if (!isGM) {
+    try {
+      const nm = (await OBR.player.getName()) || "?";
+      OBR.broadcast.sendMessage(
+        BC_RECOVERY_NOTICE,
+        { playerName: nm, cardName: card.name, types },
+        { destination: "REMOTE" },
+      );
+    } catch (e) {
+      console.warn("[cc-panel] recovery notice broadcast failed", e);
+    }
+  }
+}
+
+// Same-client refresh parity for the real resource-edit.html modal: if
+// the user opens it via the "⚙"/"+ Add resource" relay above and saves
+// or deletes a resource, and the card currently open in .viewer is the
+// one that token belongs to, push it a fresh snapshot too.
+const BC_SAVE = `${PLUGIN_ID}/edit-save`;
+const BC_DELETE = `${PLUGIN_ID}/edit-delete`;
+
+function refreshOpenCardIfBoundTo(itemId: string): void {
+  if (current.type !== "card") return;
+  const openCardId = current.id;
+  const card = cards.find((c) => c.id === openCardId);
+  if (card?.boundedTokenId === itemId) void sendFreshResources(card.id);
+}
+// NOTE: the actual OBR.broadcast.onMessage(BC_SAVE/BC_DELETE, ...)
+// registration lives inside OBR.onReady() further down — calling
+// OBR.broadcast.onMessage at module top level (before the SDK
+// handshake completes) throws "Unable to send message: not ready".
+
+window.addEventListener("message", (event) => {
+  const msg = event.data;
+  if (!msg || typeof msg.type !== "string" || typeof msg.cardId !== "string") {
+    return;
+  }
+  switch (msg.type) {
+    case "cc-request-resources":
+      void sendFreshResources(msg.cardId);
+      break;
+    case "cc-toggle-resource-pip": {
+      const card = cards.find((c) => c.id === msg.cardId);
+      const itemId = card?.boundedTokenId;
+      if (!itemId || typeof msg.resourceId !== "string") break;
+      const delta = Number(msg.delta) || 0;
+      void (async () => {
+        let prevCurrent = 0;
+        const updated = await updateResource(itemId, msg.resourceId, (r) => {
+          prevCurrent = r.current;
+          return {
+            ...r,
+            current: Math.max(0, Math.min(r.max, r.current + delta)),
+          };
+        });
+        // Same "roll a die per point spent" behaviour as the real pip
+        // widget (panel.ts's applyChange) — a dieRoll resource being
+        // DECREASED rolls one die per point, broadcast through the
+        // existing dice-roll toast so it's indistinguishable from
+        // clicking the pip directly in the Resources tab elsewhere.
+        if (updated && updated.type === "dieRoll" && delta < 0 && updated.dieInfo) {
+          const uses = Math.min(Math.abs(delta), 10);
+          const dice = Array.from({ length: uses }, () => ({
+            type: dieInfoToDiceType(updated.dieInfo as string),
+            value: rollDieInfo(updated.dieInfo as string),
+          }));
+          try {
+            await broadcastDiceRoll({
+              itemId,
+              dice,
+              winnerIdx: -1,
+              label: `${updated.name || "?"} ${t(getLocalLang(), "rpDieRollLabel")}`,
+              rollerId: itemId,
+            });
+          } catch (e) {
+            console.warn("[cc-panel] dieRoll consume broadcast failed", e);
+          }
+        }
+        // The "used/gained a resource" bottom-center toast (same one
+        // clicking a pip in info-page.ts's real panel triggers) — reuses
+        // panel.ts's own broadcastChanged so the payload shape/animation
+        // is byte-identical, not a re-implementation.
+        if (updated && delta !== 0) {
+          void broadcastChanged(itemId, updated, delta, prevCurrent);
+        }
+        await sendFreshResources(msg.cardId);
+      })();
+      break;
+    }
+    case "cc-open-resource-edit": {
+      const card = cards.find((c) => c.id === msg.cardId);
+      const itemId = card?.boundedTokenId;
+      if (!itemId) break;
+      void (async () => {
+        let resource: any;
+        if (typeof msg.resourceId === "string") {
+          const items = await OBR.scene.items.getItems([itemId]);
+          resource = readResources(items[0] ?? null).find(
+            (r) => r.id === msg.resourceId,
+          );
+        }
+        // Reuses the REAL resource-edit.html modal — same BC_OPEN_EDIT
+        // broadcast panel.ts's own gear icon / "+ Add resource" button
+        // send, caught by resourceTracker/index.ts's always-loaded
+        // listener (LOCAL destination = same client, every frame).
+        try {
+          OBR.broadcast.sendMessage(
+            BC_OPEN_EDIT,
+            resource ? { itemId, resource } : { itemId },
+            { destination: "LOCAL" },
+          );
+        } catch (e) {
+          console.warn("[cc-panel] cc-open-resource-edit relay failed", e);
+        }
+      })();
+      break;
+    }
+    case "cc-run-card-recovery": {
+      const pressed = msg.recoveryType as RecoveryType | undefined;
+      if (!pressed) break;
+      void runFullscreenCardRecovery(msg.cardId, pressed);
+      break;
+    }
+    case "cc-recovery-lr-confirmed": {
+      if (pendingLrConfirm && pendingLrConfirm.cardId === msg.cardId) {
+        pendingLrConfirm.resolve({
+          dawn: !!msg.dawn,
+          dusk: !!msg.dusk,
+        });
+        pendingLrConfirm = null;
+      }
+      break;
+    }
+    case "cc-recharge-resource": {
+      const card = cards.find((c) => c.id === msg.cardId);
+      const itemId = card?.boundedTokenId;
+      if (!itemId || typeof msg.resourceId !== "string") break;
+      void OBR.scene.items.getItems([itemId]).then(async (items) => {
+        const res = readResources(items[0] ?? null).find(
+          (r) => r.id === msg.resourceId,
+        );
+        if (!res) return;
+        const result = await rollChargeResource(itemId, res);
+        postToFullscreenIframe({
+          type: "cc-recharge-result",
+          cardId: msg.cardId,
+          resourceId: msg.resourceId,
+          current: result?.resource.current ?? res.current,
+          max: result?.resource.max ?? res.max,
+          total: result?.total ?? 0,
+        });
+      });
+      break;
+    }
+  }
+});
+
 function buildCardIframeSrc(card: CardEntry, cacheBust = false): string {
   const params = new URLSearchParams();
   params.set("room", roomId);
@@ -1348,6 +1808,16 @@ OBR.onReady(async () => {
   try {
     isGM = (await OBR.player.getRole()) === "GM";
   } catch {}
+  wireRecoveryButtonsVisibility();
+  wireRecoveryButtonClicks();
+  OBR.broadcast.onMessage(BC_SAVE, (event) => {
+    const data = event.data as { itemId?: string } | undefined;
+    if (data?.itemId) refreshOpenCardIfBoundTo(data.itemId);
+  });
+  OBR.broadcast.onMessage(BC_DELETE, (event) => {
+    const data = event.data as { itemId?: string } | undefined;
+    if (data?.itemId) refreshOpenCardIfBoundTo(data.itemId);
+  });
   // 2026-06 — fetch the party list HERE, because this document
   // (cc-panel.html) is a true direct-child OBR document and its SDK
   // actually completes the postMessage handshake. cc-fullscreen.html
@@ -1380,7 +1850,10 @@ OBR.onReady(async () => {
       myPlayerId = p.id;
       changed = true;
     }
-    if (changed) render();
+    if (changed) {
+      render();
+      wireRecoveryButtonsVisibility();
+    }
   });
   // Keep the forwarded player list live — someone joining/leaving
   // mid-session should update the Manage Owners dropdown without

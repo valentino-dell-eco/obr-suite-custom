@@ -73,6 +73,25 @@ html,body{
    highlights and click misfires. */
 .toast .widget{pointer-events:none}
 
+/* Rest announcements (SR/LR/DW/DS) — simple text toast, no widget. */
+.toast.toast-rest{
+  border-color: rgba(147,112,219,0.55);
+  box-shadow: 0 8px 22px rgba(147,112,219,0.18);
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.toast-rest .rest-icon{
+  flex: none;
+  width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  color: #c9a6f5;
+}
+.toast-rest .rest-text{
+  font-size: 12px;
+  color: #e6e8ee;
+}
+
 .toast .rt-pills{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .toast .rt-pill-icon{
   display:inline-flex;align-items:center;justify-content:center;

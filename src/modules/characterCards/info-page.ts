@@ -16,6 +16,18 @@ import { installPanelZoom } from "../../utils/panelZoom";
 import { getLocalLang } from "../../state";
 import { t } from "../../i18n";
 import { normalizeCombatGearFlags } from "./data-normalize";
+import {
+  RecoveryType,
+  BC_RECOVERY_NOTICE,
+  expandRecoveryTypes,
+  tokensHaveRecoveryType,
+  writeRecoveryPassForTokens,
+  rollChargeResource,
+} from "./recovery";
+import {
+  showLrExtraConfirm,
+  showChargesRollModal,
+} from "./recovery-ui";
 
 // 2026-05-13 — Was previously dev-only (gated through STABLE_HIDES /
 // STABLE_HIDES_CC) until cc-fullscreen + hp-bar integration matured.
@@ -73,7 +85,20 @@ type RtTabId = "attr" | "res";
 let activeRtTab: RtTabId = "attr";
 
 function renderRtTabStrip(): string {
+  // 2026-07 — per-card SR/LR/DW/DS recovery row, shown above the
+  // attr/res tabs ("sopra le sezioni"). Hidden by default; visibility
+  // is resolved async by refreshRecoveryPermission() right after this
+  // markup lands in the DOM (owner-or-GM check needs a round trip).
+  const recoveryRow = `
+    <div class="cc-recovery-row" id="cardRecoveryRow" style="display:none">
+      <button type="button" class="cc-recovery-btn" data-recovery="SR" title="${escapeHtml(tt("rcvBtnSRTitle"))}">SR</button>
+      <button type="button" class="cc-recovery-btn" data-recovery="LR" title="${escapeHtml(tt("rcvBtnLRTitle"))}">LR</button>
+      <button type="button" class="cc-recovery-btn" data-recovery="DW" title="${escapeHtml(tt("rcvBtnDWTitle"))}">DW</button>
+      <button type="button" class="cc-recovery-btn" data-recovery="DS" title="${escapeHtml(tt("rcvBtnDSTitle"))}">DS</button>
+    </div>
+  `;
   return `
+    ${recoveryRow}
     <div class="rt-tabstrip">
       <div class="rt-tab-indicator" data-rt-indicator></div>
       <button class="rt-tab ${activeRtTab === "attr" ? "on" : ""}" data-rt-tab="attr" type="button">${tt("ccTabAbilities")}</button>
@@ -123,6 +148,134 @@ function setupRtTabSwitching(): void {
     const target = (b.dataset.rtTab as RtTabId) ?? "attr";
     b.addEventListener("click", () => switchTo(target));
   });
+}
+
+// --- Per-card recovery buttons (SR/LR/DW/DS) ------------------------------
+//
+// Visible to the card's owner OR the GM (see refreshRecoveryPermission).
+// Touches only `boundItemId` — the token currently bound to THIS card.
+// Shares its actual logic with the global button row in panel-page.ts
+// via the recovery.ts / recovery-ui.ts modules, so both stay in sync
+// behaviourally without duplicating the write/roll code.
+
+async function refreshRecoveryPermission(): Promise<void> {
+  canUseRecoveryButtons = false;
+  if (cachedIsGM) {
+    canUseRecoveryButtons = true;
+  } else if (boundItemId) {
+    try {
+      const myId = await OBR.player.getId();
+      const items = await OBR.scene.items.getItems([boundItemId]);
+      canUseRecoveryButtons =
+        (items[0] as any)?.createdUserId === myId;
+    } catch {
+      canUseRecoveryButtons = false;
+    }
+  }
+  const row = root.querySelector<HTMLElement>("#cardRecoveryRow");
+  if (row) {
+    row.style.display = canUseRecoveryButtons && boundItemId ? "grid" : "none";
+  }
+}
+
+function wireCardRecoveryButtons(): void {
+  const row = root.querySelector<HTMLElement>("#cardRecoveryRow");
+  if (!row) return;
+  row.addEventListener("click", (e) => {
+    if (!canUseRecoveryButtons || !boundItemId) return;
+    const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>(
+      "button[data-recovery]",
+    );
+    if (!btn || btn.disabled) return;
+    const type = btn.dataset.recovery as RecoveryType | undefined;
+    if (!type) return;
+    const buttons = Array.from(
+      row.querySelectorAll<HTMLButtonElement>("button[data-recovery]"),
+    );
+    for (const b of buttons) b.disabled = true;
+    runCardRecovery(type).finally(() => {
+      for (const b of buttons) b.disabled = false;
+    });
+  });
+}
+
+async function runCardRecovery(pressed: RecoveryType): Promise<void> {
+  const itemId = boundItemId;
+  if (!itemId) return;
+
+  let dawn = false;
+  let dusk = false;
+  if (pressed === "LR") {
+    const [hasDawn, hasDusk] = await Promise.all([
+      tokensHaveRecoveryType([itemId], "DW"),
+      tokensHaveRecoveryType([itemId], "DS"),
+    ]);
+    if (hasDawn || hasDusk) {
+      const choice = await showLrExtraConfirm({
+        hasDawn,
+        hasDusk,
+        title: tt("rcvConfirmDwDsTitle"),
+        bodyText: tt("rcvConfirmDwDsBody"),
+        dawnLabel: tt("rcvConfirmDwDsDawn"),
+        duskLabel: tt("rcvConfirmDwDsDusk"),
+        continueLabel: tt("rcvConfirmDwDsConfirm"),
+      });
+      dawn = choice.dawn;
+      dusk = choice.dusk;
+    }
+  }
+  const types = expandRecoveryTypes(pressed, dawn, dusk);
+
+  const needsRollByItem = await writeRecoveryPassForTokens([itemId], types);
+  // Reflect the instant part of the write in the Resources tab right
+  // away rather than waiting on the scene-sync round trip.
+  void rtMountHandle?.refresh();
+
+  const resources = needsRollByItem.get(itemId) ?? [];
+  if (resources.length > 0) {
+    showChargesRollModal({
+      title: tt("rcvChargesModalTitle"),
+      rechargeLabel: tt("rcvBtnRecharge"),
+      closeLabel: tt("reClose"),
+      groups: [
+        {
+          rows: resources.map((r) => ({
+            itemId,
+            resourceId: r.id,
+            name: r.name,
+            current: r.current,
+            max: r.max,
+            formula: r.chargesFormula || "",
+            onRecharge: async () => {
+              const result = await rollChargeResource(itemId, r);
+              void rtMountHandle?.refresh();
+              if (!result) return null;
+              return {
+                current: result.resource.current,
+                max: result.resource.max,
+                total: result.total,
+              };
+            },
+          })),
+        },
+      ],
+    });
+  }
+
+  // FYI-only notice to the GM — never sent when the GM itself pressed
+  // the button (nothing to notify itself about).
+  if (!cachedIsGM) {
+    try {
+      const playerName = (await OBR.player.getName()) || "?";
+      OBR.broadcast.sendMessage(
+        BC_RECOVERY_NOTICE,
+        { playerName, cardName: currentCardDisplayName, types },
+        { destination: "REMOTE" },
+      );
+    } catch (e) {
+      console.warn("[cc-info] recovery notice broadcast failed", e);
+    }
+  }
 }
 
 let rtMountHandle: {
@@ -643,6 +796,12 @@ async function refreshCurrentCard(): Promise<void> {
 // stat banner reads this. OBR.onReady below populates it before any
 // showCard runs, so the very first render already has the right value.
 let cachedIsGM = false;
+// Recovery buttons (SR/LR/DW/DS) — set by render() so
+// runCardRecovery()'s GM-notice broadcast can label which card a
+// player used the buttons on. See refreshRecoveryPermission() /
+// wireCardRecoveryButtons() further down for the rest of the feature.
+let currentCardDisplayName = "";
+let canUseRecoveryButtons = false;
 
 async function showCard(
   cardId: string,
@@ -712,10 +871,10 @@ function render(
 
   const name =
     id.display_name || id.character_name || t(getLocalLang(), "ccInfoUnnamed");
-  const race = [id.race?.name, id.race?.subrace].filter(Boolean).join("·");
+  currentCardDisplayName = name;
   const cls = classesStr(d);
   const lvl = d.total_level != null ? `Lv${d.total_level}` : "";
-  const sub = [race, cls, lvl].filter(Boolean).join(" ");
+  const sub = [cls, lvl].filter(Boolean).join(" ");
 
   const rawUrl = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`;
 
@@ -988,10 +1147,12 @@ function render(
           <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1 0 .707c-.48.48-1.072.588-1.503.588-.177 0-.339-.016-.484-.041L7.176 13.04a.5.5 0 0 1-.708 0L3.633 10.207 1.4 12.439a.5.5 0 0 1-.707-.707L2.926 9.5.74 7.314a.5.5 0 0 1 0-.708l1.51-1.51c.41-.41.945-.625 1.482-.711.534-.085 1.139-.097 1.683-.024.546.073 1.169.114 1.643-.04.305-.099.62-.281.94-.602.193-.193.282-.467.348-.749.066-.281.117-.572.196-.793a1.51 1.51 0 0 1 .31-.508c.094-.092.215-.174.357-.232a.5.5 0 0 1 .19-.04Z" fill="currentColor"/>
         </svg>
       </button>
-      <div class="name-wrap">
-        ${renderNameButton(name, !!boundItemId)}
+      <div class="title-block">
+        <div class="name-wrap">
+          ${renderNameButton(name, !!boundItemId)}
+        </div>
+        <div class="sub">${escapeHtml(sub)}</div>
       </div>
-      <div class="sub">${escapeHtml(sub)}</div>
       <div class="sync-wrap" id="cc-sync-wrap">
         <button class="${syncCloud.className}" id="cc-cloud-btn" type="button"
           title="${escapeHtml(syncCloud.title)}">${syncCloud.html}</button>
@@ -1005,6 +1166,8 @@ function render(
   `;
 
   setupRtTabSwitching();
+  wireCardRecoveryButtons();
+  void refreshRecoveryPermission();
   void ensureRtResourceMount();
 
   const statMount = root.querySelector<HTMLElement>("#cc-stat-mount");

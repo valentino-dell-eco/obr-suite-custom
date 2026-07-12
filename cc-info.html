@@ -264,6 +264,22 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      /* 2026-07 — wraps name-wrap + sub as a unit. At normal widths both
+   sit on one row ("Flint  Human/Elf Rogue Lv4"); when .hdr doesn't have
+   room for both plus the icons/Raw Data on either side, .sub (having
+   its own minimum width below) drops to a second row on its own,
+   getting the FULL width instead of being ellipsis-truncated into
+   illegibility. No breakpoint to pick — this is native flex-wrap
+   reflow, so it adapts to whatever width the panel actually ends up at. */
+      .title-block {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: 6px;
+        row-gap: 0;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
       .name-wrap {
         display: flex;
         align-items: center;
@@ -309,7 +325,10 @@
       .sub {
         font-size: 10.5px;
         color: #aaa;
-        flex: 1;
+        /* flex-basis 140px = "wants at least this much before agreeing
+           to share a row with the name" — below that, flex-wrap on
+           .title-block (above) bumps it to its own full-width row. */
+        flex: 1 1 140px;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -388,12 +407,18 @@
         color: #2ecc71;
       }
 
-      /* align-items: stretch (grid default) makes the 3 cards in each row share
-   the same height — STR/CON/CHA grow to match DEX/WIS so the layout no
-   longer looks ragged with short cards beside tall ones. */
+      /* align-items: stretch (grid default) makes the cards in each row share
+   the same height — short cards grow to match taller ones so the layout no
+   longer looks ragged with short cards beside tall ones.
+   2026-07 — was a hardcoded repeat(3, 1fr), which assumed short CJK skill
+   labels (运动 +5). English labels (Animal Handling, Investigation) don't
+   fit 3-per-row at narrow panel widths and collide/overlap. auto-fit +
+   minmax lets the grid drop to 2 or 1 columns on its own as the panel
+   narrows, with whichever count DOES fit getting the full row width
+   (rather than 3 cramped columns no matter what). */
       .abil {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
         gap: 3px;
         margin-bottom: 6px;
         align-items: stretch;
@@ -405,6 +430,10 @@
         padding: 3px 5px;
         display: flex;
         flex-direction: column;
+        /* Same min-width:0 reasoning as .sk below — lets .abil's
+           auto-fit/minmax() tracks actually shrink instead of expanding
+           to fit this card's untruncated content. */
+        min-width: 0;
       }
       .abl-head {
         display: flex;
@@ -440,11 +469,14 @@
         color: #fce6bd;
       }
 
-      /* Skills embedded inside each ability card — 2 columns of small chips.
-   Width per chip is wide enough for "运动 +5" / "调查 +2" etc. */
+      /* Skills embedded inside each ability card — auto-fit chips instead of
+   a hardcoded 2-column grid. A short CJK label ("运动 +5") still fits two
+   per row; a long English one ("Animal Handling +3") drops to one per
+   row on its own once the card is too narrow for two, instead of
+   wrapping and colliding with its neighbour. */
       .abl-skills {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
         gap: 1px 4px;
         margin-top: 3px;
         padding-top: 3px;
@@ -460,6 +492,13 @@
         font-size: 9.5px;
         line-height: 1.4;
         border-radius: 2px;
+        /* Grid items default to min-width:auto (respects content's
+           intrinsic size), which fights the auto-fit/minmax() track
+           sizing above and was the actual cause of the collision — the
+           track would rather overflow than shrink below "Investigation"'s
+           natural width. This lets .sk-n's own text-overflow:ellipsis
+           (below) do its job instead. */
+        min-width: 0;
       }
       .abl .sk .sk-n {
         color: #888;
@@ -835,6 +874,35 @@
           background: rgba(255, 255, 255, 0.06);
           transform: scale(1);
         }
+      }
+
+      /* Per-card SR/LR/DW/DS recovery row — see info-page.ts
+         renderRtTabStrip(). Sits directly above the attr/res tabs. */
+      .cc-recovery-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        padding: 6px 8px;
+        background: rgba(31, 33, 48, 0.94);
+      }
+      .cc-recovery-btn {
+        background: rgba(147, 112, 219, 0.14);
+        border: 1px solid rgba(147, 112, 219, 0.5);
+        color: #c9a6f5;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 5px 0;
+        border-radius: 5px;
+      }
+      .cc-recovery-btn:hover {
+        background: rgba(147, 112, 219, 0.28);
+        border-color: rgba(147, 112, 219, 0.8);
+      }
+      .cc-recovery-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
       }
 
       .rt-tabstrip {

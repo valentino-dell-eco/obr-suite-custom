@@ -16,6 +16,12 @@ import OBR from "@owlbear-rodeo/sdk";
 import { ICON_LIBRARY } from "./modules/resourceTracker/icons";
 import type { Resource, IconId } from "./modules/resourceTracker/types";
 import { sfxResourceToast, subscribeToSfx } from "./modules/dice/sfx-broadcast";
+import { t } from "./i18n";
+import { getLocalLang } from "./state";
+import {
+  BC_REST_ANNOUNCEMENT,
+  RestAnnouncementPayload,
+} from "./modules/characterCards/recovery";
 
 const BC_RESOURCE_CHANGED = "com.obr-suite/resources/changed";
 const TOAST_HOLD_MS = 5000;     // 2.5 → 5 s per user spec
@@ -146,6 +152,45 @@ function showToast(p: ResourceToastPayload): void {
   }, TOAST_HOLD_MS);
 }
 
+const REST_ICON =
+  '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>';
+
+const RECOVERY_MSG_KEY: Record<string, Parameters<typeof t>[1]> = {
+  SR: "rcvAnnounceSR",
+  LR: "rcvAnnounceLR",
+  DW: "rcvAnnounceDW",
+  DS: "rcvAnnounceDS",
+};
+
+function showRestToast(p: RestAnnouncementPayload): void {
+  const key = RECOVERY_MSG_KEY[p.recoveryType];
+  if (!key) return;
+  const text = t(getLocalLang(), key).replace(
+    "{name}",
+    escapeHtml(p.characterName || "?"),
+  );
+  const el = document.createElement("div");
+  el.className = "toast toast-rest";
+  el.innerHTML = `
+    <span class="rest-icon">${REST_ICON}</span>
+    <span class="rest-text">${text}</span>
+  `;
+  while (stackEl.children.length >= MAX_VISIBLE) {
+    const oldest = stackEl.firstElementChild;
+    if (!oldest) break;
+    oldest.remove();
+  }
+  stackEl.appendChild(el);
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  el.offsetWidth;
+  el.classList.add("is-in");
+  setTimeout(() => {
+    el.classList.remove("is-in");
+    el.classList.add("is-out");
+    setTimeout(() => { try { el.remove(); } catch {} }, TOAST_FADE_MS);
+  }, TOAST_HOLD_MS);
+}
+
 OBR.onReady(() => {
   // 2026-05-15 — also subscribe to BC_SFX so the toast iframe's own
   // audio context (if it ever wakes up) can play sounds. The toast
@@ -166,5 +211,11 @@ OBR.onReady(() => {
     // synth chime. Net effect: one soft "blip" per resource change,
     // heard by everyone in the room.
     try { sfxResourceToast(); } catch {}
+  });
+
+  OBR.broadcast.onMessage(BC_REST_ANNOUNCEMENT, (event) => {
+    const data = event.data as RestAnnouncementPayload | undefined;
+    if (!data || !data.recoveryType || !data.characterName) return;
+    showRestToast(data);
   });
 });

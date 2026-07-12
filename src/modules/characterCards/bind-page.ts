@@ -21,6 +21,14 @@ interface CardEntry {
   uploader: string;
   uploaded_at: string;
   url: string;
+  // 2026-07 — recovery buttons feature. The token id this card is
+  // CURRENTLY bound to, if any (1:1 — binding a second token to the
+  // same card auto-unbinds the first, see `bindTo` below). Kept in
+  // sync here (scene-level card list) rather than derived on demand
+  // so the recovery buttons (panel-page.ts global row, info-page.ts
+  // per-card row) can resolve "which token do I touch for this
+  // card" without a scene-wide item scan.
+  boundedTokenId?: string | null;
 }
 
 const params = new URLSearchParams(location.search);
@@ -155,6 +163,19 @@ const EXTERNAL_BUBBLES_META = "com.owlbear-rodeo-bubbles-extension/metadata";
 
 async function bindTo(cardId: string | null) {
   if (!itemId) return;
+  // Snapshot BEFORE we touch anything: which card (if any) this
+  // token was previously bound to, and — if we're binding to a NEW
+  // card — which OTHER token that card was previously attached to.
+  // Both are needed to keep `boundedTokenId` in sync 1:1 further
+  // down, without racing the writes below.
+  const [previousBoundId, cardsSnapshot] = await Promise.all([
+    getCurrentBinding(),
+    getCards(),
+  ]);
+  const staleTokenId =
+    cardId != null
+      ? cardsSnapshot.find((c) => c.id === cardId)?.boundedTokenId
+      : null;
   // Resolve the new dex-mod + bubbles seed up front (before the bind
   // write) so we can include them in the same `updateItems` call —
   // single round-trip, and the initiative tracker / bubbles bar see
@@ -259,6 +280,50 @@ async function bindTo(cardId: string | null) {
         delete d.metadata[INIT_DEXMOD_META];
       }
     });
+
+    // Enforce the 1:1 invariant: if the target card was already
+    // bound to a DIFFERENT token, unbind that stale token now
+    // (last bind wins). No-op if the token was already deleted.
+    if (staleTokenId && staleTokenId !== itemId) {
+      try {
+        await OBR.scene.items.updateItems([staleTokenId], (drafts) => {
+          const d = drafts[0];
+          if (!d) return;
+          delete d.metadata[BIND_META];
+          delete d.metadata[INIT_DEXMOD_META];
+        });
+      } catch (e) {
+        console.warn("[character-cards] stale token unbind failed", e);
+      }
+    }
+
+    // Sync `boundedTokenId` on the scene-level card list: clear it
+    // from whatever card this token was previously attached to (if
+    // any) and set it on the new target card (bind) or leave it
+    // cleared (unbind, cardId === null).
+    try {
+      const meta = await OBR.scene.getMetadata();
+      const list = Array.isArray(meta[SCENE_META_KEY])
+        ? ((meta[SCENE_META_KEY] as CardEntry[]).slice())
+        : [];
+      const next = list.map((c) => {
+        if (
+          previousBoundId &&
+          c.id === previousBoundId &&
+          c.boundedTokenId === itemId
+        ) {
+          return { ...c, boundedTokenId: null };
+        }
+        if (cardId && c.id === cardId) {
+          return { ...c, boundedTokenId: itemId };
+        }
+        return c;
+      });
+      await OBR.scene.setMetadata({ [SCENE_META_KEY]: next });
+    } catch (e) {
+      console.warn("[character-cards] boundedTokenId sync failed", e);
+    }
+
     if (cardId) {
       try {
         const items = await OBR.scene.items.getItems([itemId]);
