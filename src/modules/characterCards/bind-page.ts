@@ -15,6 +15,8 @@ const SCENE_META_KEY = "com.character-cards/list";
 // (Source of truth lives in `modules/initiative/utils/metadata.ts`.)
 const INIT_DEXMOD_META = "com.initiative-tracker/dexMod";
 
+const SERVER_ORIGIN = "https://obr.dnd.center";
+
 interface CardEntry {
   id: string;
   name: string;
@@ -48,6 +50,71 @@ function escapeHtml(s: string) {
   );
 }
 
+function roomKey(): string {
+  return (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+/**
+ * Persist meta.boundedTokenId into the character content itself
+ * (data.json on server, or localStorage for imported_ cards).
+ * Best-effort: never fails the bind path.
+ */
+async function persistBoundedTokenInCardContent(
+  cardId: string,
+  tokenId: string | null,
+): Promise<void> {
+  // 1) Imported cards live only in localStorage
+  if (cardId.startsWith("imported_")) {
+    try {
+      const key = `character-cards/imported/${cardId}`;
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (!data || typeof data !== "object") return;
+      if (!data.meta || typeof data.meta !== "object") data.meta = {};
+      if ((data.meta.boundedTokenId ?? null) === tokenId) return;
+      data.meta.boundedTokenId = tokenId;
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+      console.warn(
+        "[character-cards] persist meta.boundedTokenId (imported) failed",
+        e,
+      );
+    }
+    return;
+  }
+
+  // 2) Server cards: GET data.json → patch meta only → PUT
+  const roomId = roomKey();
+  const getUrl = `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+  const putUrl = `${SERVER_ORIGIN}/api/character/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data`;
+
+  try {
+    const res = await fetch(getUrl, { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || typeof data !== "object") return;
+    if (!data.meta || typeof data.meta !== "object") data.meta = {};
+    if ((data.meta.boundedTokenId ?? null) === tokenId) return;
+    data.meta.boundedTokenId = tokenId;
+
+    const put = await fetch(putUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!put.ok) {
+      console.warn(
+        "[character-cards] persist meta.boundedTokenId PUT failed",
+        put.status,
+        await put.text().catch(() => ""),
+      );
+    }
+  } catch (e) {
+    console.warn("[character-cards] persist meta.boundedTokenId failed", e);
+  }
+}
+
 async function getCards(): Promise<CardEntry[]> {
   try {
     const meta = await OBR.scene.getMetadata();
@@ -77,8 +144,8 @@ async function getCurrentBinding(): Promise<string | null> {
 // if the dex-mod prefill can't be derived.
 async function fetchCardInitiative(cardId: string): Promise<number | null> {
   try {
-    const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const url = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+    const roomId = roomKey();
+    const url = `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const d = await res.json();
@@ -103,8 +170,8 @@ async function fetchCardBubblesSeed(
   cardId: string,
 ): Promise<BubblesSeed | null> {
   try {
-    const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const url = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+    const roomId = roomKey();
+    const url = `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const d = await res.json();
@@ -137,8 +204,8 @@ async function fetchCardAutoResources(
   cardId: string,
 ): Promise<AutoResource[] | null> {
   try {
-    const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const url = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+    const roomId = roomKey();
+    const url = `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const d = await res.json();
@@ -322,6 +389,23 @@ async function bindTo(cardId: string | null) {
       await OBR.scene.setMetadata({ [SCENE_META_KEY]: next });
     } catch (e) {
       console.warn("[character-cards] boundedTokenId sync failed", e);
+    }
+
+    // Persist meta.boundedTokenId into character content (best-effort).
+    // List-scene sync above remains the live source of truth for
+    // resources/recovery; this keeps the exported/fullscreen JSON
+    // aligned with the bind.
+    try {
+      if (previousBoundId && previousBoundId !== cardId) {
+        await persistBoundedTokenInCardContent(previousBoundId, null);
+      }
+      if (cardId) {
+        await persistBoundedTokenInCardContent(cardId, itemId);
+      } else if (previousBoundId) {
+        await persistBoundedTokenInCardContent(previousBoundId, null);
+      }
+    } catch (e) {
+      console.warn("[character-cards] content bind sync failed", e);
     }
 
     if (cardId) {

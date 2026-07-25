@@ -32,6 +32,22 @@ export const BC_RECOVERY_TRIGGER = "com.character-cards/recovery-trigger";
 // per-card recovery buttons, purely so the GM sees an FYI modal. Never
 // sent when the GM itself presses a per-card button (no one to notify).
 export const BC_RECOVERY_NOTICE = "com.character-cards/recovery-notice";
+// 2026-07 — cc-recovery-roll.html is a real top-level OBR modal (see
+// index.ts's BC_RECOVERY_TRIGGER handler for why it can't render
+// directly in background.html). These two LOCAL-only channels let
+// index.ts (which owns the accumulated pending list — it's the only
+// listener of BC_RECOVERY_TRIGGER) talk to that modal once it's open,
+// instead of tearing it down and reopening it on every extra trigger:
+//   UPDATE — a second (or third...) recovery pass added more of the
+//     player's own tokens/resources to the pending list while the
+//     modal was already open; push the merged list in so it appends
+//     rather than resetting.
+//   CLOSED — the modal notifies the opener when it actually goes away
+//     (user closed it, or nothing was left to roll), so index.ts knows
+//     to drop its accumulator and treat the next trigger as "modal is
+//     closed, open fresh" again.
+export const BC_RECOVERY_ROLL_UPDATE = "com.character-cards/recovery-roll-update";
+export const BC_RECOVERY_ROLL_CLOSED = "com.character-cards/recovery-roll-closed";
 
 export interface RecoveryTriggerItem {
   itemId: string;
@@ -52,6 +68,29 @@ export interface RecoveryTriggerPayload {
   /** One entry per token that has at least one charges resource still
    *  needing a roll. Receivers filter this down to tokens they own. */
   items: RecoveryTriggerItem[];
+}
+
+/** Merge a new batch of pending recovery-roll items into an existing
+ *  list, keyed by (itemId, resourceId). Later values win — a resource
+ *  reappearing in `incoming` (e.g. the GM pressed a second LR before
+ *  the player rolled the first one) replaces the stale current/max
+ *  snapshot with the fresh one, rather than duplicating the row. */
+export function mergeRecoveryRollItems(
+  base: RecoveryTriggerItem[],
+  incoming: RecoveryTriggerItem[],
+): RecoveryTriggerItem[] {
+  const byItem = new Map<string, Map<string, RecoveryTriggerItem["resources"][number]>>();
+  for (const it of base) {
+    byItem.set(it.itemId, new Map(it.resources.map((r) => [r.id, r])));
+  }
+  for (const it of incoming) {
+    const existing = byItem.get(it.itemId) ?? new Map();
+    for (const r of it.resources) existing.set(r.id, r);
+    byItem.set(it.itemId, existing);
+  }
+  return [...byItem.entries()]
+    .map(([itemId, resources]) => ({ itemId, resources: [...resources.values()] }))
+    .filter((it) => it.resources.length > 0);
 }
 
 export interface RecoveryNoticePayload {

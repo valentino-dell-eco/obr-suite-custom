@@ -57,6 +57,7 @@ const T = (k: Parameters<typeof t>[1]) => t(_lang, k);
 // currently-open card. Used by the StatsBanner edit handlers to push
 // HP / AC changes through to the bubbles plugin.
 const BIND_META_KEY = "com.character-cards/boundCardId";
+const SCENE_META_KEY = "com.character-cards/list";
 
 // 2026-05-14 (#14 f2) — inline SVG glyphs for the 复制 / 粘贴 micro
 // sub-buttons. `currentColor` so they inherit the button text colour
@@ -284,12 +285,7 @@ const ablAbbr = (k: string): string =>
 // inside the 概览 tab below 防御 — overview becomes the
 // "everything-at-a-glance" home, and only the long-form sections
 // (法术 / 特性 / 背景) get their own dedicated tabs.
-type TabKey =
-  | "overview"
-  | "spells"
-  | "features"
-  | "background"
-  | "resources";
+type TabKey = "overview" | "spells" | "features" | "background" | "resources";
 
 const TABS: { key: TabKey; labelKey: Parameters<typeof t>[1] }[] = [
   { key: "overview", labelKey: "ccTabOverview" },
@@ -1779,10 +1775,7 @@ function CombatSection({ data }: { data: CharacterData }) {
           if (editing) {
             const extraList: Array<{ damage?: string; damage_type?: string }> =
               Array.isArray(w.extra_damages) ? w.extra_damages : [];
-            const updateExtra = (
-              exIdx: number,
-              patch: Record<string, any>,
-            ) => {
+            const updateExtra = (exIdx: number, patch: Record<string, any>) => {
               const next = [...extraList];
               next[exIdx] = { ...next[exIdx], ...patch };
               updateWeapon(idx, { extra_damages: next });
@@ -1813,103 +1806,98 @@ function CombatSection({ data }: { data: CharacterData }) {
                     outside .weap-edit-grid so it never gets swept into
                     the responsive column set. */}
                 <div class="weap-edit-top">
-                <div class="weap-edit-grid">
-                  <div class="weap-edit-field weap-edit-field-wide">
-                    <span class="weap-edit-field-label">
-                      {T("ccWeaponNamePh")}
-                    </span>
-                    <div class="weap-edit-name-row">
-                      <input
-                        class="cc-edit-text"
-                        type="text"
-                        value={w.name ?? ""}
-                        placeholder={T("ccWeaponNamePh")}
-                        onInput={(e: any) =>
-                          updateWeapon(idx, { name: e.target.value })
-                        }
-                      />
-                      {/* 2026-06-21 — proficiency checkbox. Drives the
+                  <div class="weap-edit-grid">
+                    <div class="weap-edit-field weap-edit-field-wide">
+                      <span class="weap-edit-field-label">
+                        {T("ccWeaponNamePh")}
+                      </span>
+                      <div class="weap-edit-name-row">
+                        <input
+                          class="cc-edit-text"
+                          type="text"
+                          value={w.name ?? ""}
+                          placeholder={T("ccWeaponNamePh")}
+                          onInput={(e: any) =>
+                            updateWeapon(idx, { name: e.target.value })
+                          }
+                        />
+                        {/* 2026-06-21 — proficiency checkbox. Drives the
                           "熟练" badge shown in view mode (w.proficient)
                           — no derived math here (attack_bonus / damage
                           stay manual text fields the player types
                           directly), this just records the flag. */}
-                      <label
-                        class="weap-prof-check"
-                        title={T("ccProfShort") || "Proficient"}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!w.proficient}
-                          onChange={(e: any) =>
-                            updateWeapon(idx, {
-                              proficient: !!e.target.checked,
-                            })
-                          }
-                        />
-                        <span>{T("ccProfShort") || "熟练"}</span>
-                      </label>
+                        <label
+                          class="weap-prof-check"
+                          title={T("ccProfShort") || "Proficient"}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!w.proficient}
+                            onChange={(e: any) =>
+                              updateWeapon(idx, {
+                                proficient: !!e.target.checked,
+                              })
+                            }
+                          />
+                          <span>{T("ccProfShort") || "熟练"}</span>
+                        </label>
+                      </div>
                     </div>
-                  </div>
-                  <div class="weap-edit-field">
-                    <span class="weap-edit-field-label">
-                      {T("ccHit")}
-                    </span>
-                    <input
-                      class="cc-edit-text"
-                      type="text"
-                      value={w.attack_bonus ?? ""}
-                      placeholder="+5"
-                      onInput={(e: any) =>
-                        updateWeapon(idx, { attack_bonus: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div class="weap-edit-field">
-                    <span class="weap-edit-field-label">
-                      {T("ccDamage")}
-                    </span>
-                    <input
-                      class="cc-edit-text"
-                      type="text"
-                      value={w.damage ?? ""}
-                      placeholder="1d8+3"
-                      onInput={(e: any) =>
-                        updateWeapon(idx, { damage: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div class="weap-edit-field">
-                    <span class="weap-edit-field-label">
-                      {T("ccDmgTypePh")}
-                    </span>
-                    <input
-                      class="cc-edit-text"
-                      type="text"
-                      value={w.damage_type ?? ""}
-                      placeholder={T("ccDmgTypePh")}
-                      onInput={(e: any) =>
-                        updateWeapon(idx, { damage_type: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div class="weap-edit-field weap-edit-field-wide">
-                    <span class="weap-edit-field-label">
-                      {T("ccPropertiesPh") || "Properties"}
-                    </span>
-                    <input
-                      class="cc-edit-text"
-                      type="text"
-                      value={w.properties ?? ""}
-                      placeholder={
-                        T("ccPropertiesPh") ||
-                        "e.g. Versatile (1d8), Finesse"
-                      }
-                      onInput={(e: any) =>
-                        updateWeapon(idx, { properties: e.target.value })
-                      }
-                    />
-                  </div>
-                  {/* 2026-06-21 — special_properties: a separate,
+                    <div class="weap-edit-field">
+                      <span class="weap-edit-field-label">{T("ccHit")}</span>
+                      <input
+                        class="cc-edit-text"
+                        type="text"
+                        value={w.attack_bonus ?? ""}
+                        placeholder="+5"
+                        onInput={(e: any) =>
+                          updateWeapon(idx, { attack_bonus: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div class="weap-edit-field">
+                      <span class="weap-edit-field-label">{T("ccDamage")}</span>
+                      <input
+                        class="cc-edit-text"
+                        type="text"
+                        value={w.damage ?? ""}
+                        placeholder="1d8+3"
+                        onInput={(e: any) =>
+                          updateWeapon(idx, { damage: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div class="weap-edit-field">
+                      <span class="weap-edit-field-label">
+                        {T("ccDmgTypePh")}
+                      </span>
+                      <input
+                        class="cc-edit-text"
+                        type="text"
+                        value={w.damage_type ?? ""}
+                        placeholder={T("ccDmgTypePh")}
+                        onInput={(e: any) =>
+                          updateWeapon(idx, { damage_type: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div class="weap-edit-field weap-edit-field-wide">
+                      <span class="weap-edit-field-label">
+                        {T("ccPropertiesPh") || "Properties"}
+                      </span>
+                      <input
+                        class="cc-edit-text"
+                        type="text"
+                        value={w.properties ?? ""}
+                        placeholder={
+                          T("ccPropertiesPh") || "e.g. Versatile (1d8), Finesse"
+                        }
+                        onInput={(e: any) =>
+                          updateWeapon(idx, { properties: e.target.value })
+                        }
+                      />
+                    </div>
+                    {/* 2026-06-21 — special_properties: a separate,
                       longer free-text field for magical effects /
                       homebrew rules / lore text on the weapon — kept
                       apart from `properties` (which holds short
@@ -1917,32 +1905,32 @@ function CombatSection({ data }: { data: CharacterData }) {
                       this one can run to several sentences. textarea
                       instead of input so multi-line text doesn't get
                       clipped while typing. */}
-                  <div class="weap-edit-field weap-edit-field-wide">
-                    <span class="weap-edit-field-label">
-                      {T("ccSpecialPropertiesPh") || "Special properties"}
-                    </span>
-                    <textarea
-                      class="cc-edit-text weap-special-props-input"
-                      value={w.special_properties ?? ""}
-                      placeholder={
-                        T("ccSpecialPropertiesPh") ||
-                        "e.g. magical effects, custom rules, lore…"
-                      }
-                      onInput={(e: any) =>
-                        updateWeapon(idx, {
-                          special_properties: e.target.value,
-                        })
-                      }
-                    />
+                    <div class="weap-edit-field weap-edit-field-wide">
+                      <span class="weap-edit-field-label">
+                        {T("ccSpecialPropertiesPh") || "Special properties"}
+                      </span>
+                      <textarea
+                        class="cc-edit-text weap-special-props-input"
+                        value={w.special_properties ?? ""}
+                        placeholder={
+                          T("ccSpecialPropertiesPh") ||
+                          "e.g. magical effects, custom rules, lore…"
+                        }
+                        onInput={(e: any) =>
+                          updateWeapon(idx, {
+                            special_properties: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
                   </div>
-                </div>
-                <button
-                  class="cc-tag-x weap-edit-remove"
-                  onClick={() => removeWeapon(idx)}
-                  title={T("ccDelWeaponTitle")}
-                >
-                  ×
-                </button>
+                  <button
+                    class="cc-tag-x weap-edit-remove"
+                    onClick={() => removeWeapon(idx)}
+                    title={T("ccDelWeaponTitle")}
+                  >
+                    ×
+                  </button>
                 </div>
                 {/* 2026-06-21 — extra damage TYPES (plural). The
                     weapon's base damage stays in `damage`/`damage_type`
@@ -3707,6 +3695,86 @@ function safeNormalize(data: any): CharacterData {
     return data as CharacterData; // fallback to raw
   }
 }
+/** Ask parent (panel, which have OBR) the bound token ID. */
+function requestBoundTokenIdFromParent(cardId: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: string | null) => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("message", onMsg);
+      clearTimeout(timer);
+      resolve(v);
+    };
+    const onMsg = (e: MessageEvent) => {
+      const msg = e.data;
+      if (!msg || msg.type !== "cc-bound-token-response") return;
+      if (msg.cardId !== cardId) return;
+      const id = msg.boundItemId;
+      finish(typeof id === "string" && id.length > 0 ? id : null);
+    };
+    const timer = setTimeout(() => finish(null), 800);
+    window.addEventListener("message", onMsg);
+    try {
+      window.parent.postMessage(
+        { type: "cc-request-bound-token", cardId },
+        "*",
+      );
+    } catch {
+      finish(null);
+    }
+  });
+}
+
+/** Ensure data.meta.boundedTokenId is present.
+ *  Prefer value already in JSON; else OBR (if ready) or parent panel. */
+async function enrichWithBoundedTokenId(
+  json: CharacterData,
+  cardId: string,
+): Promise<CharacterData> {
+  const meta = { ...(json.meta || {}) };
+
+  if (
+    typeof meta.boundedTokenId === "string" &&
+    meta.boundedTokenId.length > 0
+  ) {
+    return { ...json, meta };
+  }
+
+  let resolved: string | null = null;
+
+  // A) OBR solo se davvero pronto (modal diretto)
+  try {
+    if (OBR.isReady) {
+      const sceneMeta = await OBR.scene.getMetadata();
+      const list = sceneMeta[SCENE_META_KEY];
+      if (Array.isArray(list)) {
+        const entry = list.find((c: any) => c?.id === cardId);
+        const id = entry?.boundedTokenId;
+        if (typeof id === "string" && id.length > 0) resolved = id;
+      }
+      if (!resolved) {
+        const items = await OBR.scene.items.getItems(
+          (it: any) =>
+            (it.metadata as Record<string, unknown> | undefined)?.[
+              BIND_META_KEY
+            ] === cardId,
+        );
+        if (items[0]?.id) resolved = items[0].id;
+      }
+    }
+  } catch (e) {
+    console.warn("[cc-fullscreen] enrich OBR path failed", e);
+  }
+
+  // B) Parent panel (iframe annidato: OBR non ready)
+  if (!resolved) {
+    resolved = await requestBoundTokenIdFromParent(cardId);
+  }
+
+  meta.boundedTokenId = resolved;
+  return { ...json, meta };
+}
 
 // ===== Main app ==============================================
 function App() {
@@ -3963,8 +4031,10 @@ function App() {
       if (!json) throw new Error("No data found");
 
       console.log(`[cc-fullscreen] Loaded from ${source} for ${cardId}`);
-      const normalized = safeNormalize(json);
-      commitLoadedData(normalized || json, gen);
+      const normalized = safeNormalize(json) || json;
+      const enriched = await enrichWithBoundedTokenId(normalized, cardId);
+      if (gen !== loadGenRef.current) return;
+      commitLoadedData(enriched, gen);
     } catch (e: any) {
       if (e?.name === "AbortError") return;
       if (gen !== loadGenRef.current) return;
@@ -3974,8 +4044,12 @@ function App() {
       try {
         const fallback = readLocalCardJson();
         if (fallback) {
-          console.warn(`[cc-fullscreen] EMERGENCY FALLBACK for ${cardId}`);
-          commitLoadedData(safeNormalize(fallback), gen);
+          const enrichedFb = await enrichWithBoundedTokenId(
+            safeNormalize(fallback) || fallback,
+            cardId,
+          );
+          if (gen !== loadGenRef.current) return;
+          commitLoadedData(enrichedFb, gen);
           return;
         }
       } catch {}
@@ -4037,11 +4111,12 @@ function App() {
     setData((prev) => (prev ? safeNormalize({ ...prev, ...patch }) : prev));
   }, []);
 
-  const onExport = useCallback(() => {
-    if (!data) return;
-    const id = data.identity || {};
+  const onExport = useCallback(async () => {
+    if (!data || !cardId) return;
+    const enriched = await enrichWithBoundedTokenId(data, cardId);
+    const id = enriched.identity || {};
     const name = id.display_name || id.character_name || "character";
-    downloadJson(`${name}-${cardId.slice(0, 6)}.json`, data);
+    downloadJson(`${name}-${cardId.slice(0, 6)}.json`, enriched);
   }, [data, cardId]);
 
   const onRefresh = useCallback(async () => {
@@ -4076,8 +4151,9 @@ function App() {
   }, []);
 
   const onCopyJson = useCallback(async () => {
-    if (!data) return;
-    const text = JSON.stringify(data, null, 2);
+    if (!data || !cardId) return;
+    const enriched = await enrichWithBoundedTokenId(data, cardId);
+    const text = JSON.stringify(enriched, null, 2);
     let ok = false;
     try {
       if (navigator.clipboard?.writeText) {
@@ -4103,7 +4179,7 @@ function App() {
     } else {
       window.alert(T("ccCopyFailAlert"));
     }
-  }, [data]);
+  }, [data, cardId]);
 
   const onImport = useCallback(() => {
     const inp = document.getElementById(
@@ -4592,6 +4668,11 @@ function App() {
           {tab === "resources" ? (
             <ResourcesSection
               cardId={cardId}
+              metaBoundedTokenId={
+                typeof data?.meta?.boundedTokenId === "string"
+                  ? data.meta.boundedTokenId
+                  : null
+              }
               characterName={
                 data?.identity?.display_name ||
                 data?.identity?.character_name ||
@@ -4748,11 +4829,13 @@ interface RtRollRow {
 
 function ResourcesSection({
   cardId,
+  metaBoundedTokenId,
   characterName,
   canUse,
   isGM,
 }: {
   cardId: string;
+  metaBoundedTokenId?: string | null;
   characterName: string;
   canUse: boolean;
   isGM: boolean;
@@ -4786,7 +4869,7 @@ function ResourcesSection({
       switch (msg.type) {
         case "cc-resources-response":
           setResources(Array.isArray(msg.resources) ? msg.resources : []);
-          setBoundItemId(msg.boundItemId ?? null);
+          setBoundItemId(msg.boundItemId ?? metaBoundedTokenId ?? null);
           break;
         case "cc-recovery-needs-lr-confirm":
           setPendingLr({ hasDawn: !!msg.hasDawn, hasDusk: !!msg.hasDusk });
@@ -4817,7 +4900,7 @@ function ResourcesSection({
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [cardId]);
+  }, [cardId, metaBoundedTokenId]);
 
   const togglePip = (r: RtResource, targetLevel: number) => {
     if (!canUse) return;
@@ -4881,10 +4964,7 @@ function ResourcesSection({
   };
   const openAddResource = () => {
     if (!canUse) return;
-    window.parent.postMessage(
-      { type: "cc-open-resource-edit", cardId },
-      "*",
-    );
+    window.parent.postMessage({ type: "cc-open-resource-edit", cardId }, "*");
   };
 
   if (!boundItemId && resources !== null) {
@@ -4990,8 +5070,7 @@ function ResourcesSection({
         {resources?.map((r) => {
           const max = Math.max(0, Math.floor(r.max));
           const cur = Math.max(0, Math.min(max, Math.floor(r.current)));
-          const icon =
-            ICON_LIBRARY[r.icon as IconId] ?? ICON_LIBRARY.gem;
+          const icon = ICON_LIBRARY[r.icon as IconId] ?? ICON_LIBRARY.gem;
           return (
             <div class="rt-row" key={r.id}>
               <div class="rt-row-head">
@@ -5052,10 +5131,7 @@ function ResourcesSection({
                           0,
                           Math.min(1, (e.clientX - rect.left) / rect.width),
                         );
-                        togglePip(
-                          r,
-                          Math.round(t * Math.max(1, r.max)),
-                        );
+                        togglePip(r, Math.round(t * Math.max(1, r.max)));
                       }}
                     >
                       <div
@@ -5092,7 +5168,10 @@ function ResourcesSection({
                     >
                       −
                     </button>
-                    <span class="rt-num-orb" title={`${r.name} ${cur}/${r.max}`}>
+                    <span
+                      class="rt-num-orb"
+                      title={`${r.name} ${cur}/${r.max}`}
+                    >
                       <span
                         class="rt-num-orb-icon"
                         dangerouslySetInnerHTML={{ __html: icon }}
@@ -5126,11 +5205,7 @@ function ResourcesSection({
       </div>
 
       {canUse && (
-        <button
-          type="button"
-          class="rt-add"
-          onClick={openAddResource}
-        >
+        <button type="button" class="rt-add" onClick={openAddResource}>
           {T("rpAdd")}
         </button>
       )}

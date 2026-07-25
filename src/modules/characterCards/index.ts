@@ -6,11 +6,14 @@ import { onViewportResize } from "../../utils/viewportAnchor";
 import {
   BC_RECOVERY_TRIGGER,
   BC_RECOVERY_NOTICE,
+  BC_RECOVERY_ROLL_UPDATE,
+  BC_RECOVERY_ROLL_CLOSED,
   RecoveryTriggerPayload,
+  RecoveryTriggerItem,
   RecoveryNoticePayload,
-  rollChargeResource,
+  mergeRecoveryRollItems,
 } from "./recovery";
-import { showChargesRollModal, showModal } from "./recovery-ui";
+import { showModal } from "./recovery-ui";
 import {
   PANEL_IDS,
   getPanelOffset,
@@ -27,7 +30,11 @@ import {
 // console (panel, fullscreen, or the main extension/action document),
 // this module isn't loaded there, full stop — no broadcast listener
 // can possibly exist in that context regardless of any other fix.
-console.log("%c[CC-FLOW] index.ts module EVALUATED in this document", "color: #fa0; font-weight: bold", { href: location.href });
+console.log(
+  "%c[CC-FLOW] index.ts module EVALUATED in this document",
+  "color: #fa0; font-weight: bold",
+  { href: location.href },
+);
 
 // Character-card info popover bbox — RIGHT/BOTTOM anchor. Always
 // returns the expected bbox so the layout editor can render a
@@ -86,6 +93,18 @@ const PANEL_URL = assetUrl("cc-panel.html");
 const INFO_URL = assetUrl("cc-info.html");
 const BIND_URL = assetUrl("cc-bind.html");
 const ICON_URL = assetUrl("cc-icon.svg");
+// 2026-07 fix — the charges-roll modal for ONLINE players used to be
+// rendered by calling showChargesRollModal() directly inside this
+// file's BC_RECOVERY_TRIGGER handler. That handler runs inside
+// background.html (this module's home when bundled into the always-
+// loaded action document — see the [CC-FLOW] marker above), which OBR
+// never paints on screen. The DOM was built correctly and every
+// listener worked, it just landed in an invisible iframe. Opening a
+// REAL top-level OBR modal (same pattern as BIND_URL above) fixes it:
+// cc-recovery-roll.html is a genuine document, so its OBR SDK
+// handshake completes and its `document.body` is actually rendered.
+const RECOVERY_ROLL_MODAL_ID = "com.obr-suite/cc-recovery-roll";
+const RECOVERY_ROLL_URL = assetUrl("cc-recovery-roll.html");
 
 const BIND_META = `${PLUGIN_ID}/boundCardId`;
 const SCENE_META_KEY = `${PLUGIN_ID}/list`;
@@ -135,6 +154,14 @@ const unsubs: Array<() => void> = [];
 let selectionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 let infoPopoverOpen = false;
 let currentInfoCard: string | null = null;
+// 2026-07 — recovery-roll modal state (see BC_RECOVERY_TRIGGER handler
+// below). This background document is the only listener of
+// BC_RECOVERY_TRIGGER, so it's the natural place to own the
+// accumulator: a second trigger while the modal is already open merges
+// into `pendingRecoveryRollItems` and gets pushed via
+// BC_RECOVERY_ROLL_UPDATE instead of reopening (= reloading) the modal.
+let recoveryRollModalOpen = false;
+let pendingRecoveryRollItems: RecoveryTriggerItem[] = [];
 // Last itemId passed to openInfoPopoverFor — needed so the viewport-
 // resize handler can re-issue the popover with the same URL (different
 // URL would force OBR to reload the iframe).
@@ -534,7 +561,10 @@ async function propagateCardRefresh(cardId: string): Promise<void> {
 
 export async function setupCharacterCards(): Promise<void> {
   const en = getLocalLang() === "en";
-  console.log("%c[CC-FLOW] setupCharacterCards() CALLED — module is initializing", "color: #0f0; font-weight: bold");
+  console.log(
+    "%c[CC-FLOW] setupCharacterCards() CALLED — module is initializing",
+    "color: #0f0; font-weight: bold",
+  );
 
   try {
     const [p, myId, players] = await Promise.all([
@@ -545,14 +575,15 @@ export async function setupCharacterCards(): Promise<void> {
 
     ccRole = (p as "GM" | "PLAYER") || "PLAYER";
     ccMyId = myId;
-    ccAllPlayers = players.map((el)=>{return JSON.stringify({id: el.id, playerName: el.name})});
-
+    ccAllPlayers = players.map((el) => {
+      return JSON.stringify({ id: el.id, playerName: el.name });
+    });
 
     console.log("[CC-FLOW] Initial core data fetched:", {
       myId: ccMyId,
       role: ccRole,
       playersCount: players.length,
-      players: "["+ccAllPlayers.join(",")+"]"
+      players: "[" + ccAllPlayers.join(",") + "]",
     });
 
     // NOTE: this initial broadcast almost never reaches fullscreen-page,
@@ -562,18 +593,23 @@ export async function setupCharacterCards(): Promise<void> {
     // any listener that DOES happen to already be up (e.g. panel-page,
     // if it was open before this ran). The REAL handshake fullscreen
     // relies on is the request-core-data listener registered below.
-    console.log("[CC-FLOW] Sending initial core-data broadcast (best-effort, destination=LOCAL)");
+    console.log(
+      "[CC-FLOW] Sending initial core-data broadcast (best-effort, destination=LOCAL)",
+    );
     OBR.broadcast.sendMessage(
       "com.character-cards/core-data",
       {
         myId: ccMyId,
         role: ccRole,
-        players:  "["+ccAllPlayers.join(",")+"]",
+        players: "[" + ccAllPlayers.join(",") + "]",
       },
       { destination: "LOCAL" },
     );
   } catch (e) {
-    console.error("[CC-FLOW] Failed to initialize character-cards core data", e);
+    console.error(
+      "[CC-FLOW] Failed to initialize character-cards core data",
+      e,
+    );
   }
   // 2026-06 fix — fullscreen-page.tsx mounts asynchronously (it's a
   // separate OBR.modal iframe) and may finish mounting AFTER the
@@ -584,12 +620,17 @@ export async function setupCharacterCards(): Promise<void> {
   // "com.character-cards/request-core-data" on mount as a fallback;
   // this listener answers with a fresh snapshot every time, so late
   // mounts (and any future re-request) always get a real answer.
-  console.log("[CC-FLOW] Registering request-core-data listener (this is what fullscreen-page actually depends on)");
+  console.log(
+    "[CC-FLOW] Registering request-core-data listener (this is what fullscreen-page actually depends on)",
+  );
   unsubs.push(
     OBR.broadcast.onMessage(
       "com.character-cards/request-core-data",
       async () => {
-        console.log("%c[CC-FLOW] ✅ request-core-data RECEIVED from some iframe — responding now", "color: #0af; font-weight: bold");
+        console.log(
+          "%c[CC-FLOW] ✅ request-core-data RECEIVED from some iframe — responding now",
+          "color: #0af; font-weight: bold",
+        );
         try {
           const [role, id, players] = await Promise.all([
             OBR.player.getRole(),
@@ -599,17 +640,18 @@ export async function setupCharacterCards(): Promise<void> {
           ccRole = (role as "GM" | "PLAYER") || "PLAYER";
           ccMyId = id;
           ccAllPlayers = players;
-          console.log("[CC-FLOW] Responding with core-data:", { myId: ccMyId, role: ccRole, playersCount: ccAllPlayers.length });
+          console.log("[CC-FLOW] Responding with core-data:", {
+            myId: ccMyId,
+            role: ccRole,
+            playersCount: ccAllPlayers.length,
+          });
           OBR.broadcast.sendMessage(
             "com.character-cards/core-data",
             { myId: ccMyId, role: ccRole, players: ccAllPlayers },
             { destination: "LOCAL" },
           );
         } catch (e) {
-          console.error(
-            "[CC-FLOW] request-core-data handler failed",
-            e,
-          );
+          console.error("[CC-FLOW] request-core-data handler failed", e);
         }
       },
     ),
@@ -638,46 +680,64 @@ export async function setupCharacterCards(): Promise<void> {
             .filter((tk) => (tk as any)?.createdUserId === ccMyId)
             .map((tk) => tk.id),
         );
-        const rows = payload.items
-          .filter((it) => ownedIds.has(it.itemId))
-          .flatMap((it) =>
-            it.resources.map((r) => ({
-              itemId: it.itemId,
-              resourceId: r.id,
-              name: r.name,
-              current: r.current,
-              max: r.max,
-              formula: r.chargesFormula,
-              onRecharge: async () => {
-                const result = await rollChargeResource(it.itemId, {
-                  id: r.id,
-                  name: r.name,
-                  type: "charges",
-                  current: r.current,
-                  max: r.max,
-                  chargesFormula: r.chargesFormula,
-                  icon: "gem",
-                } as any);
-                if (!result) return null;
-                return {
-                  current: result.resource.current,
-                  max: result.resource.max,
-                  total: result.total,
-                };
-              },
-            })),
-          );
-        if (rows.length === 0) return;
-        const lang = getLocalLang();
-        showChargesRollModal({
-          title: t(lang, "rcvChargesModalTitle"),
-          rechargeLabel: t(lang, "rcvBtnRecharge"),
-          closeLabel: t(lang, "reClose"),
-          groups: [{ rows }],
+        const ownedItems = payload.items.filter((it) => ownedIds.has(it.itemId));
+        if (ownedItems.length === 0) return;
+
+        pendingRecoveryRollItems = mergeRecoveryRollItems(
+          pendingRecoveryRollItems,
+          ownedItems,
+        );
+
+        if (recoveryRollModalOpen) {
+          // Already on screen — push the merged list in instead of
+          // reopening (OBR.modal.open with the same id would reload
+          // the iframe and drop whatever the player already rolled
+          // visually this pass).
+          try {
+            OBR.broadcast.sendMessage(
+              BC_RECOVERY_ROLL_UPDATE,
+              { items: pendingRecoveryRollItems },
+              { destination: "LOCAL" },
+            );
+          } catch (e) {
+            console.warn(
+              "[obr-suite/character-cards] recovery-roll update broadcast failed",
+              e,
+            );
+          }
+          return;
+        }
+
+        // Don't render here — this listener runs inside background.html
+        // (hidden, never painted). Open a real top-level OBR modal and
+        // hand it the accumulated payload; recovery-roll-page.ts does
+        // the actual showChargesRollModal() call from a document that's
+        // genuinely visible.
+        recoveryRollModalOpen = true;
+        await OBR.modal.open({
+          id: RECOVERY_ROLL_MODAL_ID,
+          url: `${RECOVERY_ROLL_URL}?payload=${encodeURIComponent(
+            JSON.stringify(pendingRecoveryRollItems),
+          )}`,
+          width: 380,
+          height: 480,
         });
       } catch (e) {
-        console.warn("[obr-suite/character-cards] recovery-trigger handling failed", e);
+        console.warn(
+          "[obr-suite/character-cards] recovery-trigger handling failed",
+          e,
+        );
       }
+    }),
+  );
+
+  // The recovery-roll modal notifies us when it actually goes away
+  // (player closed it, or nothing was left to roll) so the next
+  // trigger opens fresh instead of assuming it's still open.
+  unsubs.push(
+    OBR.broadcast.onMessage(BC_RECOVERY_ROLL_CLOSED, () => {
+      recoveryRollModalOpen = false;
+      pendingRecoveryRollItems = [];
     }),
   );
 
@@ -932,7 +992,7 @@ async function ensureCardOwner(
   playerId: string,
 ): Promise<void> {
   if (!cardId || !playerId) return;
-  if (ccRole !== "GM") return; // Solo il GM può modificare le metadata
+  if (ccRole !== "GM") return;
 
   try {
     const meta = await OBR.scene.getMetadata();
@@ -941,7 +1001,14 @@ async function ensureCardOwner(
     const cardIndex = list.findIndex((c: any) => c.id === cardId);
     if (cardIndex === -1) return;
 
-    const card = list[cardIndex];
+    let card = list[cardIndex];
+
+    if (!card.meta) card.meta = {};
+
+    const boundedTokenId = card.boundedTokenId || null; 
+    card.meta.boundedTokenId = boundedTokenId;
+
+    list[cardIndex] = card;
 
     if (!Array.isArray(card.owners_id)) {
       card.owners_id = [];
@@ -964,4 +1031,15 @@ async function ensureCardOwner(
   } catch (e) {
     console.warn("[character-cards] ensureCardOwner error:", e);
   }
+}
+
+// function to add tokenId into character card's meta.boundedTokenId 
+function enrichCardWithBinding(card: any): any {
+  if (!card) return card;
+  const boundId = card.boundedTokenId || card.meta?.boundedTokenId || null;
+
+  if (!card.meta) card.meta = {};
+  card.meta.boundedTokenId = boundId;
+
+  return card;
 }

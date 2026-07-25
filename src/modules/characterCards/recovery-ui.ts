@@ -18,7 +18,11 @@ export interface ModalButton {
 }
 
 export interface ModalHandle {
-  close: () => void;
+  /** `close({ silent: true })` removes the overlay WITHOUT calling
+   *  opts.onClose — used when a caller wants to tear down and
+   *  immediately rebuild the overlay in place (e.g. re-rendering with
+   *  an updated row list) without signalling a real close upstream. */
+  close: (opts?: { silent?: boolean }) => void;
   root: HTMLElement;
 }
 
@@ -34,6 +38,12 @@ export function showModal(opts: {
   /** Width in px. Defaults to 360 (roomy enough for a resource list
    *  with a name + pips + a Recharge button per row). */
   width?: number;
+  /** Called whenever this overlay closes (button, backdrop click, or
+   *  handle.close()). Used by callers running in a real top-level OBR
+   *  document (e.g. recovery-roll-page.ts) to also close the OBR
+   *  modal chrome itself — this overlay closing on its own only
+   *  removes the in-page DOM, not the surrounding OBR window. */
+  onClose?: () => void;
 }): ModalHandle {
   const overlay = document.createElement("div");
   overlay.style.cssText = `
@@ -58,8 +68,9 @@ export function showModal(opts: {
   const btnRow = document.createElement("div");
   btnRow.style.cssText = "display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px;";
 
-  function close() {
+  function close(closeOpts?: { silent?: boolean }) {
     overlay.remove();
+    if (!closeOpts?.silent) opts.onClose?.();
   }
 
   for (const b of opts.buttons) {
@@ -166,6 +177,7 @@ export function showChargesRollModal(opts: {
   rechargeLabel: string;
   closeLabel: string;
   groups: ChargesGroup[];
+  onClose?: () => void;
 }): ModalHandle {
   const bodyParts: string[] = [];
   for (const g of opts.groups) {
@@ -193,6 +205,7 @@ export function showChargesRollModal(opts: {
     bodyHtml: bodyParts.join(""),
     width: 340,
     buttons: [{ label: opts.closeLabel, variant: "secondary", onClick: () => {} }],
+    onClose: opts.onClose,
     onMount: (root) => {
       root.querySelectorAll<HTMLButtonElement>(".chg-recharge-btn").forEach((btn) => {
         btn.addEventListener("click", async () => {

@@ -107,6 +107,7 @@ export default defineConfig(({ command }) => ({
         "cc-info": resolve(__dirname, "cc-info.html"),
         "cc-bind": resolve(__dirname, "cc-bind.html"),
         "cc-fullscreen": resolve(__dirname, "cc-fullscreen.html"),
+        "cc-recovery-roll": resolve(__dirname, "cc-recovery-roll.html"),
         "dice-effect": resolve(__dirname, "dice-effect.html"),
         "dice-panel": resolve(__dirname, "dice-panel.html"),
         "dice-history": resolve(__dirname, "dice-history.html"),

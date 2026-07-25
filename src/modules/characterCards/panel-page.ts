@@ -23,10 +23,7 @@ import {
 } from "./recovery";
 import { readResources, updateResource } from "../resourceTracker/storage";
 import { PLUGIN_ID } from "../resourceTracker/types";
-import {
-  BC_OPEN_EDIT,
-  broadcastChanged,
-} from "../resourceTracker/panel";
+import { BC_OPEN_EDIT, broadcastChanged } from "../resourceTracker/panel";
 import {
   showLrExtraConfirm,
   showChargesRollModal,
@@ -397,8 +394,12 @@ async function runGlobalRecovery(pressed: RecoveryType): Promise<void> {
   let ownerByItem = new Map<string, string | undefined>();
   try {
     const tokens = await OBR.scene.items.getItems(allItemIds);
+    console.log("[cc-panel] recovery: resolved token owners", tokens);
     ownerByItem = new Map(
-      tokens.map((tk) => [tk.id, (tk as any).createdUserId as string | undefined]),
+      tokens.map((tk) => [
+        tk.id,
+        (tk as any).createdUserId as string | undefined,
+      ]),
     );
   } catch (e) {
     console.warn("[cc-panel] recovery: failed to resolve token owners", e);
@@ -413,7 +414,8 @@ async function runGlobalRecovery(pressed: RecoveryType): Promise<void> {
   // to close/reopen the card.
   if (current.type === "card") {
     const openCardId = current.id;
-    if (bound.some((c) => c.id === openCardId)) void sendFreshResources(openCardId);
+    if (bound.some((c) => c.id === openCardId))
+      void sendFreshResources(openCardId);
   }
 
   if (needsRollByItem.size === 0) {
@@ -1295,6 +1297,19 @@ window.addEventListener("message", (event) => {
     case "cc-request-resources":
       void sendFreshResources(msg.cardId);
       break;
+    case "cc-request-bound-token": {
+      const card = cards.find((c) => c.id === msg.cardId);
+      const boundItemId =
+        typeof card?.boundedTokenId === "string" && card.boundedTokenId
+          ? card.boundedTokenId
+          : null;
+      postToFullscreenIframe({
+        type: "cc-bound-token-response",
+        cardId: msg.cardId,
+        boundItemId,
+      });
+      break;
+    }
     case "cc-toggle-resource-pip": {
       const card = cards.find((c) => c.id === msg.cardId);
       const itemId = card?.boundedTokenId;
@@ -2274,7 +2289,10 @@ OBR.onReady(async () => {
         try {
           await openQuickPopupAt({ expression, label, itemId }, { x: 0, y: 0 });
         } catch (err) {
-          console.error("[cc-panel] openQuickPopupAt from cc-roll-dice failed", err);
+          console.error(
+            "[cc-panel] openQuickPopupAt from cc-roll-dice failed",
+            err,
+          );
         }
       })();
     }
