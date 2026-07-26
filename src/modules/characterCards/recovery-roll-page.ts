@@ -44,14 +44,28 @@ function rowKey(itemId: string, resourceId: string): string {
   return `${itemId}__${resourceId}`;
 }
 
-function notifyClosed(): void {
-  try {
-    OBR.broadcast.sendMessage(BC_RECOVERY_ROLL_CLOSED, {}, { destination: "LOCAL" });
-  } catch {}
+function summarize(list: RecoveryTriggerItem[]) {
+  return list.map((it) => ({
+    itemId: it.itemId,
+    resources: it.resources.map((r) => `${r.name} (${r.current}/${r.max})`),
+  }));
 }
 
-function closeForReal(): void {
-  notifyClosed();
+function notifyClosed(reason: string): void {
+  console.log(
+    "%c[cc-recovery-roll:page] closing — notifying opener",
+    "color: #e88876",
+    { reason },
+  );
+  try {
+    OBR.broadcast.sendMessage(BC_RECOVERY_ROLL_CLOSED, {}, { destination: "LOCAL" });
+  } catch (e) {
+    console.warn("[cc-recovery-roll:page] BC_RECOVERY_ROLL_CLOSED send failed", e);
+  }
+}
+
+function closeForReal(reason: string): void {
+  notifyClosed(reason);
   void OBR.modal.close(MODAL_ID);
 }
 
@@ -68,6 +82,11 @@ function buildRows(): ChargesRow[] {
           max: r.max,
           formula: r.chargesFormula,
           onRecharge: async () => {
+            console.log(
+              "%c[cc-recovery-roll:page] recharge clicked",
+              "color: #5dade2",
+              { itemId: it.itemId, resource: r.name, formula: r.chargesFormula },
+            );
             const result = await rollChargeResource(it.itemId, {
               id: r.id,
               name: r.name,
@@ -77,8 +96,25 @@ function buildRows(): ChargesRow[] {
               chargesFormula: r.chargesFormula,
               icon: "gem",
             } as any);
-            if (!result) return null;
+            if (!result) {
+              console.warn(
+                "[cc-recovery-roll:page] recharge failed / returned null",
+                { itemId: it.itemId, resource: r.name },
+              );
+              return null;
+            }
             rolledKeys.add(rowKey(it.itemId, r.id));
+            console.log(
+              "%c[cc-recovery-roll:page] recharge applied",
+              "color: #6fdc94",
+              {
+                itemId: it.itemId,
+                resource: r.name,
+                current: result.resource.current,
+                max: result.resource.max,
+                rolledTotal: result.total,
+              },
+            );
             return {
               current: result.resource.current,
               max: result.resource.max,
@@ -92,21 +128,37 @@ function buildRows(): ChargesRow[] {
 
 function render(): void {
   const rows = buildRows();
+  console.log(
+    "%c[cc-recovery-roll:page] render",
+    "color: #5dade2",
+    {
+      pendingItems: summarize(items),
+      alreadyRolled: [...rolledKeys],
+      rowsShown: rows.length,
+    },
+  );
   if (rows.length === 0) {
     // Everything either got rolled or was merged away — no reason to
     // leave an empty frame open.
-    closeForReal();
+    closeForReal("nothing left to roll");
     return;
   }
   // Tear down the previous overlay WITHOUT firing onClose (silent) —
   // this is an in-place refresh, not the player closing the modal.
   handle?.close({ silent: true });
   handle = showChargesRollModal({
-    title: t(lang, "rcvChargesModalTitle"),
+    // Dedicated title (not rcvChargesModalTitle) — this page IS the
+    // whole frame the player sees, so it reads as a direct address
+    // rather than a generic dialog heading.
+    title: t(lang, "rcvPlayerRollTitle"),
     rechargeLabel: t(lang, "rcvBtnRecharge"),
     closeLabel: t(lang, "reClose"),
     groups: [{ rows }],
-    onClose: closeForReal,
+    onClose: () => closeForReal("player closed the modal"),
+    // This document IS a single-purpose OBR modal already (opened via
+    // OBR.modal.open in index.ts) — fill it edge to edge instead of
+    // drawing a second, smaller floating card inside it.
+    variant: "fullBleed",
   });
 }
 
@@ -118,15 +170,20 @@ function readInitialPayload(): RecoveryTriggerItem[] {
     const parsed = JSON.parse(decodeURIComponent(raw));
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.warn("[cc-recovery-roll] failed to parse payload", e);
+    console.warn("[cc-recovery-roll:page] failed to parse payload", e);
     return [];
   }
 }
 
 OBR.onReady(async () => {
   items = readInitialPayload();
+  console.log(
+    "%c[cc-recovery-roll:page] mounted with initial payload",
+    "color: #6fdc94",
+    { items: summarize(items) },
+  );
   if (items.length === 0) {
-    closeForReal();
+    closeForReal("empty initial payload");
     return;
   }
   render();
@@ -134,6 +191,11 @@ OBR.onReady(async () => {
   OBR.broadcast.onMessage(BC_RECOVERY_ROLL_UPDATE, (event) => {
     const payload = event.data as { items?: RecoveryTriggerItem[] } | undefined;
     if (!payload?.items?.length) return;
+    console.log(
+      "%c[cc-recovery-roll:page] BC_RECOVERY_ROLL_UPDATE received",
+      "color: #5dade2",
+      { incoming: summarize(payload.items) },
+    );
     items = mergeRecoveryRollItems(items, payload.items);
     render();
   });
@@ -141,5 +203,5 @@ OBR.onReady(async () => {
   // Fallback for OBR's own close chrome (backdrop click, native X) —
   // pagehide fires regardless of how the modal iframe goes away, same
   // pattern background.ts already relies on for PANEL_OPEN_KEY.
-  window.addEventListener("pagehide", notifyClosed);
+  window.addEventListener("pagehide", () => notifyClosed("pagehide"));
 });

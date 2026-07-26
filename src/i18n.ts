@@ -963,6 +963,15 @@ const TR: Dict = {
   rcvConfirmDwDsDusk: { zh: "黄昏", en: "Dusk" },
   rcvConfirmDwDsConfirm: { zh: "继续", en: "Continue" },
   rcvChargesModalTitle: { zh: "需要投掷的充能", en: "Charges to Roll" },
+  // 2026-07 — cc-recovery-roll.html title. Distinct from
+  // rcvChargesModalTitle (used by the GM's own in-page overlay for
+  // per-card / offline-owner rolls) because this one is the ENTIRE
+  // content of a dedicated top-level page the player sees, so it reads
+  // as a direct address rather than a generic dialog heading.
+  rcvPlayerRollTitle: {
+    zh: "GM 请求你投掷充能",
+    en: "The GM asks you to roll",
+  },
   rcvGmOfflineModalTitle: {
     zh: "离线玩家的充能（GM 代投）",
     en: "Offline Players' Charges (GM rolls)",

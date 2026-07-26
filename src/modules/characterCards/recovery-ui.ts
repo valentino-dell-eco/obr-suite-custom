@@ -44,15 +44,36 @@ export function showModal(opts: {
    *  modal chrome itself — this overlay closing on its own only
    *  removes the in-page DOM, not the surrounding OBR window. */
   onClose?: () => void;
+  /** "overlay" (default) — full-viewport dark backdrop + a centered,
+   *  bordered floating card. Correct for a modal drawn INSIDE a
+   *  shared document that has other content around it (cc-panel.html,
+   *  cc-info.html).
+   *  "fullBleed" — the card fills the entire host document edge to
+   *  edge, no backdrop, no centering, no border/radius. Use this when
+   *  the host document IS ALREADY a single-purpose OBR modal/popover
+   *  (e.g. cc-recovery-roll.html) — otherwise the player sees a
+   *  floating card nested inside another modal frame, which reads as
+   *  two stacked dialogs for one concept. */
+  variant?: "overlay" | "fullBleed";
 }): ModalHandle {
+  const fullBleed = opts.variant === "fullBleed";
   const overlay = document.createElement("div");
-  overlay.style.cssText = `
+  overlay.style.cssText = fullBleed
+    ? `position: fixed; inset: 0; z-index: ${++zCounter}; display: flex;`
+    : `
     position: fixed; inset: 0; z-index: ${++zCounter};
     background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
     display: flex; align-items: center; justify-content: center;
   `;
   const card = document.createElement("div");
-  card.style.cssText = `
+  card.style.cssText = fullBleed
+    ? `
+    background: #16213e; width: 100%; height: 100%;
+    padding: 18px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 12px;
+    font-family: inherit; color: #eee;
+  `
+    : `
     background: #16213e; border: 1px solid rgba(255,255,255,0.12);
     border-radius: 10px; padding: 18px; width: ${opts.width ?? 360}px;
     max-width: 90vw; max-height: 80vh; overflow-y: auto;
@@ -96,7 +117,7 @@ export function showModal(opts: {
   card.appendChild(btnRow);
   overlay.appendChild(card);
   overlay.addEventListener("click", (e) => {
-    if (e.target === overlay) close();
+    if (!fullBleed && e.target === overlay) close();
   });
   document.body.appendChild(overlay);
   opts.onMount?.(card);
@@ -178,6 +199,7 @@ export function showChargesRollModal(opts: {
   closeLabel: string;
   groups: ChargesGroup[];
   onClose?: () => void;
+  variant?: "overlay" | "fullBleed";
 }): ModalHandle {
   const bodyParts: string[] = [];
   for (const g of opts.groups) {
@@ -206,6 +228,7 @@ export function showChargesRollModal(opts: {
     width: 340,
     buttons: [{ label: opts.closeLabel, variant: "secondary", onClick: () => {} }],
     onClose: opts.onClose,
+    variant: opts.variant,
     onMount: (root) => {
       root.querySelectorAll<HTMLButtonElement>(".chg-recharge-btn").forEach((btn) => {
         btn.addEventListener("click", async () => {
