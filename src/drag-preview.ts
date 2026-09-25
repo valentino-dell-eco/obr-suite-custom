@@ -63,6 +63,7 @@ function panelLabel(panelId: string): string {
     case "bestiary-panel": return t(getLocalLang(), "dragPreviewBestiaryPanel");
     case "bestiary-info": return t(getLocalLang(), "dragPreviewBestiaryInfo");
     case "cc-info": return t(getLocalLang(), "dragPreviewCcInfo");
+    case "chase-tracker": return t(getLocalLang(), "dragPreviewChaseTracker");
     default: return t(getLocalLang(), "dragPreviewFallback");
   }
 }

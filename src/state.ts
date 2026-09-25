@@ -36,7 +36,8 @@ export type ModuleId =
   | "circleImage"
   | "follow"
   | "musicBoard"
-  | "transform";
+  | "transform"
+  | "chaseTracker";
 
 export type DataVersion = "2014" | "2024" | "all";
 export type Language = "zh" | "en";
@@ -216,6 +217,12 @@ export const DEFAULT_STATE: SuiteState = {
     // is being fleshed out into preset forms + two-stage effects +
     // bestiary binding + camera focus.
     transform: true,
+    // Chase Tracker — right-click "Add to Chase as Quarry / Pursuer"
+    // + a bottom-dock overlay showing every active chase as a bar
+    // with quarry/pursuer pins. Default ON like most stable features;
+    // has its own GM-only context menus so it stays inert until the
+    // GM actually starts a chase.
+    chaseTracker: true,
   },
   dataVersion: "2024",
   allowPlayerMonsters: false,

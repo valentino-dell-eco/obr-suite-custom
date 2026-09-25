@@ -20,6 +20,10 @@ import { setupResourceTracker, teardownResourceTracker } from "./modules/resourc
 import { setupBubbles, teardownBubbles } from "./modules/bubbles";
 import { setupStatusTracker, teardownStatusTracker } from "./modules/statusTracker";
 import { setupHpBar, teardownHpBar } from "./modules/hpBar";
+import {
+  setupChaseTracker,
+  teardownChaseTracker,
+} from "./modules/chaseTracker";
 import { setupMetadataInspector, teardownMetadataInspector } from "./modules/metadata-inspector";
 import { setupFullFog, teardownFullFog } from "./modules/fullFog";
 import { setupMusicBoard, teardownMusicBoard } from "./modules/musicBoard";
@@ -449,6 +453,7 @@ OBR.onReady(() => {
     PANEL_IDS.statusPalette,
     PANEL_IDS.hpBar,
     PANEL_IDS.musicBoard,
+    PANEL_IDS.chaseTracker,
   ];
   async function collectLayoutEditorBboxes(): Promise<Record<string, { left: number; top: number; width: number; height: number }>> {
     const bboxMap: Record<string, { left: number; top: number; width: number; height: number }> = {};
@@ -602,6 +607,7 @@ const modules: Partial<Record<keyof ReturnType<typeof getState>["enabled"], Modu
   portals: { setup: setupPortals, teardown: teardownPortals },
   bubbles: { setup: setupBubbles, teardown: teardownBubbles },
   hpBar: { setup: setupHpBar, teardown: teardownHpBar },
+  chaseTracker: { setup: setupChaseTracker, teardown: teardownChaseTracker },
   metadataInspector: {
     setup: async () => { await setupMetadataInspector(); },
     teardown: async () => { teardownMetadataInspector(); },

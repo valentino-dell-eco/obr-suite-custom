@@ -147,6 +147,11 @@ export default defineConfig(({ command }) => ({
         // 2026-05-19 — music board (dev-only via STABLE_HIDES; module
         // registration is gated in background.ts).
         "music-board": resolve(__dirname, "music-board.html"),
+        "chase-tracker": resolve(__dirname, "chase-tracker.html"),
+        "chase-tracker-pursuer": resolve(
+          __dirname,
+          "chase-tracker-pursuer.html",
+        ),
       },
     },
   },

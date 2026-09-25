@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Add Pursuer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  height:100%;width:100%;overflow:hidden;
+  background:#14182a;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;
+  color:#e6e8ee;
+}
+.wrap{display:flex;flex-direction:column;height:100%;padding:14px;gap:10px}
+.title{font-size:13px;font-weight:700;color:#e6e8ee}
+.subtitle{font-size:11px;color:#9aa0b3;margin-bottom:4px}
+.list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.chase-row{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-radius:10px;
+  background:rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.10);
+  cursor:pointer;
+  transition:background .12s ease, border-color .12s ease;
+}
+.chase-row:hover{background:rgba(52,152,219,0.16);border-color:rgba(52,152,219,0.55)}
+.chase-row img{width:32px;height:32px;border-radius:50%;object-fit:cover;flex:none;background:#222}
+.chase-row .name{font-size:12.5px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chase-row .count{font-size:10.5px;color:#9aa0b3}
+.empty{font-size:12px;color:#9aa0b3;text-align:center;padding:20px 0}
+.cancel{
+  align-self:flex-end;
+  font-size:11.5px;color:#9aa0b3;
+  background:transparent;border:none;cursor:pointer;padding:6px 10px;
+}
+.cancel:hover{color:#e6e8ee}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="title" id="title">Add to Chase as Pursuer</div>
+  <div class="subtitle" id="subtitle">Choose which chase to join:</div>
+  <div class="list" id="list"></div>
+  <button class="cancel" id="cancel">Cancel</button>
+</div>
+<script type="module" src="/src/chase-tracker-pursuer-page.ts"></script>
+</body>
+</html>

@@ -84,6 +84,7 @@ const PANEL_LABEL_KEYS: Record<string, I18nKey> = {
   [PANEL_IDS.statusPalette]: "layoutStatusPalette",
   [PANEL_IDS.hpBar]: "layoutHpBar",
   [PANEL_IDS.musicBoard]: "layoutMusicBoard",
+  [PANEL_IDS.chaseTracker]: "layoutChaseTracker",
 };
 
 function setHintKey(key: I18nKey): void {
@@ -150,6 +151,7 @@ const PANEL_ANCHOR: Record<string, { h: AnchorH; v: AnchorV }> = {
   [PANEL_IDS.hpBar]:          { h: "left",  v: "top" },    // hpBar/index.ts
   [PANEL_IDS.musicBoard]:     { h: "right", v: "top" },    // musicBoard/index.ts — right-anchored
   [PANEL_IDS.portalEdit]:     { h: "left",  v: "top" },    // portals/index.ts (CENTER → treat as left)
+  [PANEL_IDS.chaseTracker]:   { h: "left",  v: "bottom" }, // chaseTracker/index.ts — bottom-center dock (h approximated as left)
 };
 
 // Min size for resizable panels — smaller than this and the panels
@@ -174,6 +176,7 @@ const PANEL_MIN: Record<string, { w: number; h: number }> = {
   [PANEL_IDS.hpBar]:         { w: 200, h: 60 },  // single-line bar
   [PANEL_IDS.musicBoard]:    { w: 300, h: 200 }, // now-playing + volume + pair
   [PANEL_IDS.portalEdit]:    { w: 260, h: 200 }, // form fields
+  [PANEL_IDS.chaseTracker]:  { w: 360, h: 150 }, // one chase row + inline editor, no clipping
 };
 function minFor(panelId: string): { w: number; h: number } {
   return PANEL_MIN[panelId] ?? { w: MIN_W, h: MIN_H };
@@ -469,6 +472,7 @@ OBR.onReady(() => {
     PANEL_IDS.statusPalette,
     PANEL_IDS.hpBar,
     PANEL_IDS.musicBoard,
+    PANEL_IDS.chaseTracker,
   ];
   for (const panelId of order) {
     const bbox = bboxMap[panelId];

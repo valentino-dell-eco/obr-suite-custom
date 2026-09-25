@@ -1638,6 +1638,7 @@ const TR: Dict = {
   layoutStatusPalette: { zh: "状态调色板", en: "Status Palette" },
   layoutHpBar: { zh: "血条组件", en: "HP Bar" },
   layoutMusicBoard: { zh: "音乐板", en: "Music Board" },
+  layoutChaseTracker: { zh: "追逐战追踪器", en: "Chase Tracker" },
   layoutEditorTitle: { zh: "布局编辑", en: "Layout Edit" },
   layoutEditorHint: {
     zh: "拖动面板代理到任意位置",
@@ -2025,6 +2026,7 @@ const TR: Dict = {
 
   // === Drag preview ===
   dragPreviewFallback: { zh: "面板", en: "Panel" },
+  dragPreviewChaseTracker: { zh: "追逐战追踪器", en: "Chase Tracker" },
 
   // === HP bar hardcoded ===
   hpBarResetTitle: {

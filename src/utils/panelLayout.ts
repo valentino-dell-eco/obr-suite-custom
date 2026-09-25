@@ -43,6 +43,9 @@ export const PANEL_IDS = {
    *  the popover's left edge (facing the canvas interior since the
    *  popover anchors to the viewport's right side). */
   musicBoard: "music-board",
+  /** Chase Tracker dock (bottom-center by default). Shows every
+   *  active chase as a bar; drag the header to relocate. */
+  chaseTracker: "chase-tracker",
 } as const;
 
 export type PanelId = (typeof PANEL_IDS)[keyof typeof PANEL_IDS];
