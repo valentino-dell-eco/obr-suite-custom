@@ -3324,7 +3324,7 @@ const TABS: TabDef[] = [
   <li><b>开始追逐</b>：右键 token → 「加入追逐战（作为猎物）」</li>
   <li><b>加入追击</b>：右键另一个 token → 「加入追逐战（作为追击者）」，选择要加入的追逐战</li>
   <li><b>选择 / 调整位置</b>：点击面板上的图钉即可选中该 token（先攻轮到谁时也会自动选中它），面板底部会出现该 token 的距离编辑区：用「−」「+」按钮（步长取自当前场景网格比例）或直接点击数字输入，编辑完成后按「确认」写入，或按「取消」放弃修改</li>
-  <li><b>面板</b>：屏幕底部的追逐战追踪器会显示每场追逐战的进度条；「工具套件」→「追逐战追踪器」可手动显示 / 隐藏</li>
+  <li><b>面板</b>：屏幕底部的追逐战追踪器会显示每场追逐战的进度条；「工具套件」→「追逐战追踪器」或快捷键 <kbd>Shift+C</kbd> 可手动显示 / 隐藏</li>
   <li><b>删除</b>：DM 点击面板上每场追逐战最右侧的垃圾桶图标即可结束该追逐战</li>
   <li>与角色卡面板一样，该面板不会在手机 / 平板客户端上显示</li>
 </ul>`,
@@ -3333,7 +3333,7 @@ const TABS: TabDef[] = [
   <li><b>Start a chase</b>: right-click a token → "Add to Chase as Quarry"</li>
   <li><b>Join as pursuer</b>: right-click another token → "Add to Chase as Pursuer", then pick which chase to join</li>
   <li><b>Select / adjust position</b>: click a pin in the panel to select that token (it's also auto-selected the moment its initiative turn starts) — a distance editor appears at the bottom of the panel with "−"/"+" buttons (stepping by the scene's grid scale), a directly-editable number, and Confirm/Cancel</li>
-  <li><b>Panel</b>: a dock at the bottom of the screen shows every active chase as a bar; "Tools Suite" → "Chase Tracker" shows / hides it by hand</li>
+  <li><b>Panel</b>: a dock at the bottom of the screen shows every active chase as a bar; "Tools Suite" → "Chase Tracker" or shortcut <kbd>Shift+C</kbd> shows / hides it by hand</li>
   <li><b>Delete</b>: as the DM, click the trash icon at the right end of any chase row to end it</li>
   <li>Just like the Character Sheet, this panel doesn't show up on mobile / tablet clients</li>
 </ul>`,

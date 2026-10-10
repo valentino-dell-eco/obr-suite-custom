@@ -40,7 +40,7 @@ import {
   BC_PANEL_RESET,
 } from "../../utils/panelLayout";
 import { PLUGIN_ID, MEMBER_KEY, ChaseEntry } from "./types";
-import { registerSuiteItem, unregisterSuiteItem } from "../toolsSuite";
+import { registerSuiteItem, unregisterSuiteItem, SHORTCUT_TOOLS } from "../toolsSuite";
 import {
   getChaseLocalSettings,
   initChaseRoomSettings,
@@ -77,6 +77,7 @@ const DOCK_H = 300;
 const DOCK_INSET_BOTTOM = 16;
 
 const SUITE_ITEM_ID = `${PLUGIN_ID}/suite-item`;
+const SHORTCUT_ACTION_ID = `${PLUGIN_ID}/shortcut`;
 
 const unsubs: Array<() => void> = [];
 let overlayOpen = false;
@@ -315,9 +316,21 @@ export async function setupChaseTracker(): Promise<void> {
     suite: "shared",
     label: en ? "Chase Tracker" : "追逐战追踪器",
     icon: ICON_URL,
-    hint: en ? "Show / hide the chase panel" : "显示 / 隐藏追逐战面板",
+    hint: en ? "Show / hide the panel · shortcut Shift+C" : "显示 / 隐藏面板 · 快捷键 Shift+C",
     onPick: () => toggleOverlay(),
   });
+
+  // Shift+C — same toggle as the Tools Suite row.
+  try {
+    await OBR.tool.createAction({
+      id: SHORTCUT_ACTION_ID,
+      shortcut: "Shift+C",
+      icons: [{ icon: ICON_URL, label: en ? "Chase Tracker" : "追逐战追踪器", filter: { activeTools: SHORTCUT_TOOLS } }],
+      onClick: () => toggleOverlay(),
+    });
+  } catch (e) {
+    console.warn("[chase-tracker] shortcut action failed", e);
+  }
 
   unsubs.push(OBR.scene.onMetadataChange(() => { void refreshOverlay(); }));
   unsubs.push(
@@ -373,6 +386,7 @@ export async function teardownChaseTracker(): Promise<void> {
   }
   await removeContextMenus();
   unregisterSuiteItem(SUITE_ITEM_ID);
+  try { await OBR.tool.removeAction(SHORTCUT_ACTION_ID); } catch {}
   overlayOpen = false;
   manualOpen = false;
   userClosed = false;

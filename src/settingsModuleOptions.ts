@@ -162,7 +162,7 @@ export function chaseOptionsHtml(lang: L, isGM: boolean): string {
       ], !isGM, lang),
     )}
     ${row(tr(lang, "先攻自动选中", "Follow initiative"), `${P}${tr(lang, "轮到某 token 的先攻回合时自动选中它。", "Select the token whose initiative turn starts.")}`, tog("chase.autoSelect", ls.autoSelect))}
-    ${row(tr(lang, "自动打开面板", "Open automatically"), `${P}${tr(lang, "有追逐战时自动显示面板；关闭时可从「工具套件」→「追逐战追踪器」打开。", "Show the panel when a chase is running; when off, open it from Tools Suite → Chase Tracker.")}`, tog("chase.autoOpen", ls.autoOpen))}
+    ${row(tr(lang, "自动打开面板", "Open automatically"), `${P}${tr(lang, "有追逐战时自动显示面板；关闭时可从「工具套件」→「追逐战追踪器」或 Shift+C 打开。", "Show the panel when a chase is running; when off, open it from Tools Suite → Chase Tracker or Shift+C.")}`, tog("chase.autoOpen", ls.autoOpen))}
   `;
 }
 

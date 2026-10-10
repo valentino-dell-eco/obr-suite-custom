@@ -2,6 +2,12 @@
 
 All notable changes to this project follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Shift+C** shows / hides the Chase Tracker panel (same as Tools Suite → Chase Tracker).
+
 ## [2.0.0] — 2026-10-10
 
 Breaking: the old full-screen Status Tracker is replaced by the new Status Tracker (status chips). Buffs stored by the old tracker on tokens are no longer drawn.
