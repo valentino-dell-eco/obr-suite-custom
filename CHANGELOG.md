@@ -6,12 +6,14 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 ### Added
 
+- **Player status changes announced in Room Chat.** When a player adds / removes a status or changes its level on their own token (manage window, palette click or drag-and-drop), a line is posted to the “All” channel, e.g. “🏷️ Goblin: added Charmed”, “🏷️ Goblin: Exhaustion 1 → 1.5”. The GM's own edits are not announced.
 - **Status Tracker horizontal / vertical offset** (Settings → Status Tracker, room-wide, scene px −200 … 200), like the HP bubbles' vertical offset.
 - **Status levels in steps of 0.5** (−/+ and typed values snap to the nearest half; −99 … 99).
 - **Shift+C** shows / hides the Chase Tracker panel (same as Tools Suite → Chase Tracker).
 
 ### Fixed
 
+- **Toggling a status hidden / visible no longer resets its level.**
 - **Status library empty / “Restore D&D 5e” failing** in rooms whose metadata (16 KB shared by every extension) was nearly full. The library is now stored as a diff against the built-in presets (`{ v: 2, c, d }`): an untouched room stores nothing, and the old full-list format is converted on the GM's next load. Preset titles follow each viewer's language. Save errors caused by a full room now say so and list the biggest room-metadata keys; the Metadata Inspector's Room tab shows the room's total size.
 
 

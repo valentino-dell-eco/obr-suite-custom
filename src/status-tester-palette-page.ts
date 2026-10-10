@@ -26,6 +26,8 @@ import {
 import { onLibraryChange, readLibrary } from "./modules/statusTester/library";
 import { openLibraryModal } from "./modules/statusTester/open";
 import { addStatusToTokens } from "./modules/statusTester/apply";
+import { announceStatusChange } from "./modules/statusTester/announce";
+import { displayTitle } from "./modules/statusTester/types";
 import { getLocalSettings, initRoomSettings, playersMayApply } from "./modules/statusTester/settings";
 
 const lang = getLocalLang();
@@ -104,12 +106,16 @@ async function applyToSelection(defId: string): Promise<void> {
   }
   try {
     const def = library.find((d) => d.id === defId);
-    const n = await addStatusToTokens(sel, defId, {
+    const names = await addStatusToTokens(sel, defId, {
       isGM,
       playerId,
       hidden: isGM && getLocalSettings().gmDefaultHidden,
       levels: !!def?.levels,
     });
+    const n = names.length;
+    if (def) {
+      for (const name of names) void announceStatusChange(isGM, name, { kind: "add", status: displayTitle(def, { level: 1 }) });
+    }
     if (n > 0) setFoot(t(lang, "sttAddedN").replace("{n}", String(n)), "flash");
     else setFoot(t(lang, "sttNothingAdded"), "warn");
   } catch (e) {

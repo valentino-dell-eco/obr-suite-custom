@@ -12,9 +12,10 @@ export async function addStatusToTokens(
   tokenIds: string[],
   defId: string,
   opts: { isGM: boolean; playerId: string; hidden?: boolean; levels?: boolean },
-): Promise<number> {
-  if (tokenIds.length === 0 || !defId) return 0;
-  let added = 0;
+): Promise<string[]> {
+  if (tokenIds.length === 0 || !defId) return [];
+  // Names of the tokens that actually got the status.
+  const added: string[] = [];
   await OBR.scene.items.updateItems(tokenIds, (drafts) => {
     for (const d of drafts) {
       if (!canManage(d, opts.isGM, opts.playerId)) continue;
@@ -26,7 +27,7 @@ export async function addStatusToTokens(
       if (opts.isGM && opts.hidden) entry.hidden = true;
       if (opts.levels) entry.level = 1;
       meta[APPLIED_KEY] = [...cur, entry];
-      added++;
+      added.push(d.name ?? "");
     }
   });
   return added;

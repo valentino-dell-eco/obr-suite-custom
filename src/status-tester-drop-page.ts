@@ -26,6 +26,7 @@ import {
   BC_DRAG_READY,
   BC_DRAG_TARGETS,
   DragTargetRect,
+  displayTitle,
   StatusDef,
   canManage,
   iconUrl,
@@ -35,6 +36,7 @@ import {
 } from "./modules/statusTester/types";
 import { readLibrary } from "./modules/statusTester/library";
 import { addStatusToTokens } from "./modules/statusTester/apply";
+import { announceStatusChange } from "./modules/statusTester/announce";
 import { getLocalSettings, initRoomSettings } from "./modules/statusTester/settings";
 
 // GM: new statuses start hidden when that personal setting is on;
@@ -189,12 +191,14 @@ async function dropAt(x: number, y: number, shift: boolean): Promise<void> {
   const target = hot;
   if (target && def) {
     try {
-      const n = await addStatusToTokens([target.id], def.id, {
+      const names = await addStatusToTokens([target.id], def.id, {
         isGM,
         playerId,
         hidden: isGM && shift !== defaultHidden,
         levels: !!def.levels,
       });
+      const n = names.length;
+      if (n) await announceStatusChange(isGM, names[0], { kind: "add", status: displayTitle(def, { level: 1 }) });
       console.info(`[status-tester] drop "${def.id}" on ${target.id}: ${n ? "added" : "not added (already there / not allowed)"}`);
       if (!n) {
         void OBR.notification.show(t(lang, "sttNothingAdded"), "INFO").catch(() => {});

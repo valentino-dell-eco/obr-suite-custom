@@ -87,6 +87,36 @@ function charWidth(ch: string, fontSize: number): number {
   return fontSize * 0.56;
 }
 
+// Real text measurement (canvas, same font as the map Text items) so the
+// pill hugs its title. The old per-character estimate ran wide on long
+// Latin titles and left an empty tail on the right of the chip.
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+const MEASURE_PX = 100;
+const widthCache = new Map<string, number>();
+function measuredWidth100(text: string): number | null {
+  if (measureCtx === undefined) {
+    try { measureCtx = document.createElement("canvas").getContext("2d"); } catch { measureCtx = null; }
+    if (measureCtx) measureCtx.font = `700 ${MEASURE_PX}px ${FONT}`;
+  }
+  if (!measureCtx) return null;
+  let w = widthCache.get(text);
+  if (w === undefined) {
+    w = measureCtx.measureText(text).width;
+    if (widthCache.size > 500) widthCache.clear();
+    widthCache.set(text, w);
+  }
+  return w;
+}
+
+function textWidth(text: string, fontSize: number): number {
+  const w100 = measuredWidth100(text);
+  // +3%: the map renderer's glyph spacing differs a hair from canvas.
+  if (w100 !== null) return (w100 / MEASURE_PX) * fontSize * 1.03;
+  let w = 0;
+  for (const ch of Array.from(text)) w += charWidth(ch, fontSize);
+  return w * 1.08;
+}
+
 /** Chip size (world units) for a status title at chip height `h`.
  *  `iconScale` / `textScale` are the personal size settings. */
 export function chipMetrics(
@@ -99,9 +129,7 @@ export function chipMetrics(
   const pad = h * 0.32;
   const iconSize = hasIcon ? Math.min(h * 0.7 * (scales.iconScale ?? 1), h * 1.3) : 0;
   const gap = hasIcon && title ? h * 0.18 : 0;
-  let textW = 0;
-  for (const ch of Array.from(title)) textW += charWidth(ch, fontSize);
-  textW = textW * 1.08;
+  const textW = textWidth(title, fontSize);
   const w = Math.max(h, pad + iconSize + gap + textW + pad);
   return { w, h, fontSize, pad, iconSize, gap, textW };
 }

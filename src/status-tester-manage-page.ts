@@ -33,6 +33,7 @@ import {
 } from "./modules/statusTester/types";
 import { onLibraryChange, readLibrary } from "./modules/statusTester/library";
 import { openLibraryModal } from "./modules/statusTester/open";
+import { announceStatusChange, type StatusChange } from "./modules/statusTester/announce";
 import { getLocalSettings, getRoomSettings, initRoomSettings } from "./modules/statusTester/settings";
 
 const params = new URLSearchParams(location.search);
@@ -153,10 +154,13 @@ function renderPicker(): void {
     .join("");
 }
 
-async function mutate(fn: (cur: AppliedStatus[]) => AppliedStatus[]): Promise<void> {
+/** Apply `fn` to the token's list; on success, announce `change` in
+ *  the chat (players only — see announce.ts). */
+async function mutate(fn: (cur: AppliedStatus[]) => AppliedStatus[], change?: StatusChange): Promise<void> {
   if (busy) return;
   busy = true;
   showError("");
+  let ok = false;
   try {
     await OBR.scene.items.updateItems([tokenId], (drafts) => {
       for (const d of drafts) {
@@ -168,12 +172,19 @@ async function mutate(fn: (cur: AppliedStatus[]) => AppliedStatus[]): Promise<vo
         else delete meta[APPLIED_KEY];
       }
     });
+    ok = true;
   } catch (e) {
     console.warn("[status-tester] update failed", e);
     showError(t(lang, "sttSaveFailed"));
   } finally {
     busy = false;
   }
+  if (ok && change && token) void announceStatusChange(isGM, token.name ?? "", change);
+}
+
+function titleOf(defId: string, level?: number): string {
+  const def = library.find((d) => d.id === defId);
+  return def ? displayTitle(def, { level }) : t(lang, "sttUnknownStatus");
 }
 
 function addStatus(defId: string): void {
@@ -190,10 +201,19 @@ function addStatus(defId: string): void {
     if (hidden) entry.hidden = true;
     if (def?.levels) entry.level = 1;
     return [...cur, entry];
-  });
+  }, { kind: "add", status: titleOf(defId, 1) });
 }
 
 function setLevel(uid: string, value: number | ((cur: number) => number)): void {
+  const before = token ? readApplied(token).find((a) => a.uid === uid) : undefined;
+  let change: StatusChange | undefined;
+  if (before) {
+    const from = before.level ?? 1;
+    const to = cleanLevel(typeof value === "function" ? value(from) : value);
+    if (to === undefined || to === from) return;
+    const def = library.find((d) => d.id === before.defId);
+    change = { kind: "level", status: def?.title || t(lang, "sttUnknownStatus"), from, to };
+  }
   void mutate((cur) =>
     cur.map((a) => {
       if (a.uid !== uid || (!isGM && a.hidden)) return a;
@@ -201,12 +221,17 @@ function setLevel(uid: string, value: number | ((cur: number) => number)): void 
       const next = cleanLevel(typeof value === "function" ? value(now) : value);
       return next === undefined ? a : { ...a, level: next };
     }),
+    change,
   );
 }
 
 function removeStatus(uid: string): void {
   // Players can only remove entries they can see (non-hidden).
-  void mutate((cur) => cur.filter((a) => !(a.uid === uid && (isGM || !a.hidden))));
+  const before = token ? readApplied(token).find((a) => a.uid === uid) : undefined;
+  void mutate(
+    (cur) => cur.filter((a) => !(a.uid === uid && (isGM || !a.hidden))),
+    before ? { kind: "remove", status: titleOf(before.defId, before.level) } : undefined,
+  );
 }
 
 function toggleHidden(uid: string): void {
@@ -214,9 +239,9 @@ function toggleHidden(uid: string): void {
   void mutate((cur) =>
     cur.map((a) => {
       if (a.uid !== uid) return a;
-      const n: AppliedStatus = { uid: a.uid, defId: a.defId };
-      if (!a.hidden) n.hidden = true;
-      return n;
+      // Keep everything (level included); only flip `hidden`.
+      const { hidden: _h, ...rest } = a;
+      return a.hidden ? rest : { ...rest, hidden: true };
     }),
   );
 }
