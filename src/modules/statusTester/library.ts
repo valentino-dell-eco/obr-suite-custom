@@ -42,6 +42,23 @@ export function onLibraryChange(cb: (defs: StatusDef[]) => void): () => void {
   });
 }
 
+/** Room metadata is capped at 16 KB for ALL extensions together. Used
+ *  to explain a failed write: total size + the biggest keys. */
+export const ROOM_LIMIT_BYTES = 16 * 1024;
+export async function roomMetadataUsage(): Promise<{ total: number; top: Array<{ key: string; bytes: number }> }> {
+  const enc = new TextEncoder();
+  const meta = await OBR.room.getMetadata();
+  const top = Object.entries(meta)
+    .map(([key, v]) => ({ key, bytes: enc.encode(JSON.stringify({ [key]: v })).length }))
+    .sort((a, b) => b.bytes - a.bytes);
+  return { total: enc.encode(JSON.stringify(meta)).length, top };
+}
+
+/** True when an OBR error means "room metadata over 16 KB". */
+export function isSizeLimitError(e: unknown): boolean {
+  return /size limit/i.test(String((e as Error)?.message ?? e));
+}
+
 export async function writeLibraryChanges(changes: {
   upsert?: StatusDef[];
   remove?: string[];

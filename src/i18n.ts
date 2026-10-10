@@ -2151,6 +2151,7 @@ const TR: Dict = {
   sttAlreadyApplied: { zh: "该 token 已有此状态（可修改等级）", en: "Already on this token (change its level instead)" },
   sttPlayersViewOnly: { zh: "GM 设置为玩家只能查看状态", en: "The GM lets players view statuses only" },
   sttLevel: { zh: "等级", en: "Level" },
+  sttRoomFull: { zh: "无法保存：房间元数据已满（所有扩展共用 16 KB）。请删除占用最多的数据", en: "Can't save: the room's metadata is full (16 KB shared by every extension). Free up the biggest entries" },
   sttFieldLevels: { zh: "有等级", en: "Has levels" },
   sttFieldLevelsHint: { zh: "标签显示为「名称 X」，等级可在 token 的管理窗口中修改（整数，可为负）。", en: "The chip reads “Title X”; the level is set in the token's manage window (whole numbers, negatives allowed)." },
   sttAddedN: { zh: "已添加到 {n} 个 token", en: "Added to {n} token(s)" },

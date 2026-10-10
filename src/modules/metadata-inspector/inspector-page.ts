@@ -310,7 +310,20 @@ async function loadRoomMode(): Promise<void> {
   try {
     const meta = (await OBR.room.getMetadata()) ?? {};
     const keyCount = Object.keys(meta).length;
-    const subline = `<b style="color:#7ec8f0">OBR.room.getMetadata()</b> · ${keyCount} ${en ? "keys" : "个 key"} · <span style="color:#9aa0b3">${en ? "room-level data, shared across scenes" : "跨 scene 的房间级数据"}</span>`;
+    // Room metadata is capped at 16 KB for every extension together —
+    // show the total and the heaviest keys so a full room is obvious.
+    const enc = new TextEncoder();
+    const total = enc.encode(JSON.stringify(meta)).length;
+    const heavy = Object.entries(meta)
+      .map(([k, v]) => [k, enc.encode(JSON.stringify({ [k]: v })).length] as const)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([k, n]) => `${escapeHtml(k)} ${(n / 1024).toFixed(1)} KB`)
+      .join(" · ");
+    const pct = Math.round((total / 16384) * 100);
+    const col = pct >= 90 ? "#ff8b7a" : pct >= 70 ? "#f5c876" : "#9be7a8";
+    const subline = `<b style="color:#7ec8f0">OBR.room.getMetadata()</b> · ${keyCount} ${en ? "keys" : "个 key"} · <b style="color:${col}">${(total / 1024).toFixed(1)} / 16 KB (${pct}%)</b>` +
+      `<br><span style="color:#9aa0b3">${en ? "Largest" : "最大"}: ${heavy}</span>`;
     renderRawMetadata(en ? "Room metadata" : "房间元数据", subline, meta);
   } catch (e) {
     bodyEl.innerHTML = `<div class="empty">${en ? "Failed to load room metadata: " : "加载房间元数据失败："}${escapeHtml(String((e as Error).message ?? e))}</div>`;

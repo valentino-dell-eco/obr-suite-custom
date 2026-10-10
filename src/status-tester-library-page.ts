@@ -26,7 +26,15 @@ import {
   sanitizeDef,
   textColorFor,
 } from "./modules/statusTester/types";
-import { onLibraryChange, readLibrary, restoreMissingPresets, writeLibraryChanges } from "./modules/statusTester/library";
+import {
+  ROOM_LIMIT_BYTES,
+  isSizeLimitError,
+  onLibraryChange,
+  readLibrary,
+  restoreMissingPresets,
+  roomMetadataUsage,
+  writeLibraryChanges,
+} from "./modules/statusTester/library";
 import { initRoomSettings, mayEditLibrary } from "./modules/statusTester/settings";
 
 const lang = getLocalLang();
@@ -105,6 +113,21 @@ function chipHtml(def: StatusDef): string {
 function setErr(el: HTMLElement, msg: string): void {
   el.textContent = msg;
   el.hidden = !msg;
+}
+
+/** A write failed because the room's metadata (shared by every
+ *  extension) is full: say so, with the biggest keys, so the GM knows
+ *  what to clean up. */
+async function showRoomFull(): Promise<void> {
+  let detail = "";
+  try {
+    const u = await roomMetadataUsage();
+    const kb = (n: number) => (n / 1024).toFixed(1);
+    detail = ` (${kb(u.total)} / ${kb(ROOM_LIMIT_BYTES)} KB) — ` +
+      u.top.slice(0, 4).map((x) => `${x.key}: ${kb(x.bytes)} KB`).join(" · ");
+  } catch {}
+  warnEl.textContent = t(lang, "sttRoomFull") + detail;
+  warnEl.hidden = false;
 }
 
 function updateWarning(defs: StatusDef[]): void {
@@ -310,6 +333,7 @@ presetBtn.addEventListener("click", async () => {
     setTimeout(() => { presetBtn.textContent = t(lang, "sttRestorePresets"); }, 2000);
   } catch (e) {
     console.warn("[status-tester] restore presets failed", e);
+    if (isSizeLimitError(e)) void showRoomFull();
   } finally {
     presetBtn.disabled = false;
   }
@@ -438,6 +462,7 @@ saveBtn.addEventListener("click", async () => {
   } catch (e) {
     console.warn("[status-tester] save failed", e);
     setErr(formErr, t(lang, "sttSaveFailed"));
+    if (isSizeLimitError(e)) void showRoomFull();
   } finally {
     saving = false;
     saveBtn.disabled = false;
