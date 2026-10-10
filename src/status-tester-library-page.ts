@@ -20,7 +20,6 @@ import {
   iconUrl,
   isHexColor,
   isHttpUrl,
-  librarySizeBytes,
   newId,
   sanitizeAttachment,
   sanitizeDef,
@@ -28,6 +27,7 @@ import {
 } from "./modules/statusTester/types";
 import {
   ROOM_LIMIT_BYTES,
+  encodedLibraryBytes,
   isSizeLimitError,
   onLibraryChange,
   readLibrary,
@@ -131,7 +131,7 @@ async function showRoomFull(): Promise<void> {
 }
 
 function updateWarning(defs: StatusDef[]): void {
-  const bytes = librarySizeBytes(defs);
+  const bytes = encodedLibraryBytes(defs);
   if (bytes > LIBRARY_WARN_BYTES) {
     warnEl.textContent = t(lang, "sttSizeWarning").replace("{n}", (bytes / 1024).toFixed(1));
     warnEl.hidden = false;

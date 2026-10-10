@@ -8,6 +8,11 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 - **Shift+C** shows / hides the Chase Tracker panel (same as Tools Suite → Chase Tracker).
 
+### Fixed
+
+- **Status library empty / “Restore D&D 5e” failing** in rooms whose metadata (16 KB shared by every extension) was nearly full. The library is now stored as a diff against the built-in presets (`{ v: 2, c, d }`): an untouched room stores nothing, and the old full-list format is converted on the GM's next load. Preset titles follow each viewer's language. Save errors caused by a full room now say so and list the biggest room-metadata keys; the Metadata Inspector's Room tab shows the room's total size.
+
+
 ## [2.0.0] — 2026-10-10
 
 Breaking: the old full-screen Status Tracker is replaced by the new Status Tracker (status chips). Buffs stored by the old tracker on tokens are no longer drawn.

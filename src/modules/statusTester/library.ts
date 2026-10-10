@@ -1,12 +1,25 @@
-// Status Tester — status library (room metadata) access.
+// Status Tracker — status library (room metadata) access.
 //
-// Usable from the background iframe and from every page. Writes are
-// "merge by id against a fresh read": the caller says which ids it
-// upserts / deletes, we re-read the room metadata right before the
-// single setMetadata call and apply only those changes, so concurrent
-// edits to OTHER statuses aren't clobbered.
+// Room metadata is capped at 16 KB for EVERY extension in the room
+// together, so the library is stored as a DIFF against the built-in
+// D&D 5e presets (which live in code, presets.ts):
+//
+//   { v: 2, c: [compact defs], d: [preset ids] }
+//     c — custom statuses + presets the GM edited (full definition)
+//     d — presets the GM deleted
+//
+// An untouched room stores nothing at all (= every preset), and preset
+// titles follow each viewer's UI language. The original format — a
+// plain array holding every status — is still read, and converted the
+// first time a GM client loads the module.
+//
+// Writes are "merge by id against a fresh read": the caller says which
+// ids it upserts / deletes, we re-read right before the single
+// setMetadata call and apply only those changes, so concurrent edits
+// to OTHER statuses aren't clobbered.
 
 import OBR from "@owlbear-rodeo/sdk";
+import { getLocalLang } from "../../state";
 import {
   LIBRARY_KEY,
   StatusDef,
@@ -14,19 +27,97 @@ import {
   sanitizeDef,
   serializeLibrary,
 } from "./types";
-import { LEGACY_PRESET_LOOK, PRESET_ICON, PRESET_LEVELS, presetDefs } from "./presets";
+import { LEGACY_PRESET_LOOK, PRESET_ICON, PRESET_IDS, presetDefs } from "./presets";
+
+interface LibraryV2 {
+  v: 2;
+  c: unknown[];
+  d: string[];
+}
+
+function isV2(raw: unknown): raw is LibraryV2 {
+  return !!raw && typeof raw === "object" && (raw as { v?: unknown }).v === 2;
+}
+
+const PRESET_SET = new Set(PRESET_IDS);
+
+function presetById(id: string, lang: string): StatusDef | undefined {
+  return presetDefs(lang).find((p) => p.id === id);
+}
+
+/** Canonical JSON of a definition, for equality checks. */
+function canon(d: StatusDef): string {
+  return JSON.stringify(serializeLibrary([d])[0]);
+}
+
+/** Is `d` just an unedited preset (in either UI language)? Entries from
+ *  the original seeding (old icon / emoji, no `levels` yet) count as
+ *  unedited too. */
+function isUneditedPreset(d: StatusDef): boolean {
+  if (!PRESET_SET.has(d.id)) return false;
+  let probe: StatusDef = { ...d };
+  const old = LEGACY_PRESET_LOOK[d.id];
+  if (old && (probe.icon ?? undefined) === old.icon && (probe.emoji ?? undefined) === old.emoji) {
+    const { emoji: _drop, ...rest } = probe;
+    probe = { ...rest, icon: PRESET_ICON[d.id] || undefined };
+  }
+  for (const lang of ["en", "zh"]) {
+    const p = presetById(d.id, lang);
+    if (!p) continue;
+    // `levels` never set = take the preset's; false and unset are equal.
+    const cmp = { ...probe, levels: (probe.levels ?? p.levels) || undefined };
+    if (canon(cmp) === canon({ ...p, levels: p.levels || undefined })) return true;
+  }
+  return false;
+}
+
+/** Room value → the full library this viewer sees. */
+export function resolveLibrary(raw: unknown, lang: string = getLocalLang()): StatusDef[] {
+  const presets = presetDefs(lang);
+  if (raw === undefined || raw === null) return presets;
+  if (Array.isArray(raw)) {
+    // Original format: every status stored in full.
+    return parseLibrary(raw).map((d) => (isUneditedPreset(d) ? presetById(d.id, lang) ?? d : d));
+  }
+  if (!isV2(raw)) return presets;
+  const custom = parseLibrary(raw.c);
+  const deleted = new Set(Array.isArray(raw.d) ? raw.d.filter((x): x is string => typeof x === "string") : []);
+  const byId = new Map(custom.map((d) => [d.id, d]));
+  const out = presets.filter((p) => !deleted.has(p.id)).map((p) => byId.get(p.id) ?? p);
+  for (const d of custom) if (!PRESET_SET.has(d.id)) out.push(d);
+  return out;
+}
+
+/** Full library → the compact room value. */
+export function encodeLibrary(defs: StatusDef[]): LibraryV2 {
+  const have = new Set(defs.map((d) => d.id));
+  return {
+    v: 2,
+    c: serializeLibrary(defs.filter((d) => !isUneditedPreset(d))),
+    d: PRESET_IDS.filter((id) => !have.has(id)),
+  };
+}
+
+/** Bytes the library takes in room metadata. */
+export function encodedLibraryBytes(defs: StatusDef[]): number {
+  try {
+    return new TextEncoder().encode(JSON.stringify(encodeLibrary(defs))).length;
+  } catch {
+    return 0;
+  }
+}
 
 export async function readLibrary(): Promise<StatusDef[]> {
   try {
     const meta = await OBR.room.getMetadata();
-    return parseLibrary(meta[LIBRARY_KEY]);
+    return resolveLibrary(meta[LIBRARY_KEY]);
   } catch {
-    return [];
+    return presetDefs(getLocalLang());
   }
 }
 
 export function libraryFromMetadata(meta: Record<string, unknown>): StatusDef[] {
-  return parseLibrary(meta[LIBRARY_KEY]);
+  return resolveLibrary(meta[LIBRARY_KEY]);
 }
 
 export function onLibraryChange(cb: (defs: StatusDef[]) => void): () => void {
@@ -38,7 +129,7 @@ export function onLibraryChange(cb: (defs: StatusDef[]) => void): () => void {
     try { raw = JSON.stringify(meta[LIBRARY_KEY] ?? null); } catch {}
     if (raw === last) return;
     last = raw;
-    cb(parseLibrary(meta[LIBRARY_KEY]));
+    cb(resolveLibrary(meta[LIBRARY_KEY]));
   });
 }
 
@@ -73,58 +164,33 @@ export async function writeLibraryChanges(changes: {
     if (i >= 0) next[i] = d;
     else next = [...next, d];
   }
-  await OBR.room.setMetadata({ [LIBRARY_KEY]: serializeLibrary(next) });
+  await OBR.room.setMetadata({ [LIBRARY_KEY]: encodeLibrary(next) });
   return next;
 }
 
-/** First run in a room (no library key at all): seed the D&D 5e 2014
- *  presets. A library the GM emptied on purpose ([] stored) is left
- *  alone. Call from a GM client only. */
+/** GM load: rooms still holding the original full-list format are
+ *  converted to the compact diff (frees most of the space). Nothing
+ *  is written for a room that never touched the library — the presets
+ *  are implicit. Call from a GM client only. */
 export async function seedPresetsIfMissing(lang: string): Promise<boolean> {
   try {
     const meta = await OBR.room.getMetadata();
-    if (meta[LIBRARY_KEY] !== undefined) {
-      await upgradeLegacyPresets();
-      return false;
-    }
-    await OBR.room.setMetadata({ [LIBRARY_KEY]: serializeLibrary(presetDefs(lang)) });
+    const raw = meta[LIBRARY_KEY];
+    if (!Array.isArray(raw)) return false;
+    await OBR.room.setMetadata({ [LIBRARY_KEY]: encodeLibrary(resolveLibrary(raw, lang)) });
     return true;
-  } catch {
+  } catch (e) {
+    console.warn("[status-tester] library conversion failed", e);
     return false;
   }
 }
 
-/** Re-add every preset whose id is not in the library (edited presets
- *  keep their edits). Returns how many were added. */
+/** Re-add every preset missing from the library (edited presets keep
+ *  their edits). Returns how many were added. */
 export async function restoreMissingPresets(lang: string): Promise<number> {
   const fresh = await readLibrary();
   const have = new Set(fresh.map((d) => d.id));
   const missing = presetDefs(lang).filter((d) => !have.has(d.id));
   if (missing.length) await writeLibraryChanges({ upsert: missing });
   return missing.length;
-}
-
-/** Presets seeded before the D&D icon set still use a generic icon or
- *  an emoji. Move them to their new icon — only entries whose icon and
- *  emoji are EXACTLY the original seeded ones (never a GM's edits). */
-export async function upgradeLegacyPresets(): Promise<number> {
-  const fresh = await readLibrary();
-  const upsert: StatusDef[] = [];
-  for (const d of fresh) {
-    // Presets seeded before levels existed (Exhaustion): turn levels on
-    // once — `levels` is stored explicitly afterwards, so a GM who
-    // switches it off is never overridden.
-    if (PRESET_LEVELS.has(d.id) && d.levels === undefined) {
-      upsert.push({ ...d, levels: true });
-      continue;
-    }
-    const old = LEGACY_PRESET_LOOK[d.id];
-    const icon = PRESET_ICON[d.id];
-    if (!old || !icon) continue;
-    if ((d.icon ?? undefined) !== old.icon || (d.emoji ?? undefined) !== old.emoji) continue;
-    const { emoji: _drop, ...rest } = d;
-    upsert.push({ ...rest, icon });
-  }
-  if (upsert.length) await writeLibraryChanges({ upsert });
-  return upsert.length;
 }
