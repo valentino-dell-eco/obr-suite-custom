@@ -176,12 +176,15 @@ export interface AppliedStatus {
 
 export const LEVEL_MIN = -99;
 export const LEVEL_MAX = 99;
+/** − / + step for levels. */
+export const LEVEL_STEP = 0.5;
 
 /** Clamp anything to a valid integer level (undefined if not a number). */
 export function cleanLevel(v: unknown): number | undefined {
   const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
   if (typeof n !== "number" || !Number.isFinite(n)) return undefined;
-  return Math.max(LEVEL_MIN, Math.min(LEVEL_MAX, Math.trunc(n)));
+  // Steps of 0.5 (1, 1.5, 2 …): snap to the nearest half.
+  return Math.max(LEVEL_MIN, Math.min(LEVEL_MAX, Math.round(n * 2) / 2));
 }
 
 /** Title as shown on a chip: "Exhaustion 3" for levelled statuses. */

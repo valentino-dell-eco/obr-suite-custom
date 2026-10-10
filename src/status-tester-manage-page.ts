@@ -20,6 +20,7 @@ import {
   MANAGE_MODAL_ID,
   StatusDef,
   canManage,
+  LEVEL_STEP,
   cleanLevel,
   displayTitle,
   iconUrl,
@@ -124,9 +125,9 @@ function render(): void {
           : "";
         // Level stepper for statuses that have levels.
         const lv = manage && def?.levels
-          ? `<span class="lv"><button type="button" data-act="lv-" data-uid="${escapeHtml(a.uid)}" aria-label="−1">−</button>` +
-            `<input type="number" step="1" data-uid="${escapeHtml(a.uid)}" value="${a.level ?? 1}" aria-label="${escapeHtml(t(lang, "sttLevel"))}">` +
-            `<button type="button" data-act="lv+" data-uid="${escapeHtml(a.uid)}" aria-label="+1">+</button></span>`
+          ? `<span class="lv"><button type="button" data-act="lv-" data-uid="${escapeHtml(a.uid)}" aria-label="−0.5">−</button>` +
+            `<input type="number" step="0.5" data-uid="${escapeHtml(a.uid)}" value="${a.level ?? 1}" aria-label="${escapeHtml(t(lang, "sttLevel"))}">` +
+            `<button type="button" data-act="lv+" data-uid="${escapeHtml(a.uid)}" aria-label="+0.5">+</button></span>`
           : "";
         return `<div class="row">${chipHtml(def, { hidden: a.hidden, applied: a })}<span class="spacer"></span>${lv}${eye}${rm}</div>`;
       })
@@ -226,8 +227,8 @@ appliedEl.addEventListener("click", (e) => {
   const uid = btn.dataset.uid ?? "";
   if (btn.dataset.act === "rm") removeStatus(uid);
   else if (btn.dataset.act === "hide") toggleHidden(uid);
-  else if (btn.dataset.act === "lv+") setLevel(uid, (n) => n + 1);
-  else if (btn.dataset.act === "lv-") setLevel(uid, (n) => n - 1);
+  else if (btn.dataset.act === "lv+") setLevel(uid, (n) => n + LEVEL_STEP);
+  else if (btn.dataset.act === "lv-") setLevel(uid, (n) => n - LEVEL_STEP);
 });
 
 // Typed level: commit on change / Enter; non-numbers snap back.

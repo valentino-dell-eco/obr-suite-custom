@@ -32,7 +32,9 @@ html,body{
 #chip.ghost{background:transparent!important;color:transparent!important;
   border-color:transparent!important;box-shadow:none;opacity:1!important}
 #chip.ghost > *{visibility:hidden}
-#chip.ghost:hover{box-shadow:0 0 0 2px rgba(255,255,255,.75)}
+/* No hover ring: the HTML chip can be a frame out of step with the map
+   chip (rotation / resize), so a ring drawn on it showed up offset. */
+#chip.ghost:hover{box-shadow:none}
 #gear{
   position:absolute;top:var(--chip-cy,50%);transform:translateY(-50%);
   display:none;align-items:center;justify-content:center;

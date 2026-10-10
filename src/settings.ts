@@ -3386,7 +3386,7 @@ const TABS: TabDef[] = [
   <li><b>快速管理</b>：点击状态标签显示齿轮，点击齿轮打开管理窗口</li>
   <li>多个状态时每 5 秒轮换显示；移动镜头或 token 时标签暂时隐藏</li>
   <li>GM 可将状态设为对玩家隐藏，之后可随时切换为可见</li>
-  <li><b>等级</b>：在状态库中为状态开启「有等级」（如力竭），标签显示为「力竭 3」，可在 token 的管理窗口中修改等级（整数，可为负）</li>
+  <li><b>等级</b>：在状态库中为状态开启「有等级」（如力竭），标签显示为「力竭 3」，可在 token 的管理窗口中修改等级（步长 0.5，可为负）</li>
 </ul>`,
       en: `<p><b>Status Tracker</b> — status chips with an icon, colour and title, plus an optional image overlaid on the token.</p>
 <ul>
@@ -3398,7 +3398,7 @@ const TABS: TabDef[] = [
   <li><b>Quick manage</b>: click a chip to reveal the gear, click the gear to manage</li>
   <li>Several statuses rotate every 5 seconds; chips hide while the camera or a token is moving</li>
   <li>The GM can hide a status from players and make it visible later</li>
-  <li><b>Levels</b>: turn on "Has levels" for a status in the library (e.g. Exhaustion) — the chip reads "Exhaustion 3" and the level is edited in the token's manage window (whole numbers, negatives allowed)</li>
+  <li><b>Levels</b>: turn on "Has levels" for a status in the library (e.g. Exhaustion) — the chip reads "Exhaustion 3" and the level is edited in the token's manage window (steps of 0.5, negatives allowed)</li>
 </ul>`,
     } as Record<string, string>)[lang],
     afterRender: (root, gm) => wireModuleOptions(root, gm, () => { if (activeTab === "statusTester") renderContent(); }),

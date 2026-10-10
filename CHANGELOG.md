@@ -6,6 +6,7 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 ### Added
 
+- **Status levels in steps of 0.5** (−/+ and typed values snap to the nearest half; −99 … 99).
 - **Shift+C** shows / hides the Chase Tracker panel (same as Tools Suite → Chase Tracker).
 
 ### Fixed

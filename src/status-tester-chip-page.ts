@@ -47,6 +47,8 @@ const BASE_W = Math.max(Number(params.get("w")) || 360, 40);
 // Each token has its own chip popover; this is ours.
 const POPOVER_ID = params.get("pid") || CHIP_POPOVER_ID;
 const LIST_MIN_W = 240;
+/** Gap between the chip band and the hover list (px). */
+const LIST_GAP = 4;
 
 const chipEl = document.getElementById("chip") as HTMLDivElement;
 const gearEl = document.getElementById("gear") as HTMLButtonElement;
@@ -190,25 +192,39 @@ function renderList(): void {
   }
   const idx = ls.rotateSec > 0 ? rotationIndex(list.length, Date.now(), rotateMs(ls)) : 0;
   listEl.innerHTML = list.map((e, i) => listRowHtml(e, i === idx)).join("");
-  listEl.style.top = `${BASE_H - 2}px`;
+  // Entirely BELOW the chip's band: while the popover is still at its
+  // base height (before / after the resize) no sliver of the list can
+  // show through — that was the dark line flashing under the chip.
+  listEl.style.top = `${BASE_H + LIST_GAP}px`;
   listEl.classList.add("visible");
-  const needed = Math.ceil(BASE_H + listEl.offsetHeight + 6);
+  const needed = Math.ceil(BASE_H + LIST_GAP + listEl.offsetHeight + 6);
   void OBR.popover.setWidth(POPOVER_ID, Math.max(BASE_W, LIST_MIN_W, Math.ceil(listEl.offsetWidth + 8))).catch(() => {});
   void OBR.popover.setHeight(POPOVER_ID, needed).catch(() => {});
 }
 
+// Open on hover; close a moment after the mouse leaves both the chip
+// and the list, so crossing the small gap between them doesn't close it.
+let closeTimer: ReturnType<typeof setTimeout> | null = null;
+function cancelClose(): void {
+  if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+}
 chipEl.addEventListener("mouseenter", () => {
+  cancelClose();
+  if (listOpen) return;
   listOpen = true;
   renderList();
 });
-// Close only when leaving both the chip and the list (the list sits
-// right under the chip, so moving onto it keeps it open).
+listEl.addEventListener("mouseenter", cancelClose);
 for (const el of [chipEl, listEl]) {
   el.addEventListener("mouseleave", (ev) => {
     const to = ev.relatedTarget as Node | null;
     if (to && (chipEl.contains(to) || listEl.contains(to) || gearEl.contains(to))) return;
-    listOpen = false;
-    renderList();
+    cancelClose();
+    closeTimer = setTimeout(() => {
+      closeTimer = null;
+      listOpen = false;
+      renderList();
+    }, 160);
   });
 }
 
