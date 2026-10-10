@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Room Chat</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  height:100%;width:100%;overflow:hidden;
+  background:rgba(15,20,36,0.96);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;
+  color:#e6e8ee;
+  border-radius:14px;
+}
+.chat{display:flex;flex-direction:column;height:100%;border:1px solid rgba(255,255,255,0.14);border-radius:14px;overflow:hidden}
+.head{
+  display:flex;align-items:center;gap:8px;flex:none;height:40px;padding:8px 10px 8px 12px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+  font-size:13px;font-weight:800;user-select:none;
+}
+.drag-handle{
+  flex-shrink:0;width:14px;height:18px;display:flex;align-items:center;justify-content:center;
+  cursor:grab;color:rgba(255,255,255,0.3);opacity:0.55;
+  transition:opacity .12s,color .12s;touch-action:none;user-select:none;
+}
+.drag-handle:hover{opacity:1;color:rgba(255,255,255,0.85)}
+.drag-handle.is-dragging{cursor:grabbing;opacity:1;color:#5dade2}
+.drag-handle svg{width:12px;height:18px;display:block;pointer-events:none}
+.head .title{flex:1}
+.close{
+  flex:none;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+  color:rgba(255,255,255,0.5);cursor:pointer;font-size:14px;font-weight:800;
+}
+.close:hover{background:rgba(255,255,255,0.1);color:#fff}
+.clear{
+  flex:none;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+  color:rgba(255,255,255,0.5);cursor:pointer;
+}
+.clear:hover{background:rgba(231,76,60,0.2);color:#ff8b7a}
+.clear svg{width:14px;height:14px;pointer-events:none}
+.confirmbar{
+  flex:none;display:none;align-items:center;gap:6px;flex-wrap:wrap;
+  padding:8px 12px;border-top:1px solid rgba(231,76,60,0.35);
+  background:rgba(231,76,60,0.12);font-size:11.5px;color:#ffb3a8;
+}
+.confirmbar.visible{display:flex}
+.confirmbar .q{flex:1 1 100%;font-weight:600}
+.confirmbar button{
+  font-size:11px;font-weight:700;border:none;border-radius:7px;padding:5px 10px;cursor:pointer;
+}
+.confirmbar .cancel{background:rgba(255,255,255,0.08);color:#c5cad8}
+.confirmbar .cancel:hover{background:rgba(255,255,255,0.16)}
+.confirmbar .danger{background:rgba(231,76,60,0.85);color:#fff}
+.confirmbar .danger:hover{background:#e74c3c}
+
+.msgs{
+  flex:1;min-height:0;overflow-y:auto;padding:10px 12px;
+  display:flex;flex-direction:column;gap:8px;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.18) transparent;
+}
+.msgs::-webkit-scrollbar{width:8px}
+.msgs::-webkit-scrollbar-track{background:transparent}
+.msgs::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.18);border-radius:4px;border:2px solid transparent;background-clip:padding-box}
+.msgs::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.32)}
+.empty{margin:auto;font-size:12px;color:#7d8494;text-align:center}
+
+.msg{display:flex;flex-direction:column;gap:2px;font-size:12.5px;line-height:1.35;word-break:break-word}
+.msg .meta{display:flex;align-items:baseline;gap:6px;font-size:11px;color:#8a90a3}
+.msg .from{font-weight:700}
+.msg .badge{
+  font-size:9.5px;font-weight:800;letter-spacing:.03em;padding:1px 6px;border-radius:999px;
+}
+.msg .badge.gm{background:rgba(156,124,255,0.22);color:#c4b0ff}
+.msg .badge.player{background:rgba(245,200,118,0.2);color:#f5c876}
+.msg .body{color:#e6e8ee;white-space:pre-wrap}
+.msg.whisper .body{font-style:italic}
+.msg.own .body{color:#cfe6ff}
+.cast{
+  margin-top:2px;padding:7px 9px;border-radius:9px;
+  background:linear-gradient(135deg,rgba(93,173,226,0.18),rgba(156,124,255,0.18));
+  border:1px solid rgba(156,124,255,0.4);font-size:12.5px;
+}
+.cast-head{display:flex;align-items:center;gap:4px}
+.cast .spell{font-weight:800;color:#e9e0ff;flex:1;min-width:0}
+.cast-btn{
+  flex:none;border:none;background:transparent;color:#b9c3d9;cursor:pointer;
+  font-size:11px;line-height:1;padding:3px 5px;border-radius:5px;opacity:.7;
+  transition:opacity .12s,background .12s,transform .15s;
+}
+.cast-btn:hover{opacity:1;background:rgba(255,255,255,0.1)}
+.cast-toggle.open{transform:rotate(180deg);opacity:1}
+.cast .lvl{font-size:11px;color:#b9c3d9;margin-top:2px}
+.cast-meta{font-size:10.5px;color:#9aa0b3;margin-top:5px;font-style:italic}
+.cast-scaled{font-size:11px;color:#f5c876;margin-top:2px;font-weight:600}
+.cast-desc .rollable{color:#7ec8f0;font-weight:700;cursor:pointer;border-bottom:1px dotted rgba(126,200,240,0.6);padding:0 1px;border-radius:3px}
+.cast-desc .rollable:hover{background:rgba(93,173,226,0.2)}
+.cast-desc .rollable.scaled{color:#f5c876;border-bottom-color:rgba(245,200,118,0.7)}
+.cast-desc{font-size:12px;color:#dde1ec;margin-top:5px;white-space:pre-wrap;line-height:1.4}
+
+.composer{flex:none;border-top:1px solid rgba(255,255,255,0.10);background:rgba(8,11,20,0.65);padding:8px 10px 10px;display:flex;flex-direction:column;gap:7px}
+.channels{display:flex;align-items:center;gap:6px}
+.ch{
+  flex:none;font-size:11px;font-weight:700;padding:5px 10px;border-radius:999px;cursor:pointer;
+  background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.14);color:#c5cad8;user-select:none;
+}
+.ch:hover{background:rgba(255,255,255,0.12)}
+.ch.active[data-ch="all"]{background:rgba(52,152,219,0.28);border-color:#3498db;color:#fff}
+.ch.active[data-ch="gm"]{background:rgba(156,124,255,0.3);border-color:#9c7cff;color:#fff}
+.ch.active[data-ch="player"]{background:rgba(245,200,118,0.26);border-color:#f5c876;color:#fff}
+.ch.disabled{opacity:.35;pointer-events:none}
+select.target{
+  flex:1;min-width:0;font-size:11px;padding:5px 6px;border-radius:8px;
+  background:#1a2036;border:1px solid rgba(255,255,255,0.18);color:#e6e8ee;
+}
+.row{display:flex;gap:6px}
+input.text{
+  flex:1;min-width:0;font-size:12.5px;padding:8px 10px;border-radius:9px;
+  background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.18);color:#e6e8ee;outline:none;
+}
+input.text:focus{border-color:#5dade2}
+button.send{
+  flex:none;font-size:12px;font-weight:700;border:none;border-radius:9px;padding:0 14px;
+  background:#3498db;color:#fff;cursor:pointer;
+}
+button.send:hover{background:#4aa8e8}
+button.send:disabled{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.35);cursor:default}
+</style>
+</head>
+<body>
+<div class="chat">
+  <div class="head">
+    <div class="drag-handle" id="dragHandle">
+      <svg viewBox="0 0 12 18" aria-hidden="true">
+        <circle cx="3" cy="3" r="1.2" fill="currentColor"/><circle cx="9" cy="3" r="1.2" fill="currentColor"/>
+        <circle cx="3" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/>
+        <circle cx="3" cy="15" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/>
+      </svg>
+    </div>
+    <span class="title" id="title">Room Chat</span>
+    <div class="clear" id="clear" title="Clear chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        <line x1="10" y1="11" x2="10" y2="17"/>
+        <line x1="14" y1="11" x2="14" y2="17"/>
+      </svg>
+    </div>
+    <div class="close" id="close" title="Close">✕</div>
+  </div>
+  <div class="msgs" id="msgs"></div>
+  <div class="confirmbar" id="confirmBar">
+    <div class="q" id="confirmQ">Clear the chat?</div>
+    <button class="cancel" id="cfCancel">Cancel</button>
+    <button class="danger" id="cfLocal">Clear mine</button>
+    <button class="danger" id="cfAll" style="display:none">Clear for everyone</button>
+  </div>
+  <div class="composer">
+    <div class="channels" id="channels">
+      <div class="ch active" data-ch="all" id="chAll">All</div>
+      <div class="ch" data-ch="gm" id="chGm">GM</div>
+      <div class="ch" data-ch="player" id="chPlayer">Player</div>
+      <select class="target" id="target" style="display:none"></select>
+    </div>
+    <div class="row">
+      <input class="text" id="text" type="text" maxlength="500" autocomplete="off">
+      <button class="send" id="send">Send</button>
+    </div>
+  </div>
+</div>
+<script type="module" src="/src/room-chat-page.ts"></script>
+</body>
+</html>

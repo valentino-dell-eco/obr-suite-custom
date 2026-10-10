@@ -25,6 +25,7 @@ import OBR, { buildImage } from "@owlbear-rodeo/sdk";
 import type { Image, Item } from "@owlbear-rodeo/sdk";
 import { assetUrl } from "../../asset-base";
 import { getLocalLang } from "../../state";
+import { initBroadcastAuth, isFromSelf } from "../../utils/broadcastAuth";
 
 // Dev-only module; per-client language read once at init (context menus
 // register at boot, so a live re-render isn't needed).
@@ -306,6 +307,7 @@ function probeImageSize(url: string): Promise<{ w: number; h: number }> {
 // ---- setup / teardown ----------------------------------------------
 
 export async function setupTransform(): Promise<void> {
+  await initBroadcastAuth();
   try { myRole = (await OBR.player.getRole()) as "GM" | "PLAYER"; } catch {}
   try { myId = await OBR.player.getId(); } catch {}
 
@@ -377,6 +379,7 @@ export async function setupTransform(): Promise<void> {
   // token image + size to the token, then close the picker.
   try {
     const u = OBR.broadcast.onMessage(BC_TRANSFORM_PICK, async (event) => {
+      if (!isFromSelf(event)) return; // LOCAL from our bestiary picker
       const data = event.data as {
         itemId?: string; tokenUrl?: string; size?: string; name?: string;
       } | undefined;
@@ -406,6 +409,7 @@ export async function setupTransform(): Promise<void> {
   // bestiary picker is now the primary "变身" entry point.
   try {
     const u = OBR.broadcast.onMessage(BC_APPLY_FORM, async (event) => {
+      if (!isFromSelf(event)) return; // LOCAL from transform.html popover
       const data = event.data as { itemId?: string; form?: TransformForm } | undefined;
       if (!data?.itemId || !data.form?.image?.url) return;
       if (!data.form.image.mime) data.form.image.mime = mimeFromUrl(data.form.image.url);

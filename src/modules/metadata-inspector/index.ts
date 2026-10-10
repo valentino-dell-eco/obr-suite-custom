@@ -1,26 +1,14 @@
-// Metadata inspector — DM-only.
-//
-// Tool registers in OBR's left sidebar. While the tool is active,
-// the top action bar shows THREE selectable mode buttons (modes have
-// built-in active-state styling, unlike actions):
-//
-//   • 默认  — selection-driven small popover beside the picked item.
-//             Empty / multi selection → no popover. This is the
-//             original telescope behavior and the default starting
-//             mode every time the tool activates.
-//   • 场景  — full-height popover at the right edge with scene
-//             metadata + the option to switch to room.
-//   • 房间  — same popover, defaulting to room metadata.
-//
-// Mode buttons are mutually exclusive (OBR's mode selector is a
-// segmented control). Switching to scene/room closes the small item
-// popover; switching back to default closes the big popover and
-// re-renders the item popover for the current selection.
-
 import OBR from "@owlbear-rodeo/sdk";
 import { assetUrl } from "../../asset-base";
 import { getLocalLang } from "../../state";
 import { IS_MOBILE } from "../../feature-flags";
+import {
+  GM_TOOLS_SUITE_ID,
+  suiteModeFilter,
+  registerSuiteItem,
+  unregisterSuiteItem,
+  activateHiddenMode,
+} from "../toolsSuite";
 
 const TOOL_ID = "com.obr-suite/metadata-inspector";
 const MODE_DEFAULT = `${TOOL_ID}/mode-default`;
@@ -32,8 +20,9 @@ const POPOVER_META_ID = "com.obr-suite/metadata-inspector/meta";
 const ICON_URL = assetUrl("metadata-inspector-icon.svg");
 const ICON_SCENE_URL = assetUrl("metadata-inspector-scene-icon.svg");
 const ICON_ROOM_URL = assetUrl("metadata-inspector-room-icon.svg");
-const ICON_PERFORMANCE_URL = assetUrl("metadata-inspector-room-icon.svg"); // TODO: create performance icon
+const ICON_PERFORMANCE_URL = assetUrl("metadata-inspector-room-icon.svg");
 const POPOVER_URL = assetUrl("metadata-inspector.html");
+const INSPECTOR_MODES = new Set([MODE_DEFAULT, MODE_SCENE, MODE_ROOM, MODE_PERFORMANCE]);
 
 export const BC_INSPECTOR_SET_MODE = "com.obr-suite/metadata-inspector/set-mode";
 
@@ -76,25 +65,13 @@ async function itemAnchor(itemId: string): Promise<{ left: number; top: number }
   return { left, top };
 }
 
-// Right-edge anchor + height that fills the viewport. The user
-// asked for "可以更长一些包括整个屏幕高度" — so we compute a height
-// that equals (viewport height − top inset − bottom inset). The
-// inspector page's ResizeObserver still respects this (it can only
-// shrink the popover smaller than what we set, never grow past the
-// initial allocation).
-async function metaAnchorAndSize(): Promise<{
-  anchor: { left: number; top: number };
-  height: number;
-}> {
+async function metaAnchorAndSize(): Promise<{ anchor: { left: number; top: number }; height: number }> {
   let vw = 1280;
   let vh = 720;
   try { vw = await OBR.viewport.getWidth(); } catch {}
   try { vh = await OBR.viewport.getHeight(); } catch {}
   return {
-    anchor: {
-      left: Math.max(8, vw - META_W - META_TOP_INSET),
-      top: META_TOP_INSET,
-    },
+    anchor: { left: Math.max(8, vw - META_W - META_TOP_INSET), top: META_TOP_INSET },
     height: Math.max(240, vh - META_TOP_INSET - META_BOTTOM_INSET),
   };
 }
@@ -114,9 +91,6 @@ async function closeMetaInspector(): Promise<void> {
 
 async function openItemInspector(itemId: string): Promise<void> {
   if (metaPopoverOpen) await closeMetaInspector();
-  // Reopen with new anchor — close existing first so OBR re-evaluates
-  // anchorPosition; just calling open with the same id keeps the old
-  // anchor on some SDK versions.
   if (itemPopoverOpen) {
     try { await OBR.popover.close(POPOVER_ITEM_ID); } catch {}
     itemPopoverOpen = false;
@@ -146,13 +120,8 @@ async function openItemInspector(itemId: string): Promise<void> {
 async function openMetaInspector(mode: MetaMode): Promise<void> {
   if (itemPopoverOpen) await closeItemInspector();
   if (metaPopoverOpen) {
-    // Already open — just switch tab via broadcast.
     try {
-      await OBR.broadcast.sendMessage(
-        BC_INSPECTOR_SET_MODE,
-        { mode },
-        { destination: "LOCAL" },
-      );
+      await OBR.broadcast.sendMessage(BC_INSPECTOR_SET_MODE, { mode }, { destination: "LOCAL" });
     } catch (e) {
       console.warn("[metadata-inspector] broadcast set-mode failed", e);
     }
@@ -180,16 +149,15 @@ async function openMetaInspector(mode: MetaMode): Promise<void> {
 }
 
 async function isOurToolActive(): Promise<boolean> {
-  if (activeToolNow !== null) return activeToolNow === TOOL_ID;
+  if (activeToolNow !== null) {
+    return activeToolNow === GM_TOOLS_SUITE_ID && INSPECTOR_MODES.has(activeModeNow);
+  }
   try {
-    const t = await OBR.tool.getActiveTool();
-    return t === TOOL_ID;
+    const [tool, mode] = await Promise.all([OBR.tool.getActiveTool(), OBR.tool.getActiveToolMode()]);
+    return tool === GM_TOOLS_SUITE_ID && INSPECTOR_MODES.has(mode ?? "");
   } catch { return false; }
 }
 
-// Sync the item popover with the current selection. Called when the
-// user enters default mode OR when selection changes while default
-// mode is active. Empty / multi selection → close popover.
 async function syncItemFromSelection(): Promise<void> {
   let sel: string[] = [];
   try { sel = (await OBR.player.getSelection()) ?? []; } catch {}
@@ -203,8 +171,6 @@ async function syncItemFromSelection(): Promise<void> {
 }
 
 export async function setupMetadataInspector(): Promise<void> {
-  // Mobile clients skip setup — the inspector tool icon + popover
-  // overlay would just clutter the limited touch UI.
   if (IS_MOBILE) {
     console.info("[metadata-inspector] mobile client — skipping setup");
     return;
@@ -213,38 +179,14 @@ export async function setupMetadataInspector(): Promise<void> {
   if (role !== "GM") return;
   const en = getLocalLang() === "en";
 
-  // Tool entry — left sidebar.
-  try {
-    await OBR.tool.create({
-      id: TOOL_ID,
-      defaultMode: MODE_DEFAULT,
-      icons: [{
-        icon: ICON_URL,
-        label: en ? "Metadata inspector (DM)" : "元数据检查 (DM)",
-        filter: { roles: ["GM"] },
-      }],
-      onClick: async () => {
-        await OBR.tool.activateTool(TOOL_ID);
-        return false;
-      },
-    });
-  } catch (e) {
-    console.warn("[metadata-inspector] tool.create failed", e);
-  }
+  const inspectorIconFilter = suiteModeFilter(GM_TOOLS_SUITE_ID);
 
-  // Default mode — passthrough cursor; item popover follows selection.
   try {
     await OBR.tool.createMode({
       id: MODE_DEFAULT,
-      icons: [{
-        icon: ICON_URL,
-        label: en ? "Select item (default) — popover follows selection" : "选物体（默认） — 选中物体即弹出，取消选中则收起",
-        filter: { activeTools: [TOOL_ID] },
-      }],
+      icons: [{ icon: ICON_URL, label: en ? "Select item (default) — popover follows selection" : "选物体（默认） — 选中物体即弹出，取消选中则收起", filter: inspectorIconFilter }],
       cursors: [{ cursor: "help" }],
       onActivate: () => {
-        // Going back to default — close meta popover, restore item
-        // popover from selection.
         void closeMetaInspector();
         void syncItemFromSelection();
       },
@@ -253,95 +195,76 @@ export async function setupMetadataInspector(): Promise<void> {
     console.warn("[metadata-inspector] createMode default failed", e);
   }
 
-  // Scene mode — opens the big popover with scene metadata.
   try {
     await OBR.tool.createMode({
       id: MODE_SCENE,
-      icons: [{
-        icon: ICON_SCENE_URL,
-        label: en ? "Scene metadata (OBR.scene.getMetadata)" : "场景元数据 (OBR.scene.getMetadata)",
-        filter: { activeTools: [TOOL_ID] },
-      }],
+      icons: [{ icon: ICON_SCENE_URL, label: en ? "Scene metadata (OBR.scene.getMetadata)" : "场景元数据 (OBR.scene.getMetadata)", filter: inspectorIconFilter }],
       cursors: [{ cursor: "help" }],
-      onActivate: () => {
-        void openMetaInspector("scene");
-      },
+      onActivate: () => { void openMetaInspector("scene"); },
     });
   } catch (e) {
     console.warn("[metadata-inspector] createMode scene failed", e);
   }
 
-  // Room mode — same big popover, defaults to room tab.
   try {
     await OBR.tool.createMode({
       id: MODE_ROOM,
-      icons: [{
-        icon: ICON_ROOM_URL,
-        label: en ? "Room metadata (OBR.room.getMetadata)" : "房间元数据 (OBR.room.getMetadata)",
-        filter: { activeTools: [TOOL_ID] },
-      }],
+      icons: [{ icon: ICON_ROOM_URL, label: en ? "Room metadata (OBR.room.getMetadata)" : "房间元数据 (OBR.room.getMetadata)", filter: inspectorIconFilter }],
       cursors: [{ cursor: "help" }],
-      onActivate: () => {
-        void openMetaInspector("room");
-      },
+      onActivate: () => { void openMetaInspector("room"); },
     });
   } catch (e) {
     console.warn("[metadata-inspector] createMode room failed", e);
   }
 
-  // Performance mode — same big popover, defaults to performance tab.
   try {
     await OBR.tool.createMode({
       id: MODE_PERFORMANCE,
-      icons: [{
-        icon: ICON_PERFORMANCE_URL,
-        label: en ? "Performance (FPS & memory)" : "性能指标 (FPS 和内存)",
-        filter: { activeTools: [TOOL_ID] },
-      }],
+      icons: [{ icon: ICON_PERFORMANCE_URL, label: en ? "Performance (FPS & memory)" : "性能指标 (FPS 和内存)", filter: inspectorIconFilter }],
       cursors: [{ cursor: "help" }],
-      onActivate: () => {
-        void openMetaInspector("performance");
-      },
+      onActivate: () => { void openMetaInspector("performance"); },
     });
   } catch (e) {
     console.warn("[metadata-inspector] createMode performance failed", e);
   }
 
-  // Track active tool. Activating telescope starts in MODE_DEFAULT
-  // (defaultMode set on the tool above), which fires onActivate and
-  // syncs item popover from selection. Deactivating closes both
-  // popovers.
-  try {
-    const onChange = (tool: string) => {
-      const wasUs = activeToolNow === TOOL_ID;
+  registerSuiteItem({
+    id: MODE_DEFAULT,
+    suite: "gm",
+    label: en ? "Metadata inspector" : "元数据检查",
+    icon: ICON_URL,
+    hint: en ? "Scene / room / item metadata" : "场景 / 房间 / 物体",
+    onPick: async () => {
+      await activateHiddenMode(GM_TOOLS_SUITE_ID, MODE_DEFAULT);
+      try { await openMetaInspector("scene"); } catch {}
+    },
+  });
+
+  const syncInspectorFromActive = async (): Promise<void> => {
+    try {
+      const [tool, mode] = await Promise.all([OBR.tool.getActiveTool(), OBR.tool.getActiveToolMode()]);
+      const wasUs = activeToolNow === GM_TOOLS_SUITE_ID && INSPECTOR_MODES.has(activeModeNow);
       activeToolNow = tool;
-      const isUs = tool === TOOL_ID;
-      if (!isUs && wasUs) {
-        // Switched away from telescope — close everything.
+      activeModeNow = mode ?? "";
+      const isUs = tool === GM_TOOLS_SUITE_ID && INSPECTOR_MODES.has(activeModeNow);
+      if (wasUs && !isUs) {
         void closeItemInspector();
         void closeMetaInspector();
       }
-      // When switching INTO us: the defaultMode's onActivate handles
-      // opening the item popover. No work here.
-    };
-    const unsub = OBR.tool.onToolChange(onChange);
-    if (typeof unsub === "function") unsubs.push(unsub);
-    try {
-      const t = await OBR.tool.getActiveTool();
-      if (t) onChange(t);
     } catch {}
-  } catch {}
-
-  // Track active mode separately from the tool so selection-watcher
-  // knows whether to act on item popover.
+  };
   try {
-    const unsub = OBR.tool.onToolModeChange((mode) => {
-      activeModeNow = mode ?? MODE_DEFAULT;
-    });
+    const unsub = OBR.tool.onToolChange(() => { void syncInspectorFromActive(); });
     if (typeof unsub === "function") unsubs.push(unsub);
   } catch {}
+  try {
+    const unsub = OBR.tool.onToolModeChange(() => { void syncInspectorFromActive(); });
+    if (typeof unsub === "function") unsubs.push(unsub);
+  } catch {}
+  try {
+    await syncInspectorFromActive();
+  } catch {}
 
-  // Selection-driven small popover (only in default mode).
   unsubs.push(
     OBR.player.onChange(async () => {
       if (!(await isOurToolActive())) return;
@@ -357,8 +280,8 @@ export function teardownMetadataInspector(): void {
   }
   void closeItemInspector();
   void closeMetaInspector();
-  try { OBR.tool.remove(TOOL_ID); } catch {}
   try { OBR.tool.removeMode(MODE_DEFAULT); } catch {}
+  unregisterSuiteItem(MODE_DEFAULT);
   try { OBR.tool.removeMode(MODE_SCENE); } catch {}
   try { OBR.tool.removeMode(MODE_ROOM); } catch {}
   try { OBR.tool.removeMode(MODE_PERFORMANCE); } catch {}

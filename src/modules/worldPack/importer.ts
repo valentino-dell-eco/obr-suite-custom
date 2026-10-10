@@ -3,8 +3,9 @@
 // scene metadata to the active scene.
 //
 // Two modes:
-//   replace — clear the current scene first (DM-only safety: a confirm
-//     dialog is shown by the caller).
+//   replace — the pack's items are added FIRST; the current scene is
+//     removed only after they are in (on rejected items the user can
+//     roll back and keep the scene untouched).
 //   merge   — keep the current scene; the import's items get fresh
 //     ids before they're added.
 //
@@ -25,6 +26,8 @@
 
 import OBR from "@owlbear-rodeo/sdk";
 import { FobrManifest, EMBED_PREFIX, unpackFobr } from "./format";
+import { t } from "../../i18n";
+import { getLocalLang } from "../../state";
 
 export interface ImportProgress {
   phase: "parsing" | "rewriting" | "applying-metadata" | "applying-items" | "done" | "error";
@@ -42,6 +45,8 @@ export interface ImportOptions {
    *  the importer's own preferences. The user opts in via the UI. */
   applyRoomMetadata?: boolean;
   onProgress?: (p: ImportProgress) => void;
+  /** Asks the user a yes/no question. Defaults to window.confirm. */
+  confirm?: (message: string) => Promise<boolean> | boolean;
 }
 
 export interface ImportResult {
@@ -50,6 +55,34 @@ export interface ImportResult {
   /** Number of items that failed validation / addItems. The console
    *  has per-item details; this surface count is for the UI summary. */
   failed: number;
+  /** True when the user cancelled: the scene was left untouched
+   *  (replace mode rolls back the items it had added). */
+  aborted?: boolean;
+}
+
+const MAX_URL_LEN = 2048;
+
+/** Structural check of the manifest's items BEFORE anything in the
+ *  scene is touched. Throws on a broken pack; returns how many image
+ *  URLs OBR is likely to reject (data: URLs, or URLs that are too long
+ *  / not http(s)). */
+function validateItems(items: unknown[]): { riskyImages: number } {
+  let riskyImages = 0;
+  items.forEach((raw, i) => {
+    const it = raw as any;
+    if (!it || typeof it !== "object" || Array.isArray(it)) {
+      throw new Error(`item #${i}: not an object`);
+    }
+    if (typeof it.type !== "string" || typeof it.layer !== "string") {
+      throw new Error(`item #${i}: missing type/layer`);
+    }
+    const url = it.image?.url;
+    if (typeof url === "string") {
+      const httpOk = /^https?:\/\//i.test(url) && url.length <= MAX_URL_LEN;
+      if (!httpOk) riskyImages++;
+    }
+  });
+  return { riskyImages };
 }
 
 function freshId(): string {
@@ -123,7 +156,11 @@ export async function importPackFromBlob(
   const manifest = await unpackFobr(blob);
   // Deep clone so our mutations don't leak into the manifest object
   // returned to the caller.
+  if (!Array.isArray(manifest.items)) throw new Error("invalid pack: no item list");
   const items: any[] = manifest.items.map((raw) => JSON.parse(JSON.stringify(raw)));
+  const lang = getLocalLang();
+  const ask = async (msg: string): Promise<boolean> =>
+    opts.confirm ? !!(await opts.confirm(msg)) : window.confirm(msg);
 
   // Look up the importing player so we can re-attribute every item
   // to them. Falls back to a placeholder if OBR doesn't expose
@@ -156,6 +193,17 @@ export async function importPackFromBlob(
     reauditItem(it, currentUserId, nowIso);
   }
 
+  // Nothing in the scene has been touched yet: validate now, and warn
+  // about images OBR will probably reject (embedded data: URLs, URLs
+  // over 2048 chars) so the user can bail out.
+  const { riskyImages } = validateItems(items);
+  if (riskyImages > 0) {
+    const ok = await ask(
+      t(lang, "wpImportRiskyImages").replace("{n}", String(riskyImages)),
+    );
+    if (!ok) return { manifest, applied: 0, failed: 0, aborted: true };
+  }
+
   // Pass 2: regenerate ids (both modes) and remap attachedTo so
   // attachments stay intact in the new id namespace.
   const oldToNew = new Map<string, string>();
@@ -179,23 +227,59 @@ export async function importPackFromBlob(
     }
   }
 
-  // Apply room metadata first (it's the broadest scope; some scene
-  // metadata might depend on suite state already being set).
-  if (opts.applyRoomMetadata && manifest.roomMetadata) {
+  const sorted = topologicalSort(items);
+  let applied = 0;
+  let failed = 0;
+  const addedIds: string[] = [];
+
+  // Adds the pack's items in batches. On batch failure, retry
+  // one-at-a-time so we can pinpoint the bad apple WITHOUT losing the
+  // rest of the scene.
+  const addAll = async () => {
+    onProgress({ phase: "applying-items", doneItems: 0, totalItems: sorted.length });
+    const BATCH = 100;
+    for (let i = 0; i < sorted.length; i += BATCH) {
+      const batch = sorted.slice(i, i + BATCH);
+      try {
+        await OBR.scene.items.addItems(batch);
+        applied += batch.length;
+        for (const b of batch) if (b.id) addedIds.push(b.id);
+      } catch (batchErr) {
+        console.warn(
+          "[worldPack/import] batch failed, retrying per-item:",
+          formatErr(batchErr),
+        );
+        for (const single of batch) {
+          try {
+            await OBR.scene.items.addItems([single]);
+            applied++;
+            if (single.id) addedIds.push(single.id);
+          } catch (singleErr) {
+            failed++;
+            console.warn(
+              `[worldPack/import] item rejected — id=${single.id ?? "?"} type=${single.type ?? "?"} layer=${single.layer ?? "?"}`,
+              formatErr(singleErr),
+              single,
+            );
+          }
+        }
+      }
+      onProgress({ phase: "applying-items", doneItems: applied, totalItems: sorted.length });
+    }
+  };
+
+  const applyRoomMeta = async () => {
+    if (!opts.applyRoomMetadata || !manifest.roomMetadata) return;
     try {
       // OBR.room.setMetadata accepts a partial — undefined values
       // delete keys. In replace mode we wipe foreign keys too.
+      const cur = await OBR.room.getMetadata();
+      const delta: Record<string, unknown> = {};
       if (opts.mode === "replace") {
-        const cur = await OBR.room.getMetadata();
-        const delta: Record<string, unknown> = {};
         for (const k of Object.keys(cur)) delta[k] = undefined;
-        for (const [k, v] of Object.entries(manifest.roomMetadata)) {
-          delta[k] = v;
-        }
+        for (const [k, v] of Object.entries(manifest.roomMetadata)) delta[k] = v;
         await OBR.room.setMetadata(delta);
       } else {
-        const cur = await OBR.room.getMetadata();
-        const delta: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(manifest.roomMetadata)) {
           if (!(k in cur)) delta[k] = v;
         }
@@ -204,37 +288,60 @@ export async function importPackFromBlob(
     } catch (e) {
       console.warn("[worldPack/import] room metadata failed", e);
     }
-  }
+  };
 
-  // Apply scene metadata.
-  onProgress({
-    phase: "applying-metadata",
-    doneItems: 0,
-    totalItems: items.length,
-  });
   if (opts.mode === "replace") {
-    // Wipe current items.
+    // SAFE ORDER: the current scene is only removed once the new
+    // items are in. Snapshot the existing ids, add the pack's items
+    // next to them (fresh ids → no clashes), and if anything was
+    // rejected let the user roll back to the untouched scene.
+    let existingIds: string[] = [];
     try {
-      const existing = await OBR.scene.items.getItems();
-      const ids = existing.map((i) => i.id);
-      if (ids.length > 0) await OBR.scene.items.deleteItems(ids);
+      existingIds = (await OBR.scene.items.getItems()).map((i) => i.id);
     } catch (e) {
-      console.warn("[worldPack/import] failed to clear existing items", e);
+      throw new Error(`cannot read the current scene: ${formatErr(e)}`);
     }
-    // Wipe scene metadata + apply manifest's. setMetadata with
-    // `undefined` value deletes the key.
+
+    await addAll();
+
+    if (sorted.length > 0 && (failed > 0 || applied === 0)) {
+      const proceed = await ask(
+        t(lang, "wpImportPartialConfirm")
+          .replace("{failed}", String(failed))
+          .replace("{total}", String(sorted.length)),
+      );
+      if (!proceed) {
+        try {
+          if (addedIds.length) await OBR.scene.items.deleteItems(addedIds);
+        } catch (e) {
+          console.warn("[worldPack/import] rollback failed", e);
+        }
+        return { manifest, applied: 0, failed, aborted: true };
+      }
+    }
+
+    // Import succeeded (or the user accepted the partial result):
+    // now drop the old scene and apply the pack's metadata.
+    onProgress({ phase: "applying-metadata", doneItems: applied, totalItems: sorted.length });
+    try {
+      if (existingIds.length > 0) await OBR.scene.items.deleteItems(existingIds);
+    } catch (e) {
+      console.warn("[worldPack/import] failed to clear previous items", e);
+    }
     try {
       const cur = await OBR.scene.getMetadata();
       const wipeDelta: Record<string, unknown> = {};
       for (const k of Object.keys(cur)) wipeDelta[k] = undefined;
-      for (const [k, v] of Object.entries(manifest.sceneMetadata)) {
-        wipeDelta[k] = v;
-      }
+      for (const [k, v] of Object.entries(manifest.sceneMetadata)) wipeDelta[k] = v;
       await OBR.scene.setMetadata(wipeDelta);
     } catch (e) {
       console.warn("[worldPack/import] failed to apply scene metadata", e);
     }
+    await applyRoomMeta();
   } else {
+    // Merge never deletes anything: metadata only fills missing keys.
+    await applyRoomMeta();
+    onProgress({ phase: "applying-metadata", doneItems: 0, totalItems: items.length });
     try {
       const cur = await OBR.scene.getMetadata();
       const delta: Record<string, unknown> = {};
@@ -245,54 +352,7 @@ export async function importPackFromBlob(
     } catch (e) {
       console.warn("[worldPack/import] merge metadata failed", e);
     }
-  }
-
-  // Topologically sort so attached children land after their parents.
-  const sorted = topologicalSort(items);
-
-  onProgress({
-    phase: "applying-items",
-    doneItems: 0,
-    totalItems: sorted.length,
-  });
-
-  // Apply items in batches. On batch failure, retry one-at-a-time
-  // so we can pinpoint the bad apple WITHOUT losing the rest of
-  // the scene.
-  const BATCH = 100;
-  let applied = 0;
-  let failed = 0;
-  for (let i = 0; i < sorted.length; i += BATCH) {
-    const batch = sorted.slice(i, i + BATCH);
-    try {
-      await OBR.scene.items.addItems(batch);
-      applied += batch.length;
-    } catch (batchErr) {
-      // Batch rejected — try item-by-item so we can both salvage
-      // most of the scene and identify the offender.
-      console.warn(
-        "[worldPack/import] batch failed, retrying per-item:",
-        formatErr(batchErr),
-      );
-      for (const single of batch) {
-        try {
-          await OBR.scene.items.addItems([single]);
-          applied++;
-        } catch (singleErr) {
-          failed++;
-          console.warn(
-            `[worldPack/import] item rejected — id=${single.id ?? "?"} type=${single.type ?? "?"} layer=${single.layer ?? "?"}`,
-            formatErr(singleErr),
-            single,
-          );
-        }
-      }
-    }
-    onProgress({
-      phase: "applying-items",
-      doneItems: applied,
-      totalItems: sorted.length,
-    });
+    await addAll();
   }
 
   onProgress({

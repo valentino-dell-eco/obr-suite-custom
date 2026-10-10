@@ -10,10 +10,9 @@ export const FOLLOW_PLUGIN_ID = "com.obr-suite/follow";
 /** Per-token metadata key holding the FollowConfig. */
 export const FOLLOW_KEY = `${FOLLOW_PLUGIN_ID}/data`;
 
-/** Custom tool registered for the binding-line phase. Hidden from
- *  the toolbar by filtering its mode to its own activeTools — but
- *  the tool itself sits in the sidebar so users can re-enter the
- *  binding flow without going through the context menu. */
+/** Binding-line mode, registered under GM Tools Suite
+ *  (`GM_TOOLS_SUITE_ID`). Activated from the context menu
+ *  (`ctxAddFollow`) or by picking the mode in the suite top bar. */
 export const FOLLOW_TOOL_ID = `${FOLLOW_PLUGIN_ID}/tool`;
 export const FOLLOW_MODE_ID = `${FOLLOW_PLUGIN_ID}/mode`;
 

@@ -9,14 +9,19 @@ import {
   Language,
 } from "../../state";
 import { formatTagsClickable, resolveClickRollTarget } from "../dice/tags";
+import { escapeHtml } from "../../utils/html";
+import {
+  loadLibraryIndex,
+  invalidateLibraryIndex,
+  fetchLibraryData,
+  getEnabledLibraryBases,
+  passesVersion,
+} from "../../utils/libraryIndex";
 import { bindRollableClickPopup } from "../dice/context-menu";
 import { subscribeToSfx } from "../dice/sfx-broadcast";
 import { applyI18nDom, t } from "../../i18n";
 import {
-  getLocalIndexFile,
   getLocalDataByKeySource,
-  getLocalContentSignature,
-  initLocalContent,
   BC_LOCAL_CONTENT_CHANGED,
 } from "../../utils/localContent";
 
@@ -47,68 +52,6 @@ let _lang: Language = (() => {
 })();
 const T = (k: Parameters<typeof t>[1]) => t(_lang, k);
 
-function getEnabledLibraryBases(): string[] {
-  try {
-    const libs = getState().libraries || [];
-    const bases = libs
-      .filter(
-        (l) =>
-          l.enabled &&
-          typeof l.baseUrl === "string" &&
-          l.baseUrl.trim().length > 0,
-      )
-      .map((l) => l.baseUrl.replace(/\/+$/, ""));
-    return bases.length > 0 ? bases : [DEFAULT_BASE];
-  } catch {
-    return [DEFAULT_BASE];
-  }
-}
-
-/** Like getEnabledLibraryBases but also returns each library's
- *  configured `indexPath` (defaults to `search/index.json` when
- *  unset) AND its `disabledSources` blacklist. Used by `loadIndex`
- *  so the partnered kiwee listing (`search/index-partnered.json`)
- *  gets fetched correctly AND so per-library source-code blacklists
- *  filter the merged entries. */
-function getEnabledLibrarySources(): Array<{
-  base: string;
-  indexPath: string;
-  disabledSources: Set<string>;
-}> {
-  try {
-    const libs = getState().libraries || [];
-    // 2026-05-10: empty result means EMPTY — we no longer fall back
-    // to the kiwee default base when every library is disabled. Users
-    // with only local-content imports want a clean canvas without the
-    // kiwee firehose merging in. The local-content branch in
-    // loadIndex still runs, so search results will reflect just
-    // imported JSON / MD files in that case.
-    return libs
-      .filter(
-        (l) =>
-          l.enabled &&
-          typeof l.baseUrl === "string" &&
-          l.baseUrl.trim().length > 0,
-      )
-      .map((l) => ({
-        base: l.baseUrl.replace(/\/+$/, ""),
-        indexPath:
-          typeof l.indexPath === "string" && l.indexPath.length > 0
-            ? l.indexPath.replace(/^\/+/, "")
-            : "search/index.json",
-        // Normalise disabled list to lower-case so the per-entry check
-        // is case-insensitive against whatever 5etools emits.
-        disabledSources: new Set(
-          (Array.isArray(l.disabledSources) ? l.disabledSources : [])
-            .map((s) => String(s).toLowerCase())
-            .filter((s) => s.length > 0),
-        ),
-      }));
-  } catch {
-    return [];
-  }
-}
-
 function dataBase(_lang: Language): string {
   // First enabled lib is the "primary" — used for per-entry data
   // fetches that look up by source code (we walk every base when
@@ -132,7 +75,6 @@ const BAR_H_OPEN = 440;
 // the BookOfEbonTides:11 vs XPHB:11 collision fix in `loadIndex`.
 // Old v2 caches stored numeric `s`, which would render the wrong
 // source label after this update if loaded without invalidation.
-const CACHE_KEY = "obr-suite/search-index-v3";
 const BOOKS_CACHE_KEY = "obr-suite/search-books-v3";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_RESULTS = 50;
@@ -476,224 +418,18 @@ let indexCache: IndexFile | null = null;
 let indexLoading: Promise<IndexFile> | null = null;
 let booksLoading: Promise<void> | null = null;
 
+// Index loading + merging lives in src/utils/libraryIndex.ts, shared
+// with the character card's spell picker so both see the same content
+// (enabled libraries, per-library disabled sources, local content).
+// This wrapper only adds search's own display-side source map.
 async function loadIndex(): Promise<IndexFile> {
   if (indexCache) return indexCache;
   if (indexLoading) return indexLoading;
   indexLoading = (async () => {
-    // 2026-05-10 — warm the IDB-backed local-content cache before we
-    // call getLocalContentSignature() / getLocalIndexFile() below.
-    // Idempotent.
-    await initLocalContent();
-    // Cache key is keyed on the active library set + local-content
-    // signature so switching libraries OR adding/removing local
-    // imports both invalidate the cached merged index.
-    const sources = getEnabledLibrarySources();
-    // Cache key encodes base + indexPath + disabledSources so toggling
-    // between index.json and index-partnered.json AND toggling any
-    // per-library source blacklist (e.g. disabling BOOKOFEBONTIDES)
-    // both invalidate the cache.
-    const cacheKey = `${CACHE_KEY}:${sources
-      .map(
-        (s) =>
-          `${s.base}|${s.indexPath}|${[...s.disabledSources].sort().join(",")}`,
-      )
-      .join("||")}:${getLocalContentSignature()}`;
-    try {
-      const raw = localStorage.getItem(cacheKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { ts: number; data: IndexFile };
-        if (Date.now() - parsed.ts < CACHE_TTL_MS && parsed.data?.x?.length) {
-          indexCache = parsed.data;
-          buildSourceMap(indexCache);
-          return indexCache;
-        }
-      }
-    } catch {}
-    // Fetch all libraries in parallel; carry the per-library config
-    // alongside each fetched index so the merge loop below can apply
-    // each lib's own `disabledSources` blacklist.
-    const perLibrary = await Promise.all(
-      sources.map(async (cfg) => {
-        try {
-          const res = await fetch(`${cfg.base}/${cfg.indexPath}`, {
-            cache: "no-cache",
-          });
-          if (!res.ok) return null;
-          return { idx: (await res.json()) as IndexFile, cfg };
-        } catch (e) {
-          console.warn(
-            `[obr-suite/search] index fetch failed for ${cfg.base}/${cfg.indexPath}`,
-            e,
-          );
-          return null;
-        }
-      }),
-    );
-    const valid = perLibrary.filter(
-      (x): x is { idx: IndexFile; cfg: (typeof sources)[number] } =>
-        !!x && Array.isArray(x.idx.x),
-    );
-    // Locally-imported homebrew gets synthesised into a virtual
-    // index file so it merges into the same flow as URL libraries.
-    // Local content has no `disabledSources` blacklist (per-source
-    // toggling for local homebrew can be done by deleting the file).
-    const localIdx = getLocalIndexFile();
-    const allValid: Array<{
-      idx: IndexFile;
-      cfg: { disabledSources: Set<string> };
-    }> =
-      localIdx.x.length > 0
-        ? [
-            ...valid,
-            {
-              idx: localIdx as unknown as IndexFile,
-              cfg: { disabledSources: new Set<string>() },
-            },
-          ]
-        : valid;
-    if (allValid.length === 0) {
-      // 2026-05-10: with all libraries disabled and no local content,
-      // return an empty index instead of throwing. Prevents the
-      // user-visible "loading…" spinner from sticking around when the
-      // user deliberately wants a clean canvas.
-      const empty: IndexFile = { x: [], m: { s: {} } };
-      indexCache = empty;
-      buildSourceMap(empty);
-      return empty;
-    }
-    // Naive merge — primary lib's source map wins, all entries pooled.
-    // dedupeKey uses `${cn}|${n}|${s ?? ""}` so the same monster from
-    // two libraries collapses to one row (custom lib wins because
-    // it's typically listed first).
-    const merged: IndexFile = { x: [], m: { s: {} } };
-    for (const { idx } of allValid) {
-      if (idx.m?.s) {
-        for (const [code, id] of Object.entries(idx.m.s)) {
-          if (!(code in merged.m.s)) merged.m.s[code] = id;
-        }
-      }
-    }
-    // 2026-05-04 dedupe overhaul: the partnered kiwee library
-    // overlaps significantly with the main kiwee one (same monsters
-    // listed in both). The naive `s` field won't dedupe across
-    // libraries because the same source can be assigned different
-    // numeric ids in each lib's `m.s` map. Resolve the entry's
-    // source to its CODE STRING per-library, normalise to lower-
-    // case, and use that in the dedupe key. Result: identical
-    // monsters from two libraries collapse to one row regardless
-    // of how each lib chose to number its sources.
-    //
-    // 2026-05-09 ROOT-CAUSE FIX for the
-    // "BOOKOFEBONTIDES override hides PHB" bug:
-    //
-    //   The numeric `e.s` is a per-library id. Two libraries can
-    //   assign the SAME numeric id to DIFFERENT source codes —
-    //   exactly what kiwee does:
-    //     main  m.s  → "XPHB": 11
-    //     partnered m.s  → "BookOfEbonTides": 11
-    //
-    //   Earlier code merged `m.s` into a single `merged.m.s` with
-    //   "first-wins" on the CODE key (so both XPHB:11 and
-    //   BookOfEbonTides:11 ended up in merged.m.s). The display path
-    //   then built `sourceById: Map<number, string>` from
-    //   merged.m.s, where the LAST iterated code-for-id wins —
-    //   "BookOfEbonTides" overwrote "XPHB" at id 11. Result: every
-    //   XPHB entry in main's index displayed as "BOOKOFEBONTIDES",
-    //   the source data fetch went looking for the wrong filename
-    //   and 404'd.
-    //
-    //   The fix: at merge time, rewrite each entry's `e.s` from its
-    //   per-library numeric id into the resolved UPPERCASE source
-    //   CODE string. After this, every entry carries a globally-
-    //   unique source identity, and the display path's
-    //   `srcCode(e.s)` short-circuits on the string branch — the
-    //   stale `sourceById` numeric map is never consulted again.
-    const resolveSourceCode = (e: Entry, lib: IndexFile): string => {
-      if (e.s == null) return "";
-      if (typeof e.s === "string") return e.s.toLowerCase();
-      const map = lib.m?.s || {};
-      for (const [code, id] of Object.entries(map)) {
-        if (id === e.s) return code.toLowerCase();
-      }
-      return String(e.s).toLowerCase();
-    };
-    const seen = new Set<string>();
-    for (const { idx, cfg } of allValid) {
-      for (const e of idx.x) {
-        const cn = (e.cn || "").trim().toLowerCase();
-        const n = (e.n || "").trim().toLowerCase();
-        const src = resolveSourceCode(e, idx);
-        // Per-library source blacklist (e.g. user disabled
-        // BOOKOFEBONTIDES inside the partnered library). Apply BEFORE
-        // dedupe so an entry available in another library where the
-        // source is allowed still gets through under that library.
-        if (cfg.disabledSources.size > 0 && src && cfg.disabledSources.has(src))
-          continue;
-        const key = `${cn}|${n}|${src}|${e.c ?? ""}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        // Clone the entry with `s` rewritten to the resolved code
-        // string (uppercased — display does .toUpperCase() anyway,
-        // and uppercase makes it easier to grep filenames). When
-        // src is empty (entry has no resolvable source), preserve
-        // the original `e.s` so we don't accidentally null it out.
-        const fixedEntry: Entry = src ? { ...e, s: src.toUpperCase() } : e;
-        merged.x.push(fixedEntry);
-      }
-    }
-    // Synthesise weapon-property entries from items-base.json's
-    // itemProperty array. 5etools doesn't add these to the search
-    // index because they're definitional, but the cc-info weapon
-    // chips need them to resolve. Best-effort — first library that
-    // 200s wins.
-    try {
-      for (const base of sources.map((s) => s.base)) {
-        try {
-          const r = await fetch(`${base}/data/items-base.json`, {
-            cache: "no-cache",
-          });
-          if (!r.ok) continue;
-          const j = await r.json();
-          const arr = (j.itemProperty ?? []) as any[];
-          let synthId = 9_000_000;
-          for (const p of arr) {
-            const inner =
-              Array.isArray(p.entries) &&
-              p.entries[0] &&
-              typeof p.entries[0] === "object"
-                ? p.entries[0]
-                : null;
-            const cn = (p as any).name ?? inner?.name ?? "";
-            const en =
-              (p as any).ENG_name ??
-              inner?.ENG_name ??
-              (p as any).abbreviation ??
-              "";
-            if (!cn && !en) continue;
-            const dedupeKey = `${cn}|${en}|prop`;
-            if (seen.has(dedupeKey)) continue;
-            seen.add(dedupeKey);
-            merged.x.push({
-              id: synthId++,
-              c: 58,
-              s: (p as any).source ?? "",
-              n: en,
-              cn,
-            } as any);
-          }
-          break;
-        } catch {}
-      }
-    } catch {}
-    indexCache = merged;
-    buildSourceMap(indexCache);
-    try {
-      localStorage.setItem(
-        cacheKey,
-        JSON.stringify({ ts: Date.now(), data: merged }),
-      );
-    } catch {}
-    return merged;
+    const idx = (await loadLibraryIndex()) as unknown as IndexFile;
+    indexCache = idx;
+    buildSourceMap(idx);
+    return idx;
   })();
   try {
     return await indexLoading;
@@ -764,24 +500,6 @@ interface FilterOpts {
 interface Hit {
   entry: Entry;
   score: number;
-}
-
-const CORE_2014 = new Set(["PHB", "MM"]);
-const CORE_2024 = new Set(["XPHB", "XMM"]);
-
-function passesVersion(code: string, dv: DataVersion): boolean {
-  if (dv === "all") return true;
-  // Custom / homebrew sources are "other" — always visible regardless
-  // of the 2014/2024 toggle. Mirrors bestiary/data.ts detectEdition,
-  // where anything not in the strict core sets falls into "other"
-  // which is unconditionally enabled. Without this, default
-  // dataVersion="2024" filtered out HOMEBREW / DEMO / etc. and the
-  // user could only see them by switching to "all".
-  const isCore = CORE_2014.has(code) || CORE_2024.has(code);
-  if (!isCore) return true;
-  if (dv === "2014") return CORE_2014.has(code);
-  if (dv === "2024") return CORE_2024.has(code);
-  return true;
 }
 
 function search(query: string, idx: IndexFile, opts: FilterOpts): Entry[] {
@@ -930,43 +648,16 @@ async function loadCategoryData(
     ...filePathsForSrc(srcOriginal), // original case
     ...filePathsForSrc(srcOriginal.toUpperCase()), // uppercase
   ]);
-  const bases = getEnabledLibraryBases();
   const p = (async () => {
-    // Fetch from every (base × candidatePath) combination in parallel
-    // and merge. First non-empty result keyed (ENG_name|source)
-    // survives. Built-in kiwee will typically have most entries;
-    // custom hosts contribute their homebrew without overwriting.
-    let okCount = 0;
-    const responses = await Promise.all(
-      bases.flatMap((base) =>
-        [...candidatePaths].map(async (path) => {
-          try {
-            const res = await fetch(`${base}/data/${path}`, {
-              cache: "no-cache",
-            });
-            if (entry.c === 24)
-              console.log(
-                "[TABLE FETCH]",
-                `${base}/data/${path}`,
-                "→",
-                res.status,
-              );
-            if (!res.ok) return null;
-            okCount++;
-            const json = await res.json();
-            return (json[cat.data!.key] ?? []) as DataEntry[];
-          } catch {
-            return null;
-          }
-        }),
-      ),
+    // Fetch from every (enabled library × candidatePath) in parallel
+    // and merge — shared with the spell picker (utils/libraryIndex.ts).
+    const { rows: merged, okCount } = await fetchLibraryData(
+      candidatePaths,
+      cat.data!.key,
+      entry.c === 24
+        ? (url, status) => console.log("[TABLE FETCH]", url, "→", status)
+        : undefined,
     );
-    // If EVERY (base × case-variant) combination returned 404 / network
-    // error, the data for this source is unreachable from any of the
-    // user's configured libraries. Log ONCE per source so the user can
-    // open DevTools and immediately see which library is the culprit
-    // (typically a third-party homebrew extension whose author renamed
-    // or removed files on the mirror). Suggest the workaround inline.
     if (okCount === 0) {
       const probeKey = `${cat.data!.key}|${srcOriginal}`;
       if (!loggedMissingSources.has(probeKey)) {
@@ -976,17 +667,6 @@ async function loadCategoryData(
             `Tried paths: ${[...candidatePaths].join(" / ")}. ` +
             `Workaround: ${tt("searchMissingLibraryLog" as any)}`,
         );
-      }
-    }
-    const merged: DataEntry[] = [];
-    const seen = new Set<string>();
-    for (const arr of responses) {
-      if (!arr) continue;
-      for (const e of arr) {
-        const key = `${(e.ENG_name || e.name || (e as any).caption || "").toLowerCase()}|${(e.source || "").toUpperCase()}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        merged.push(e);
       }
     }
     dataCache.set(ck, merged);
@@ -1329,13 +1009,6 @@ async function findEntryData(entry: Entry): Promise<DataEntry | null> {
 }
 
 // --- HTML escape + 5etools tag stripping ---
-function escapeHtml(s: string): string {
-  return s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
 function stripTags(s: string): string {
   return s.replace(/\{@(\w+)\s+([^}]+)\}/g, (_m, _tag, arg) => {
     const parts = String(arg).split("|");
@@ -1549,7 +1222,7 @@ function renderMonster(entry: Entry, data: DataEntry): string {
     if (data.legendaryHeader) parts.push(renderEntries(data.legendaryHeader));
     else
       parts.push(
-        `<p>${tt("searchThisCreatureCan")} ${data.legendaryActions ?? 3} ${tt("searchLegendaryActionText")}</p>`,
+        `<p>${tt("searchThisCreatureCan")} ${escapeHtml(data.legendaryActions ?? 3)} ${tt("searchLegendaryActionText")}</p>`,
       );
     for (const t of data.legendary) parts.push(renderTrait(t));
   }
@@ -1577,7 +1250,7 @@ function renderAbilityGrid(data: DataEntry): string {
     const mod = Math.floor((score - 10) / 2);
     const modStr = mod >= 0 ? `+${mod}` : String(mod);
     cells.push(
-      `<div class="ab-cell"><div class="ab-label">${ABILITY_LABEL[k]}</div><div class="ab-score">${score}</div><div class="ab-mod">${modStr}</div></div>`,
+      `<div class="ab-cell"><div class="ab-label">${ABILITY_LABEL[k]}</div><div class="ab-score">${escapeHtml(score)}</div><div class="ab-mod">${escapeHtml(modStr)}</div></div>`,
     );
   }
   return cells.length ? `<div class="ab-grid">${cells.join("")}</div>` : "";
@@ -1586,7 +1259,7 @@ function renderAbilityGrid(data: DataEntry): string {
 function renderMonsterSummary(data: DataEntry): string {
   const lines: string[] = [];
   const mkLine = (label: string, value: string) =>
-    `<div class="ms-line"><span class="ms-l">${escapeHtml(label)}</span><span class="ms-v">${value}</span></div>`;
+    `<div class="ms-line"><span class="ms-l">${escapeHtml(label)}</span><span class="ms-v">${escapeHtml(value)}</span></div>`;
 
   if (data.save && Object.keys(data.save).length) {
     const parts = Object.entries(data.save).map(
@@ -1668,18 +1341,18 @@ function renderSpellcasting(sc: any): string {
   if (sc.rest) {
     for (const [k, v] of Object.entries(sc.rest)) {
       if (Array.isArray(v) && v.length)
-        parts.push(`<p><b>${tt("searchRest")} ${k}/${tt("searchRestUsage")}：</b>${fmtSpells(v as any[])}</p>`);
+        parts.push(`<p><b>${tt("searchRest")} ${escapeHtml(k)}/${tt("searchRestUsage")}：</b>${fmtSpells(v as any[])}</p>`);
     }
   }
   if (sc.spells) {
     for (const [level, info] of Object.entries(sc.spells)) {
-      const lvl = level === "0" ? tt("searchSpellCantrip") : `${level} ${tt("searchSpellLevelSuffix")}`;
+      const lvl = level === "0" ? tt("searchSpellCantrip") : `${escapeHtml(level)} ${tt("searchSpellLevelSuffix")}`;
       const slots =
         (info as any).slots != null
-          ? `（${(info as any).slots} ${tt("searchSpellSlots")}）`
+          ? `（${escapeHtml((info as any).slots)} ${tt("searchSpellSlots")}）`
           : "";
       const ll = (info as any).lower
-        ? `（${(info as any).lower}–${level} ${tt("searchSpellLevelSuffix")}）`
+        ? `（${escapeHtml((info as any).lower)}–${escapeHtml(level)} ${tt("searchSpellLevelSuffix")}）`
         : "";
       const arr = (info as any).spells ?? [];
       parts.push(`<p><b>${lvl}${slots}${ll}：</b>${fmtSpells(arr)}</p>`);
@@ -2058,10 +1731,12 @@ function renderClass(data: any): string {
 
   let html = `<div class="class-preview-wrapper" style="padding: 4px 0; font-family: system-ui, -apple-system, sans-serif;">`;
 
-  // Helper interno per pulire o interpretare i tag inline di 5etools
+  // Helper interno per pulire o interpretare i tag inline di 5etools.
+  // Escapes the raw text FIRST, then adds the markup, so untrusted
+  // data can never inject HTML.
   const cleanTags = (str: string): string => {
     if (!str) return "";
-    return str
+    return escapeHtml(str)
       .replace(/\{@b\s+(.*?)\}/g, "<b>$1</b>")
       .replace(/\{@i\s+(.*?)\}/g, "<i>$1</i>")
       .replace(/\{@filter\s+(.*?)\|.*?\}/g, "$1")
@@ -2113,7 +1788,7 @@ function renderClass(data: any): string {
   // --- 1. INFORMAZIONI BASE ---
   html += `<div class="class-base-info" style="margin-bottom: 15px; font-size: 13px; line-height: 1.6;">`;
   if (data.hd) {
-    const faces = data.hd.faces ? `d${data.hd.faces}` : "d8";
+    const faces = data.hd.faces ? `d${escapeHtml(data.hd.faces)}` : "d8";
     const labelHd = lang === "zh" ? "生命骰" : "Hit Dice";
     const textHd = lang === "zh" ? `每等级 1${faces}` : `1${faces} per level`;
     html += `<p style="margin: 2px 0;"><b>${labelHd}:</b> ${textHd}</p>`;
@@ -2130,7 +1805,7 @@ function renderClass(data: any): string {
           : p.toUpperCase();
       })
       .join(", ");
-    html += `<p style="margin: 2px 0;"><b>${labelSaves}:</b> ${savesText}</p>`;
+    html += `<p style="margin: 2px 0;"><b>${labelSaves}:</b> ${escapeHtml(savesText)}</p>`;
   }
   if (data.spellcastingAbility) {
     const labelSpellAb =
@@ -2141,7 +1816,7 @@ function renderClass(data: any): string {
         ? abilityMap[ab].zh
         : abilityMap[ab].en
       : ab.toUpperCase();
-    html += `<p style="margin: 2px 0;"><b>${labelSpellAb}:</b> ${abText}</p>`;
+    html += `<p style="margin: 2px 0;"><b>${labelSpellAb}:</b> ${escapeHtml(abText)}</p>`;
   }
   html += `</div>`;
 
@@ -2223,7 +1898,7 @@ function renderClass(data: any): string {
         })
         .join(", ");
       const labelReq = lang === "zh" ? "属性要求" : "Requirements";
-      html += `<div><b>${labelReq}:</b> ${reqs}</div>`;
+      html += `<div><b>${labelReq}:</b> ${escapeHtml(reqs)}</div>`;
     }
     if (mc.proficienciesGained) {
       const pg = mc.proficienciesGained;
@@ -2355,7 +2030,7 @@ function renderClass(data: any): string {
     } else {
       html += data.entries
         .map((e: any) =>
-          typeof e === "string" ? `<p>${cleanTags(e)}</p>` : JSON.stringify(e),
+          typeof e === "string" ? `<p>${cleanTags(e)}</p>` : escapeHtml(JSON.stringify(e)),
         )
         .join("");
     }
@@ -2489,7 +2164,7 @@ function renderResults(hits: Entry[], q: string) {
           : "";
     parts.push(
       `<div class="row-item" data-idx="${idx}" tabindex="-1">
-        <span class="cat cat-${e.c}">${escapeHtml(cat.label)}</span>
+        <span class="cat cat-${escapeHtml(e.c)}">${escapeHtml(cat.label)}</span>
         <span class="info">
           <span class="name">${highlight(display, q)}</span>
           ${sub ? `<span class="sub">${highlight(sub, q)}</span>` : ""}
@@ -2842,6 +2517,7 @@ OBR.onReady(() => {
   // index cache so the next search pulls a fresh merged index.
   OBR.broadcast.onMessage(BC_LOCAL_CONTENT_CHANGED, () => {
     indexCache = null;
+    invalidateLibraryIndex();
     dataCache.clear();
     dataPending.clear();
   });
@@ -2979,6 +2655,7 @@ OBR.onReady(async () => {
     if (sig !== lastLibSig) {
       lastLibSig = sig;
       indexCache = null;
+      invalidateLibraryIndex();
       dataCache.clear();
       dataPending.clear();
       // Reload the index in the background so the next user input

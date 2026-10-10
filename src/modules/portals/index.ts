@@ -16,8 +16,16 @@ import {
   PortalMeta,
 } from "./types";
 import { t } from "../../i18n";
+import {
+  GM_TOOLS_SUITE_ID,
+  suiteModeFilter,
+  registerSuiteItem,
+  unregisterSuiteItem,
+  activateHiddenMode,
+} from "../toolsSuite";
 import { getLocalLang } from "../../state";
 import { assetUrl } from "../../asset-base";
+import { initBroadcastAuth, isFromSelf, isFromGM } from "../../utils/broadcastAuth";
 
 const _lang = () => getLocalLang();
 const _t = (k: Parameters<typeof t>[1]) => t(_lang(), k);
@@ -1294,6 +1302,7 @@ async function migrateLegacyPortals(): Promise<void> {
 }
 
 export async function setupPortals(): Promise<void> {
+  await initBroadcastAuth();
   try { role = (await OBR.player.getRole()) as "GM" | "PLAYER"; } catch {}
 
   // Quietly normalise old portals (image.width/height = 96 from earlier
@@ -1303,31 +1312,18 @@ export async function setupPortals(): Promise<void> {
     void migrateLegacyPortals();
   }
 
-  // GM-only tool icon. Players don't need the draw tool — they only get the
-  // entry detector + destination prompt path.
+  // GM-only mode, nested directly under the shared "GM Tools Suite"
+  // umbrella tool (no private TOOL_ID top-level icon anymore — see
+  // src/modules/toolsSuite). Players don't need the draw tool — they
+  // only get the entry detector + destination prompt path.
   if (role === "GM") {
-    await OBR.tool.create({
-      id: TOOL_ID,
-      icons: [
-        {
-          icon: TOOL_ICON_URL,
-          label: _t("portalToolName"),
-          filter: { roles: ["GM"] },
-        },
-      ],
-      onClick: async () => {
-        await OBR.tool.activateTool(TOOL_ID);
-        return false;
-      },
-    });
-
     await OBR.tool.createMode({
       id: TOOL_MODE_ID,
       icons: [
         {
           icon: TOOL_ICON_URL,
           label: _t("portalToolHint"),
-          filter: { activeTools: [TOOL_ID] },
+          filter: suiteModeFilter(GM_TOOLS_SUITE_ID),
         },
       ],
       cursors: [{ cursor: "crosshair" }],
@@ -1366,6 +1362,15 @@ export async function setupPortals(): Promise<void> {
         dragStart = null;
         await clearPreview();
       },
+    });
+
+    registerSuiteItem({
+      id: TOOL_ID,
+      suite: "gm",
+      label: _t("portalToolName"),
+      icon: TOOL_ICON_URL,
+      hint: _t("portalToolHint"),
+      onPick: () => activateHiddenMode(GM_TOOLS_SUITE_ID, TOOL_MODE_ID),
     });
   }
 
@@ -1440,6 +1445,7 @@ export async function setupPortals(): Promise<void> {
   // and close itself.
   unsubs.push(
     OBR.broadcast.onMessage(BROADCAST_TELEPORT, async (msg) => {
+      if (!isFromSelf(msg)) return; // LOCAL from our destination popover
       const data = msg.data as
         | { destPortalId: string; tokenIds: string[] }
         | undefined;
@@ -1457,7 +1463,8 @@ export async function setupPortals(): Promise<void> {
   );
 
   unsubs.push(
-    OBR.broadcast.onMessage(BROADCAST_BLINK_PROCEED, async () => {
+    OBR.broadcast.onMessage(BROADCAST_BLINK_PROCEED, async (msg) => {
+      if (!isFromSelf(msg)) return; // LOCAL from our blink modal
       const tJob = pendingTeleport;
       const fJob = pendingFocus;
       const gJob = pendingGather;
@@ -1536,6 +1543,7 @@ export async function setupPortals(): Promise<void> {
   // → modal + instant camera snap; blink off → smooth animateTo.
   unsubs.push(
     OBR.broadcast.onMessage(BROADCAST_BLINK_AND_FOCUS, async (msg) => {
+      if (!isFromGM(msg)) return; // REMOTE from the GM's initiative gather
       const data = msg.data as { x?: number; y?: number } | undefined;
       if (
         !data ||
@@ -1552,7 +1560,8 @@ export async function setupPortals(): Promise<void> {
   // background can flip its open flag back off. (Modal onClose is not
   // surfaced by OBR, so we rely on the page's beforeunload handler.)
   unsubs.push(
-    OBR.broadcast.onMessage(`${PLUGIN_ID}/blink-modal-closed`, () => {
+    OBR.broadcast.onMessage(`${PLUGIN_ID}/blink-modal-closed`, (msg) => {
+      if (!isFromSelf(msg)) return;
       blinkModalOpen = false;
       pendingTeleport = null;
     })
@@ -1561,6 +1570,7 @@ export async function setupPortals(): Promise<void> {
   // Edit popover save / delete / close (broadcast from edit page back to bg).
   unsubs.push(
     OBR.broadcast.onMessage(BROADCAST_EDIT_SAVE, async (msg) => {
+      if (!isFromSelf(msg)) return; // LOCAL from our edit popover
       const data = msg.data as
         | { id: string; name: string; tag: string }
         | undefined;
@@ -1590,6 +1600,7 @@ export async function setupPortals(): Promise<void> {
   );
   unsubs.push(
     OBR.broadcast.onMessage(BROADCAST_EDIT_DELETE, async (msg) => {
+      if (!isFromSelf(msg)) return;
       const data = msg.data as { id: string } | undefined;
       if (!data) return;
       try { await OBR.scene.items.deleteItems([data.id]); } catch {}
@@ -1597,7 +1608,8 @@ export async function setupPortals(): Promise<void> {
     })
   );
   unsubs.push(
-    OBR.broadcast.onMessage(BROADCAST_EDIT_CLOSE, async () => {
+    OBR.broadcast.onMessage(BROADCAST_EDIT_CLOSE, async (msg) => {
+      if (!isFromSelf(msg)) return;
       await closeEditPopover();
     })
   );
@@ -1606,7 +1618,8 @@ export async function setupPortals(): Promise<void> {
   // user × / Esc / page unload, it broadcasts here so we can reset
   // destPopoverOpen. (OBR doesn't expose a popover close-event API.)
   unsubs.push(
-    OBR.broadcast.onMessage(BROADCAST_DEST_CLOSED, () => {
+    OBR.broadcast.onMessage(BROADCAST_DEST_CLOSED, (msg) => {
+      if (!isFromSelf(msg)) return;
       destPopoverOpen = false;
       if (destPopoverSafetyTimer) {
         clearTimeout(destPopoverSafetyTimer);
@@ -1650,7 +1663,7 @@ export async function teardownPortals(): Promise<void> {
   await clearPreview();
   if (role === "GM") {
     try { await OBR.tool.removeMode(TOOL_MODE_ID); } catch {}
-    try { await OBR.tool.remove(TOOL_ID); } catch {}
+    unregisterSuiteItem(TOOL_ID);
   }
   for (const u of unsubs.splice(0)) u();
   if (dragEndTimer) {

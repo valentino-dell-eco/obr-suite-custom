@@ -202,6 +202,34 @@ async function syncLocalWalls(): Promise<void> {
   }
 }
 
+
+// ONE sync at a time. The debounce above only delays the START; a sync
+// is long and awaits often, and it records the ids of the items it
+// created only after addItems resolves. A second sync started meanwhile
+// could not see them, built a duplicate set, and the first set was never
+// tracked again (stale walls that kept blocking vision until reload).
+// Requests arriving mid-sync just set a "run again" flag; the running
+// loop picks it up with fresh scene state.
+let wallSyncRunning = false;
+let wallSyncAgain = false;
+async function runWallSync(): Promise<void> {
+  if (wallSyncRunning) {
+    wallSyncAgain = true;
+    return;
+  }
+  wallSyncRunning = true;
+  try {
+    do {
+      wallSyncAgain = false;
+      await syncLocalWalls();
+    } while (wallSyncAgain);
+  } catch (e) {
+    console.warn("[fullFog] syncLocalWalls failed", e);
+  } finally {
+    wallSyncRunning = false;
+  }
+}
+
 let syncQueued = false;
 function scheduleWallSync(): void {
   if (syncQueued) return;
@@ -210,7 +238,7 @@ function scheduleWallSync(): void {
   // during a save (delete old + add new). Coalesce so we sync once.
   setTimeout(() => {
     syncQueued = false;
-    void syncLocalWalls();
+    void runWallSync();
   }, 50);
 }
 

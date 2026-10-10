@@ -1,5 +1,6 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { assetUrl } from "../asset-base";
+import { initBroadcastAuth, isFromSelf, isFromGM } from "../utils/broadcastAuth";
 
 // "Sync Viewport" / 同步视口 module — migrated from focus-camera plugin.
 //
@@ -66,8 +67,10 @@ async function focusCamera(x: number, y: number, scale: number) {
 export async function setupFocus(): Promise<void> {
   // Right-click context menus removed per user feedback — the only entry
   // point is now the cluster's 同步视口 button (GM-only).
+  await initBroadcastAuth();
 
   unsubBroadcast = OBR.broadcast.onMessage(BROADCAST_FOCUS, async (event) => {
+    if (!isFromGM(event)) return; // REMOTE from the GM's focus trigger
     const data = event.data as
       | { x: number; y: number; scale: number }
       | undefined;
@@ -81,7 +84,8 @@ export async function setupFocus(): Promise<void> {
   // exactly what they themselves were looking at.
   unsubTriggerBroadcast = OBR.broadcast.onMessage(
     BC_FOCUS_TRIGGER,
-    async () => {
+    async (event) => {
+      if (!isFromSelf(event)) return; // LOCAL from our cluster-row
       try {
         const role = await OBR.player.getRole();
         if (role !== "GM") return;

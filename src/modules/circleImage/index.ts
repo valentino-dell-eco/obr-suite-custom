@@ -10,6 +10,10 @@ import OBR from "@owlbear-rodeo/sdk";
 import { assetUrl } from "../../asset-base";
 import { PLUGIN_ID, POPOVER_ID } from "./types";
 import { getLocalLang } from "../../state";
+import {
+  registerSuiteItem,
+  unregisterSuiteItem,
+} from "../toolsSuite";
 
 const TOOL_ID = `${PLUGIN_ID}/tool`;
 const ICON_URL = assetUrl("circleimage-icon.svg");
@@ -36,8 +40,6 @@ async function openPopover(): Promise<void> {
       anchorOrigin: { horizontal: "CENTER", vertical: "TOP" },
       transformOrigin: { horizontal: "CENTER", vertical: "TOP" },
       hidePaper: true,
-      // Keep the canvas usable while the popover is up so users can
-      // pan / drag tokens without first closing the cropper.
       disableClickAway: true,
     });
     popoverOpen = true;
@@ -59,45 +61,27 @@ export async function setupCircleImage(): Promise<void> {
     role = (await OBR.player.getRole()) as "GM" | "PLAYER";
   } catch {}
 
-  // GM-only — only the DM produces circle / bg-removed images.
   if (role === "GM") {
-    try {
-      await OBR.tool.create({
-        id: TOOL_ID,
-        icons: [
-          {
-            icon: ICON_URL,
-            label:
-              getLocalLang() === "en"
-                ? "Circle Image / BG Remove"
-                : "圆形图片 / 去底",
-            filter: { roles: ["GM"] },
-          },
-        ],
-        // Click toggles the popover. Don't activate as an OBR tool —
-        // user keeps Move active so they can drag from the OBR asset
-        // library straight to the canvas after the upload completes.
-        // Returning false suppresses tool activation.
-        onClick: async () => {
-          if (popoverOpen) {
-            await closePopover();
-          } else {
-            await openPopover();
-          }
-          return false;
-        },
-      });
-    } catch (e) {
-      console.warn("[obr-suite/circleImage] tool.create failed", e);
-    }
+    const label =
+      getLocalLang() === "en"
+        ? "Circle Image / BG Remove"
+        : "圆形图片 / 去底";
+    registerSuiteItem({
+      id: TOOL_ID,
+      suite: "gm",
+      label,
+      icon: ICON_URL,
+      onPick: async () => {
+        if (popoverOpen) await closePopover();
+        else await openPopover();
+      },
+    });
   }
 }
 
 export async function teardownCircleImage(): Promise<void> {
   await closePopover();
   if (role === "GM") {
-    try {
-      await OBR.tool.remove(TOOL_ID);
-    } catch {}
+    unregisterSuiteItem(TOOL_ID);
   }
 }

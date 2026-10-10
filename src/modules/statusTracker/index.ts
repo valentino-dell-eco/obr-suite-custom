@@ -48,6 +48,13 @@ import {
 } from "../../utils/panelLayout";
 import { getLocalLang } from "../../state";
 import { t } from "../../i18n";
+import {
+  TOOLS_SUITE_ID,
+  suiteModeFilter,
+  registerSuiteItem,
+  unregisterSuiteItem,
+  activateHiddenMode,
+} from "../toolsSuite";
 
 const POPOVER_PALETTE = `${PLUGIN_ID}/palette`;
 const POPOVER_MANAGE = `${PLUGIN_ID}/manage`;
@@ -726,42 +733,21 @@ export async function setupStatusTracker(): Promise<void> {
     return;
   }
 
-  // Toolbar tool — same model as Bestiary (item 2 in the user's
-  // 2026-05-04 spec). Click the icon → activate the tool → palette
-  // opens. Click any other tool → deactivate → palette closes.
-  // No role filter — anyone can manage their own / shared tokens
-  // (item 4 in the same spec).
-  try {
-    await OBR.tool.create({
-      id: TOOL_ID,
-      icons: [
-        {
-          icon: ICON_URL,
-          label: getLocalLang() === "en" ? "Status Tracker" : "状态追踪",
-          // No `roles` filter — both GM and players see the icon.
-          // Per-token permission for buff writes is enforced by the
-          // OBR scene-items API itself: players can only modify
-          // tokens they own / created. The bubble RENDERING (sync
-          // loop in `syncAllVisibleTokensImpl`) is still GM-gated
-          // since only one client should own the persistent items.
-        },
-      ],
-      onClick: async () => {
-        await OBR.tool.activateTool(TOOL_ID);
-        return false;
-      },
-    });
-  } catch (e) {
-    console.warn("[status] tool.create failed", e);
-  }
+  // Mode nested directly under the shared "Tools Suite" umbrella tool
+  // (no private TOOL_ID top-level icon anymore — see
+  // src/modules/toolsSuite). Picking the flyout row → activate the
+  // mode → palette opens. Switching to any other tool/mode → palette
+  // closes. No role filter on the flyout row — anyone can manage
+  // their own / shared tokens (item 4 in the same spec).
+  const STATUS_MODE_ID = `${TOOL_ID}/mode`;
   try {
     await OBR.tool.createMode({
-      id: `${TOOL_ID}/mode`,
+      id: STATUS_MODE_ID,
       icons: [
         {
           icon: ICON_URL,
           label: getLocalLang() === "en" ? "Status Tracker" : "状态追踪",
-          filter: { activeTools: [TOOL_ID] },
+          filter: suiteModeFilter(TOOLS_SUITE_ID),
         },
       ],
       cursors: [{ cursor: "default" }],
@@ -770,39 +756,66 @@ export async function setupStatusTracker(): Promise<void> {
     console.warn("[status] createMode failed", e);
   }
 
-  // Track which tool is active and open / close the palette in sync.
-  // Activating the status-tracker tool calls `activate()`; switching
-  // away calls `deactivate()` so the palette closes when the user
-  // picks any other tool, matching Bestiary's UX.
-  unsubs.push(
-    OBR.tool.onToolChange(async (activeId) => {
-      try {
-        if (activeId === TOOL_ID) {
-          if (!active) await activate();
-        } else {
-          // Remember the tool the user switched to (so `]` can switch
-          // back to it next time).
-          previousTool = activeId;
-          if (active) await deactivate();
-        }
-      } catch (e) {
-        console.warn("[status] tool.onToolChange failed", e);
+  registerSuiteItem({
+    id: TOOL_ID,
+    suite: "shared",
+    label: getLocalLang() === "en" ? "Status Tracker" : "状态追踪",
+    icon: ICON_URL,
+    hint: "]",
+    onPick: () => activateHiddenMode(TOOLS_SUITE_ID, STATUS_MODE_ID),
+  });
+
+  // Track which tool/mode is active and open / close the palette in
+  // sync. Needs both onToolChange (leaving the suite entirely) and
+  // onToolModeChange (switching to a sibling mode) — same pattern as
+  // metadata-inspector / bestiary.
+  let activeToolNow: string | null = null;
+  let activeModeNow = "";
+  const syncStatusFromActive = async (): Promise<void> => {
+    try {
+      const [tool, mode] = await Promise.all([
+        OBR.tool.getActiveTool(),
+        OBR.tool.getActiveToolMode(),
+      ]);
+      const wasUs = activeToolNow === TOOLS_SUITE_ID && activeModeNow === STATUS_MODE_ID;
+      activeToolNow = tool;
+      activeModeNow = mode ?? "";
+      const isUs = tool === TOOLS_SUITE_ID && activeModeNow === STATUS_MODE_ID;
+      if (isUs) {
+        if (!active) await activate();
+      } else {
+        // Remember the tool the user switched to (so `]` can switch
+        // back to it next time). If they switched to a sibling suite
+        // mode instead of a real tool, this ends up as TOOLS_SUITE_ID
+        // itself — activating it just re-opens the suite with no
+        // mode picked, an acceptable fallback for that edge case.
+        if (wasUs || previousTool === null) previousTool = tool;
+        if (active) await deactivate();
       }
-    }),
+    } catch (e) {
+      console.warn("[status] syncStatusFromActive failed", e);
+    }
+  };
+  unsubs.push(
+    OBR.tool.onToolChange(() => { void syncStatusFromActive(); }),
   );
+  unsubs.push(
+    OBR.tool.onToolModeChange(() => { void syncStatusFromActive(); }),
+  );
+  await syncStatusFromActive();
 
   // `]` shortcut — keep working (item 2 doesn't ask to remove it,
-  // and the muscle memory matters). Now toggles via the tool API
-  // rather than calling `toggle()` directly so the active tool
-  // stays in sync with the palette state.
+  // and the muscle memory matters). Toggles via activateHiddenMode /
+  // activateTool so the active tool/mode stays in sync with the
+  // palette state.
   const performShortcutToggle = async (): Promise<void> => {
     try {
-      const cur = await OBR.tool.getActiveTool();
-      if (cur === TOOL_ID) {
+      const isUsNow = activeToolNow === TOOLS_SUITE_ID && activeModeNow === STATUS_MODE_ID;
+      if (isUsNow) {
         await OBR.tool.activateTool(previousTool ?? MOVE_TOOL);
       } else {
-        previousTool = cur;
-        await OBR.tool.activateTool(TOOL_ID);
+        previousTool = activeToolNow;
+        await activateHiddenMode(TOOLS_SUITE_ID, STATUS_MODE_ID);
       }
     } catch (e) {
       console.warn("[status] BracketRight toggle failed", e);
@@ -812,14 +825,16 @@ export async function setupStatusTracker(): Promise<void> {
     await OBR.tool.createAction({
       id: TOOL_ACTION_ID,
       shortcut: "BracketRight",
-      icons: [{
-        icon: ICON_URL,
-        label: getLocalLang() === "en" ? "Status Tracker" : "状态追踪",
-        // Available on Select + on the status tracker tool itself
-        // (so pressing `]` again from inside the tool exits it).
-        // No roles filter — players can press `]` too.
-        filter: { activeTools: [SELECT_TOOL, TOOL_ID] },
-      }],
+      icons: [
+        {
+          icon: ICON_URL,
+          label: getLocalLang() === "en" ? "Status Tracker" : "状态追踪",
+          // Single filter, same shape as the pre-migration version
+          // that's known to work — just pointing at the shared suite
+          // id instead of the old private TOOL_ID.
+          filter: { activeTools: [SELECT_TOOL, TOOLS_SUITE_ID] },
+        },
+      ],
       onClick: performShortcutToggle,
     });
   } catch (e) {
@@ -1001,7 +1016,7 @@ export async function teardownStatusTracker(): Promise<void> {
   }
   try { await OBR.tool.removeAction(TOOL_ACTION_ID); } catch {}
   try { await OBR.tool.removeMode(`${TOOL_ID}/mode`); } catch {}
-  try { await OBR.tool.remove(TOOL_ID); } catch {}
+  unregisterSuiteItem(TOOL_ID);
   await removeCreateStatusMenu();
   // Force-close every popover/modal UNCONDITIONALLY. We can't rely on
   // deactivate() here — it early-returns when the status tool isn't the

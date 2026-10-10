@@ -31,6 +31,7 @@ import OBR, { buildImage, Item } from "@owlbear-rodeo/sdk";
 import { getLocalLang } from "../../state";
 import { assetUrl } from "../../asset-base";
 import { turnOnTimeStop } from "../timeStop";
+import { initBroadcastAuth, isFromSelf } from "../../utils/broadcastAuth";
 import {
   PLUGIN_ID,
   TRICKSTER_KEY,
@@ -39,6 +40,13 @@ import {
   TricksterMeta,
   TricksterTargetMode,
 } from "./types";
+import {
+  GM_TOOLS_SUITE_ID,
+  suiteModeFilter,
+  registerSuiteItem,
+  unregisterSuiteItem,
+  activateHiddenMode,
+} from "../toolsSuite";
 
 const TOOL_ID = `${PLUGIN_ID}/tool`;
 const TOOL_MODE_ID = `${PLUGIN_ID}/mode`;
@@ -496,6 +504,7 @@ async function flagTricksterFired(trickster: Item, meta: TricksterMeta) {
 // --- Setup / teardown ---
 
 export async function setupTrickster(): Promise<void> {
+  await initBroadcastAuth();
   const en = getLocalLang() === "en";
   try { role = (await OBR.player.getRole()) as "GM" | "PLAYER"; } catch {}
 
@@ -508,28 +517,13 @@ export async function setupTrickster(): Promise<void> {
   }
 
   if (role === "GM") {
-    await OBR.tool.create({
-      id: TOOL_ID,
-      icons: [
-        {
-          icon: TOOL_ICON_URL,
-          label: en ? "Where's the trickster?" : "捣蛋鬼在哪？",
-          filter: { roles: ["GM"] },
-        },
-      ],
-      onClick: async () => {
-        await OBR.tool.activateTool(TOOL_ID);
-        return false;
-      },
-    });
-
     await OBR.tool.createMode({
       id: TOOL_MODE_ID,
       icons: [
         {
           icon: TOOL_ICON_URL,
           label: en ? "Drag to draw trigger zone" : "拖动绘制触发区",
-          filter: { activeTools: [TOOL_ID] },
+          filter: suiteModeFilter(GM_TOOLS_SUITE_ID),
         },
       ],
       cursors: [{ cursor: "crosshair" }],
@@ -568,6 +562,15 @@ export async function setupTrickster(): Promise<void> {
         await clearPreview();
       },
     });
+
+    registerSuiteItem({
+      id: TOOL_ID,
+      suite: "gm",
+      label: en ? "Where's the trickster?" : "捣蛋鬼在哪？",
+      icon: TOOL_ICON_URL,
+      hint: en ? "Drag to draw trigger zone" : "拖动绘制触发区",
+      onPick: () => activateHiddenMode(GM_TOOLS_SUITE_ID, TOOL_MODE_ID),
+    });
   }
 
   // Selection watcher (DM): single trickster selected → edit popover.
@@ -601,6 +604,7 @@ export async function setupTrickster(): Promise<void> {
 
   unsubs.push(
     OBR.broadcast.onMessage(BC_SAVE, async (msg) => {
+      if (!isFromSelf(msg)) return; // LOCAL from our edit popover
       const data = msg.data as Partial<TricksterMeta> & { id: string } | undefined;
       if (!data || !data.id) return;
       try {
@@ -634,6 +638,7 @@ export async function setupTrickster(): Promise<void> {
 
   unsubs.push(
     OBR.broadcast.onMessage(BC_DELETE, async (msg) => {
+      if (!isFromSelf(msg)) return;
       const data = msg.data as { id: string } | undefined;
       if (!data) return;
       try { await OBR.scene.items.deleteItems([data.id]); } catch {}
@@ -642,13 +647,15 @@ export async function setupTrickster(): Promise<void> {
   );
 
   unsubs.push(
-    OBR.broadcast.onMessage(BC_CLOSE, async () => {
+    OBR.broadcast.onMessage(BC_CLOSE, async (msg) => {
+      if (!isFromSelf(msg)) return;
       await closeEditPopover();
     }),
   );
 
   unsubs.push(
     OBR.broadcast.onMessage(BC_RESET, async (msg) => {
+      if (!isFromSelf(msg)) return;
       const data = msg.data as { id: string } | undefined;
       if (!data) return;
       try {
@@ -671,7 +678,7 @@ export async function teardownTrickster(): Promise<void> {
   await clearPreview();
   if (role === "GM") {
     try { await OBR.tool.removeMode(TOOL_MODE_ID); } catch {}
-    try { await OBR.tool.remove(TOOL_ID); } catch {}
+    unregisterSuiteItem(TOOL_ID);
   }
   for (const u of unsubs.splice(0)) u();
   lastTokenPos.clear();

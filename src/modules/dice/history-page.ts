@@ -1,5 +1,5 @@
 import OBR from "@owlbear-rodeo/sdk";
-import { DieResult, sidesOf } from "./types";
+import { DieResult, sidesOf, sanitizeRollPayload, sanitizeRollList, rollDisplayName } from "./types";
 import { applyI18nDom, t } from "../../i18n";
 import { getLocalLang, onLangChange } from "../../state";
 import { bindPanelDrag } from "../../utils/panelDrag";
@@ -31,6 +31,8 @@ const BC_DICE_REPLAY = "com.obr-suite/dice-replay";
 // so the row appears at the same moment the dice arrive in the
 // corner.
 const BC_DICE_HISTORY_REVEAL = "com.obr-suite/dice-history-reveal";
+const BC_DICE_HISTORY_SYNC_REQUEST = "com.obr-suite/dice-history-sync-request";
+const BC_DICE_HISTORY_SYNC = "com.obr-suite/dice-history-sync";
 
 // Per-room dice history. Old shape was a single global key
 // "obr-suite/dice/history" — every room's rolls piled into the same
@@ -60,6 +62,7 @@ interface HistoryEntry {
   rollerId: string;
   rollerName: string;
   rollerColor: string;
+  tokenName?: string;
   rollId: string;
   ts: number;
   hidden?: boolean;
@@ -146,8 +149,9 @@ function loadHistory(): HistoryEntry[] {
   try {
     const v = localStorage.getItem(LS_HISTORY);
     if (!v) return [];
-    const p = JSON.parse(v);
-    if (Array.isArray(p)) return p;
+    // Sanitise on load: entries saved by older versions may carry
+    // unescaped HTML from a crafted broadcast.
+    return sanitizeRollList(JSON.parse(v)) as HistoryEntry[];
   } catch {}
   return [];
 }
@@ -422,10 +426,10 @@ function render(): void {
       const cid = g.cid;
       return `
       <div class="${rowCls.join(" ")}" data-roller="${escapeHtml(h.rollerName)}" data-rollerid="${escapeHtml(h.rollerId)}" data-player="${escapeHtml(playerKey)}" data-cid="${escapeHtml(cid)}">
-        <div class="swatch" style="--player-color:${h.rollerColor}"></div>
+        <div class="swatch" style="--player-color:${escapeHtml(String(h.rollerColor))}"></div>
         <div class="body">
           <div class="line1">
-            <span class="player">${dmTag}${darkTag}${collTag}${repeatTag}${escapeHtml(h.rollerName)}</span>
+            <span class="player">${dmTag}${darkTag}${collTag}${repeatTag}${escapeHtml(rollDisplayName(h))}</span>
             <span class="ago">${formatAgo(Date.now() - h.ts)}</span>
           </div>
           ${bodyTail}
@@ -671,9 +675,9 @@ function renderHistoryBlock(cid: string, members: HistoryEntry[]): string {
     ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>`
     : "";
   const collTag = `<span class="coll-tag">${tt("diceHistColl")} ${members.length}</span>`;
-  const labelOrName = escapeHtml(head.label || head.rollerName);
+  const labelOrName = escapeHtml(head.label || rollDisplayName(head));
   return `
-    <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${head.rollerColor}">
+    <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${escapeHtml(String(head.rollerColor))}">
       <div class="body">
         <div class="line1">
           <span class="player">${darkTag}${collTag}${labelOrName}</span>
@@ -717,10 +721,10 @@ function renderEntryRow(h: HistoryEntry, cid: string, tight: boolean): string {
     ? buildRepeatStripHtml(h, "flow")
     : `<div class="formula">${buildFormula(h, /* showLabel */ false)}</div>`;
   return `
-    <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${h.rollerColor}">
+    <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${escapeHtml(String(h.rollerColor))}">
       <div class="body">
         <div class="line1">
-          <span class="player">${h.hidden && !tight ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>` : ""}${escapeHtml(h.label || h.rollerName)}</span>
+          <span class="player">${h.hidden && !tight ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>` : ""}${escapeHtml(h.label || rollDisplayName(h))}</span>
           <span class="ago">${ago}</span>
         </div>
         ${body}
@@ -897,11 +901,14 @@ OBR.onReady(async () => {
   // (search "Hidden (dark) roll on a non-DM, non-roller client")
   // already handles the audio cadence, so we lose nothing.
   OBR.broadcast.onMessage(BROADCAST_DICE_ROLL, (event) => {
-    const data = event.data as HistoryEntry | undefined;
-    if (!data || !Array.isArray(data.dice) || !data.rollId) return;
+    // Untrusted: any player can craft this message.
+    const data = sanitizeRollPayload(event.data) as HistoryEntry | null;
+    if (!data) return;
     if (data.hidden && myRole !== "GM" && data.rollerId !== myPlayerId) {
       return;
     }
+    // Anti-cheat redacted copy of a GM hidden roll: no real values.
+    if ((data as any).redacted) return;
     // Stash. Fallback timer: if the reveal never arrives (effect
     // modal crashed / cancelled), commit anyway after PENDING_TIMEOUT_MS.
     const timer = window.setTimeout(
@@ -910,6 +917,31 @@ OBR.onReady(async () => {
     );
     pendingEntries.set(data.rollId, { entry: data, timer });
   });
+
+  // This popover is usually opened BY the roll it should show, so it
+  // missed that broadcast: ask the background for the recent ones and
+  // queue them as pending too (the reveal — or the fallback timer —
+  // commits them, so the result still appears only after the dice).
+  OBR.broadcast.onMessage(BC_DICE_HISTORY_SYNC, (event) => {
+    const rolls = (event.data as { rolls?: unknown[] } | undefined)?.rolls;
+    if (!Array.isArray(rolls)) return;
+    for (const raw of rolls) {
+      const data = sanitizeRollPayload(raw) as HistoryEntry | null;
+      if (!data || (data as any).redacted) continue;
+      if (data.hidden && myRole !== "GM" && data.rollerId !== myPlayerId) continue;
+      if (pendingEntries.has(data.rollId)) continue;
+      if (history.some((h) => h.rollId === data.rollId)) continue;
+      const age = Date.now() - (data.ts || Date.now());
+      const timer = window.setTimeout(
+        () => commitPending(data.rollId),
+        Math.max(0, PENDING_TIMEOUT_MS - age),
+      );
+      pendingEntries.set(data.rollId, { entry: data, timer });
+    }
+  });
+  OBR.broadcast
+    .sendMessage(BC_DICE_HISTORY_SYNC_REQUEST, {}, { destination: "LOCAL" })
+    .catch(() => {});
 
   // Reveal — commit the matching pending entry so it appears in the
   // visible history list now.

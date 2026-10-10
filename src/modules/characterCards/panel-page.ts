@@ -1,9 +1,18 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { ICONS } from "../../icons";
 import { applyI18nDom, t } from "../../i18n";
-import { getLocalLang, onLangChange } from "../../state";
+import {
+  getLocalLang,
+  onLangChange,
+  getState,
+  onStateChange,
+  startSceneSync,
+  refreshFromScene as refreshSuiteState,
+} from "../../state";
 import { assetUrl } from "../../asset-base";
 import { reconcileUploadedCardShieldState } from "./xlsx-shield-state";
+import { sendChat } from "../roomChat/send";
+import type { ChatCast } from "../roomChat/types";
 // 2026-06-20 — same quick-pick popup info-page.ts uses for its own
 // .rollable clicks. Exported specifically so this file can forward
 // "cc-roll-dice" messages from the nested cc-fullscreen.html iframe,
@@ -68,6 +77,11 @@ function getTemplateConfigForLang(language: string): TemplateConfig {
 // panel instance reloads the affected card iframe so other clients
 // (DM + players) see the new content without re-uploading.
 const BC_CARD_UPDATED = "com.obr-suite/cc-card-updated";
+/** Channels the nested cc-fullscreen iframe may ask us to broadcast. */
+const RELAYABLE_CHANNELS = new Set<string>([
+  BC_CARD_UPDATED,
+  "com.obr-suite/cc-dirty-changed",
+]);
 
 // Suite-namespaced popover ID so the standalone plugin's panel doesn't
 // fight with us during dual-install. Scene-metadata keys (the bound card
@@ -1814,7 +1828,31 @@ onLangChange((next) => {
   render();
 });
 
+// The nested fullscreen sheet has no working OBR SDK, so it can't read
+// the suite state (library list, disabled sources, Data Version) from
+// the room/scene itself. This panel can: keep it synced and relay it.
+// Resolves after this panel's first real read of the suite state, so
+// the iframe is never answered with the defaults.
+let resolvePanelState: () => void = () => {};
+const panelStateReady = new Promise<void>((r) => { resolvePanelState = r; });
+
+function relaySuiteState(target?: Window | null): void {
+  const win =
+    target ??
+    (document.querySelector(
+      'iframe[src*="cc-fullscreen.html"]',
+    ) as HTMLIFrameElement | null)?.contentWindow;
+  try {
+    win?.postMessage({ type: "cc-suite-state", payload: getState() }, "*");
+  } catch {}
+}
+
 OBR.onReady(async () => {
+  startSceneSync();
+  void refreshSuiteState()
+    .catch(() => {})
+    .finally(() => resolvePanelState());
+  onStateChange(() => relaySuiteState());
   applyI18nDom(lang);
   roomId = safeRoomId(OBR.room.id || "default");
   try {
@@ -2124,6 +2162,14 @@ OBR.onReady(async () => {
     // solo per aggiornare il pannello info, non per ricaricare l'iframe.
     if (data.cardId.startsWith("imported_")) return;
 
+    // Forward to the open fullscreen sheet (it has no SDK of its own);
+    // it decides whether to reload or show the "changed" banner.
+    postToFullscreenIframe({
+      type: "cc-card-updated",
+      cardId: data.cardId,
+      savedAt: (data as { savedAt?: string }).savedAt ?? null,
+    });
+
     const card = cards.find((c) => c.id === data.cardId);
     if (!card) return;
 
@@ -2155,6 +2201,7 @@ OBR.onReady(async () => {
       | undefined;
     if (!data?.cardId) return;
     const cardId = data.cardId;
+    postToFullscreenIframe({ type: "cc-dirty-changed", cardId });
     // Se richiesto un re-render completo (es. dopo save fallito dalla
     // fullscreen), ricostruiamo tutta la lista così la nuvola gialla
     // appare immediatamente senza aspettare la prossima interazione.
@@ -2255,6 +2302,23 @@ OBR.onReady(async () => {
   // postMessage had no listener and clicking an ability modifier /
   // saving throw in the fullscreen card silently did nothing.
   window.addEventListener("message", (e) => {
+    // Broadcast relay for the nested cc-fullscreen iframe (no working
+    // SDK there). Only accepted from that iframe, only for card channels.
+    if (e.data?.type === "cc-relay-broadcast") {
+      const fs = document.querySelector<HTMLIFrameElement>(
+        'iframe[src*="cc-fullscreen.html"]',
+      );
+      if (!fs || e.source !== fs.contentWindow) return;
+      const p = e.data.payload as
+        | { channel?: string; data?: unknown; destination?: string }
+        | undefined;
+      if (!p?.channel || !RELAYABLE_CHANNELS.has(p.channel)) return;
+      if (p.destination !== "LOCAL" && p.destination !== "REMOTE") return;
+      OBR.broadcast
+        .sendMessage(p.channel, p.data as any, { destination: p.destination })
+        .catch((err) => console.warn("[cc-panel] relay broadcast failed", err));
+      return;
+    }
     if (e.data?.type === "cc-back-to-list") {
       current = { type: "empty" };
       const viewer = document.getElementById("viewer") as HTMLDivElement;
@@ -2295,6 +2359,42 @@ OBR.onReady(async () => {
           );
         }
       })();
+    }
+    if (e.data?.type === "cc-request-suite-state") {
+      const src = e.source as Window | null;
+      void panelStateReady.then(() => relaySuiteState(src));
+    }
+    if (e.data?.type === "cc-cast-spell") {
+      // Character card → Room Chat. panel-page.ts has a working SDK
+      // (same reason cc-roll-dice relays through here — see comment
+      // above). The sheet sends a ChatCast already built by
+      // cast-core.ts#buildCast (description, meta, DC rule applied).
+      const cast = e.data.payload?.cast as ChatCast | undefined;
+      const spellName = typeof cast?.spellName === "string" ? cast.spellName.trim() : "";
+      if (cast && spellName) {
+        void sendChat({ scope: "all", text: "", cast: { ...cast, spellName } });
+      }
+    }
+    if (e.data?.type === "cc-search-spell") {
+      // Sheet's 🔍 next to a spell → global search bar. The sheet is a
+      // big OBR modal that sits ABOVE the search popover (why the old
+      // per-row search button was removed in 2026-05 — the user never
+      // saw the result), so close the sheet first, then fill search.
+      const q = String(e.data.payload?.q ?? "").trim();
+      if (q) {
+        void (async () => {
+          try {
+            await OBR.broadcast.sendMessage(
+              "com.obr-suite/search-query",
+              { q, autoPin: true },
+              { destination: "LOCAL" },
+            );
+          } catch {}
+          saveState();
+          try { localStorage.removeItem(PANEL_OPEN_KEY); } catch {}
+          try { await OBR.modal.close(PANEL_MODAL_ID); } catch {}
+        })();
+      }
     }
   });
   // Validate restored activeCardId still exists; otherwise clear

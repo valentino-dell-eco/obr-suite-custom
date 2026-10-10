@@ -1,4 +1,5 @@
 import OBR from "@owlbear-rodeo/sdk";
+import { assetUrl } from "../../asset-base";
 import { installDebugOverlay } from "../../utils/debugOverlay";
 import { ICONS } from "../../icons";
 import { resolveClickRollTarget } from "../dice/tags";
@@ -467,6 +468,14 @@ async function toggleTokenNameText(
   }
 }
 
+/** Card JSON is player-supplied: coerce numeric fields to a finite
+ *  number (0 otherwise) before they go into dice expressions / HTML.
+ *  Also makes a string "3" proficiency bonus ADD instead of concatenate. */
+function num(v: unknown): number {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function fmtMod(n: unknown): string {
   if (typeof n !== "number") return "?";
   return n >= 0 ? `+${n}` : `${n}`;
@@ -891,9 +900,10 @@ function render(
 
   const statBanner = `<div class="cc-stat-mount" id="cc-stat-mount"></div>`;
 
-  const initExpr = `1d20${cs.initiative >= 0 ? `+${cs.initiative}` : cs.initiative}`;
+  const initNum = num(cs.initiative);
+  const initExpr = `1d20${initNum >= 0 ? `+${initNum}` : initNum}`;
   const chips = `
-    <div class="chip init" ><span class="k">${tt("ccInit")}</span><span class="v rollable" data-expr="${initExpr}" data-label="${tt("ccFullInit")}">${fmtMod(cs.initiative)}</span></div>
+    <div class="chip init" ><span class="k">${tt("ccInit")}</span><span class="v rollable" data-expr="${escapeHtml(initExpr)}" data-label="${escapeHtml(tt("ccFullInit"))}">${fmtMod(cs.initiative)}</span></div>
     <div class="chip"><span class="k">${tt("ccSpeed")}</span><span class="v">${escapeHtml(speedStr)}</span></div>
     <div class="chip"><span class="k">${tt("ccPassivePerception")}</span><span class="v">${escapeHtml(cs.passive_perception)}</span></div>
     <div class="chip"><span class="k">${tt("ccProfBonus")}</span><span class="v">${fmtMod(cs.proficiency_bonus)}</span></div>
@@ -919,7 +929,7 @@ function render(
     const total = typeof s.total === "number" ? s.total : 0;
     const expr = `1d20${total >= 0 ? `+${total}` : total}`;
     const lbl = `${s.name ?? "?"}`;
-    return `<div class="${cls} rollable" data-expr="${expr}" data-label="${escapeHtml(lbl)}" title="${escapeHtml(lbl)} ${expr}">
+    return `<div class="${cls} rollable" data-expr="${escapeHtml(expr)}" data-label="${escapeHtml(lbl)}" title="${escapeHtml(lbl)} ${escapeHtml(expr)}">
       <span class="sk-n">${escapeHtml(s.name ?? "?")}</span>
       <span class="sk-v">${fmtMod(s.total)}</span>
     </div>`;
@@ -937,15 +947,15 @@ function render(
       typeof a.save?.bonus === "number"
         ? a.save.bonus
         : a.save?.proficient
-          ? aMod + (cs.proficiency_bonus ?? 0)
+          ? aMod + num(cs.proficiency_bonus)
           : aMod;
     const saveExpr = `1d20${saveBonus >= 0 ? `+${saveBonus}` : saveBonus}`;
     const saveLbl = `${FULL[k] ?? ABBR[k] ?? k}${t(getLocalLang(), "ccInfoSaveSuffix")}`;
     return `<div class="abl${prof ? " prof" : ""}">
         <div class="abl-head">
-          <span class="a rollable" data-expr="${saveExpr}" data-label="${escapeHtml(saveLbl)}" title="${escapeHtml(saveLbl)} ${saveExpr}">${ABBR[k]}</span>
+          <span class="a rollable" data-expr="${escapeHtml(saveExpr)}" data-label="${escapeHtml(saveLbl)}" title="${escapeHtml(saveLbl)} ${escapeHtml(saveExpr)}">${ABBR[k]}</span>
           <span class="t" style="padding-left: 5px !important;">${escapeHtml(a.total)}</span>
-          <span class="m rollable" data-expr="${aExpr}" data-label="${escapeHtml(aLbl)}" title="${escapeHtml(aLbl)} ${aExpr}">${fmtMod(a.modifier)}</span>
+          <span class="m rollable" data-expr="${escapeHtml(aExpr)}" data-label="${escapeHtml(aLbl)}" title="${escapeHtml(aLbl)} ${escapeHtml(aExpr)}">${fmtMod(a.modifier)}</span>
         </div>
         ${skHtml ? `<div class="abl-skills">${skHtml}</div>` : ""}
       </div>`;
@@ -964,7 +974,7 @@ function render(
       </div>
       <div class="wp-right">
         <div class="wp-main-atk-dmg">
-          <span class="atk rollable" data-expr="${atkExpr}" data-label="${escapeHtml(atkLbl)}" title="${escapeHtml(atkLbl)} ${atkExpr}">${escapeHtml(bonus)}</span>
+          <span class="atk rollable" data-expr="${escapeHtml(atkExpr)}" data-label="${escapeHtml(atkLbl)}" title="${escapeHtml(atkLbl)} ${escapeHtml(atkExpr)}">${escapeHtml(bonus)}</span>
           <span class="dmg">DC ${escapeHtml(sp.save_dc ?? cs.dc ?? "?")}</span>
         </div>
       </div>
@@ -1085,7 +1095,7 @@ function render(
           
           <div class="wp-right">
             <div class="wp-main-atk-dmg">
-              <span class="atk rollable" data-expr="${atkExpr}" data-label="${escapeHtml(atkLbl)}" title="${escapeHtml(atkLbl)} ${atkExpr}">${escapeHtml(w.attack_bonus ?? "?")}</span>
+              <span class="atk rollable" data-expr="${escapeHtml(atkExpr)}" data-label="${escapeHtml(atkLbl)}" title="${escapeHtml(atkLbl)} ${escapeHtml(atkExpr)}">${escapeHtml(w.attack_bonus ?? "?")}</span>
               <span class="dmg">${mainDmgHtml}</span>
             </div>
             ${extraRows.join("")}
@@ -1245,6 +1255,50 @@ let currentDragUnbind: (() => void) | null = null;
 // the cluster's search input. The cluster echoes its own input value
 // from this broadcast so the user sees the chip text appear in the
 // search box and the search popover opens with matching results.
+// 2026-10 — spells in the mini panel start the cast flow (level
+// pick + editable save DC → Room Chat) instead of a search. The cast
+// UI is its own OBR modal (spell-cast.html) since this popover is too
+// small to host it; the spell object + slots + DC go in the URL hash.
+let castableSpells: any[] = [];
+let castCtx: { slots: any; saveDc: unknown; characterLevel: number | null } = {
+  slots: {},
+  saveDc: null,
+  characterLevel: null,
+};
+const CAST_MODAL_ID = "com.obr-suite/spell-cast";
+
+function renderCastChips(spells: any[]): string {
+  castableSpells = spells;
+  return spells
+    .map(
+      (s, i) =>
+        `<span class="srch-chip cast-chip" data-cast-idx="${i}" title="${escapeHtml(tt("ccCastSpell"))}">✨ ${escapeHtml(String(s.name))}</span>`,
+    )
+    .join("");
+}
+
+async function openCastModal(spell: any): Promise<void> {
+  const payload = {
+    spell,
+    slots: castCtx.slots,
+    saveDc: castCtx.saveDc,
+    characterLevel: castCtx.characterLevel,
+  };
+  const hash = encodeURIComponent(JSON.stringify(payload));
+  try { await OBR.modal.close(CAST_MODAL_ID); } catch {}
+  try {
+    await OBR.modal.open({
+      id: CAST_MODAL_ID,
+      url: `${assetUrl("spell-cast.html")}#${hash}`,
+      width: 380,
+      height: 430,
+      hidePaper: true,
+    });
+  } catch (e) {
+    console.error("[cc-info] open cast modal failed", e);
+  }
+}
+
 function renderSearchChips(d: any): string {
   const sections: string[] = [];
   const features = d.features ?? {};
@@ -1282,6 +1336,11 @@ function renderSearchChips(d: any): string {
   // 法术 — flatten always_known + prepared + cantrips_known into one
   // grid (de-duplicated by name).
   const sp = d.spellcasting ?? {};
+  castCtx = {
+    slots: sp.spell_slots ?? {},
+    saveDc: sp.save_dc ?? d.core_stats?.dc ?? null,
+    characterLevel: typeof d.total_level === "number" ? d.total_level : null,
+  };
   const allSpells: any[] = [];
   for (const key of ["cantrips_known", "always_known", "prepared"]) {
     const arr = sp[key];
@@ -1297,7 +1356,7 @@ function renderSearchChips(d: any): string {
     });
     sections.push(`<div class="srch-sect">
       <div class="srch-sect-h">${tt("ccTabSpells")}</div>
-      <div class="srch-grid">${renderChips(uniq)}</div>
+      <div class="srch-grid">${renderCastChips(uniq)}</div>
     </div>`);
   }
 
@@ -1314,6 +1373,18 @@ async function resolveBoundToken(): Promise<string | null> {
 }
 
 root.addEventListener("click", async (e) => {
+  // Spell chip → cast flow.
+  const castChip = (e.target as HTMLElement | null)?.closest<HTMLElement>(
+    ".cast-chip",
+  );
+  if (castChip) {
+    e.preventDefault();
+    e.stopPropagation();
+    const sp = castableSpells[Number(castChip.dataset.castIdx)];
+    if (sp) void openCastModal(sp);
+    return;
+  }
+
   // Search-chip click → fill the cluster's search input so the
   // 5etools popover opens with matching results.
   const chip = (e.target as HTMLElement | null)?.closest<HTMLElement>(

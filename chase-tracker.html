@@ -259,6 +259,22 @@
       .pin.quarry::after {
         border-color: #3498db;
       }
+      /* Quarry hidden from players ("distances only"): a plain "?" disc. */
+      .pin.masked::after {
+        background: #2a3150;
+      }
+      .pin.masked::before {
+        content: "?";
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 800;
+        color: #9fc6ef;
+      }
       .pin.pursuer::after {
         border-color: #e74c3c;
       }

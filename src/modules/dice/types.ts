@@ -63,3 +63,123 @@ export function sidesOf(type: string): number {
   const m = type.match(/^d(\d+)$/i);
   return m ? parseInt(m[1], 10) : 20;
 }
+
+// --- Untrusted roll payload sanitizer ---------------------------------
+//
+// Dice rolls arrive from OTHER players via OBR.broadcast (anyone can
+// craft one from the browser console) and are persisted in
+// localStorage, then rendered with innerHTML. Every entry point —
+// broadcast receive AND history load — must pass through this so only
+// plain numbers, a hex colour and strings ever reach the renderers.
+
+export const DEFAULT_ROLLER_COLOR = "#5dade2";
+const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const DIE_TYPE_RE = /^d\d{1,4}$/i;
+const MAX_SANITIZED_DICE = 500;
+
+export function safeColor(c: unknown): string {
+  return typeof c === "string" && HEX_COLOR_RE.test(c) ? c : DEFAULT_ROLLER_COLOR;
+}
+
+function finiteNum(v: unknown, fallback = 0): number {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function sanitizeDie(raw: unknown): DieResult | null {
+  if (!raw || typeof raw !== "object") return null;
+  const d = raw as Record<string, unknown>;
+  const type = typeof d.type === "string" && DIE_TYPE_RE.test(d.type) ? d.type.toLowerCase() : null;
+  if (!type) return null;
+  const sides = sidesOf(type);
+  const value = Math.max(1, Math.min(sides, Math.round(finiteNum(d.value, 1))));
+  const out: DieResult = { type, value };
+  if (d.loser) out.loser = true;
+  if (d.subtract) out.subtract = true;
+  if (d.originalValue != null && Number.isFinite(Number(d.originalValue))) {
+    out.originalValue = Math.round(Number(d.originalValue));
+  }
+  if (d.burstParent != null && Number.isInteger(Number(d.burstParent))) {
+    out.burstParent = Number(d.burstParent);
+  }
+  return out;
+}
+
+/** Sanitised shape shared by every dice-roll consumer (history,
+ *  panel, replay). Unknown fields are dropped. */
+export interface SanitizedRoll {
+  itemId: string | null;
+  dice: DieResult[];
+  winnerIdx: number;
+  modifier: number;
+  label: string;
+  total: number;
+  rollerId: string;
+  rollerName: string;
+  rollerColor: string;
+  rollId: string;
+  ts: number;
+  /** Name of the token the roll was made for (absent when no token). */
+  tokenName?: string;
+  hidden?: boolean;
+  redacted?: boolean;
+  rollerIsGM?: boolean;
+  autoDismiss?: boolean;
+  sameHighlight?: boolean;
+  collectiveId?: string;
+  rowStarts?: number[];
+}
+
+/** Returns a clean copy of a roll payload, or null if it isn't one. */
+export function sanitizeRollPayload(raw: unknown): SanitizedRoll | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.rollId !== "string" || !r.rollId) return null;
+  if (!Array.isArray(r.dice)) return null;
+  const dice = r.dice
+    .slice(0, MAX_SANITIZED_DICE)
+    .map(sanitizeDie)
+    .filter((d): d is DieResult => !!d);
+  if (!dice.length) return null;
+  const out: SanitizedRoll = {
+    itemId: typeof r.itemId === "string" ? r.itemId : null,
+    dice,
+    winnerIdx: Math.max(-1, Math.min(dice.length - 1, Math.round(finiteNum(r.winnerIdx, -1)))),
+    modifier: finiteNum(r.modifier),
+    label: typeof r.label === "string" ? r.label : "",
+    total: finiteNum(r.total),
+    rollerId: typeof r.rollerId === "string" ? r.rollerId : "",
+    rollerName: typeof r.rollerName === "string" ? r.rollerName : "",
+    rollerColor: safeColor(r.rollerColor),
+    rollId: r.rollId,
+    ts: finiteNum(r.ts, Date.now()),
+  };
+  if (typeof r.tokenName === "string" && r.tokenName.trim()) {
+    out.tokenName = r.tokenName.trim().slice(0, 80);
+  }
+  if (r.hidden) out.hidden = true;
+  if (r.redacted) out.redacted = true;
+  if (r.rollerIsGM) out.rollerIsGM = true;
+  if (r.autoDismiss) out.autoDismiss = true;
+  if (r.sameHighlight) out.sameHighlight = true;
+  if (typeof r.collectiveId === "string" && r.collectiveId) out.collectiveId = r.collectiveId;
+  if (Array.isArray(r.rowStarts)) {
+    out.rowStarts = r.rowStarts
+      .map((n) => Number(n))
+      .filter((n) => Number.isInteger(n) && n >= 0 && n < dice.length);
+  }
+  return out;
+}
+
+/** Sanitise a stored history array (drops anything malformed). */
+export function sanitizeRollList(raw: unknown): SanitizedRoll[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(sanitizeRollPayload).filter((x): x is SanitizedRoll => !!x);
+}
+
+/** Name shown for a roll: "Token (Player)" when the roll was made for a
+ *  token, otherwise just the player's name. */
+export function rollDisplayName(r: { tokenName?: string; rollerName?: string }): string {
+  const player = r.rollerName || "?";
+  return r.tokenName ? `${r.tokenName} (${player})` : player;
+}

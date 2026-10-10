@@ -46,6 +46,8 @@ export const PANEL_IDS = {
   /** Chase Tracker dock (bottom-center by default). Shows every
    *  active chase as a bar; drag the header to relocate. */
   chaseTracker: "chase-tracker",
+  /** Room Chat popover (bottom-left by default). Drag the header grip. */
+  roomChat: "room-chat",
 } as const;
 
 export type PanelId = (typeof PANEL_IDS)[keyof typeof PANEL_IDS];

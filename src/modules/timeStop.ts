@@ -1,6 +1,7 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { getLocalLang } from "../state";
 import { assetUrl } from "../asset-base";
+import { initBroadcastAuth, isFromSelf, isFromGM } from "../utils/broadcastAuth";
 
 // "Time Stop" / 时停模式 module — migrated from time-stop plugin.
 //
@@ -235,6 +236,7 @@ async function toggle() {
 }
 
 export async function setupTimeStop(): Promise<void> {
+  await initBroadcastAuth();
   isGM = (await OBR.player.getRole()) === "GM";
   const en = getLocalLang() === "en";
 
@@ -281,8 +283,9 @@ export async function setupTimeStop(): Promise<void> {
   }
 
   unsubs.push(
-    OBR.broadcast.onMessage(BC_TOGGLE, async () => {
+    OBR.broadcast.onMessage(BC_TOGGLE, async (event) => {
       if (!isGM) return;
+      if (!isFromSelf(event)) return; // LOCAL from our cluster-row
       await toggle();
     })
   );
@@ -296,6 +299,7 @@ export async function setupTimeStop(): Promise<void> {
   // player's overlay shows that image fullscreen instead of the bars.
   unsubs.push(
     OBR.broadcast.onMessage(BROADCAST_ON, async (event) => {
+      if (!isFromGM(event)) return; // REMOTE from the GM's turnOn()
       const cgUrl = (event.data as { cgUrl?: string } | undefined)?.cgUrl ?? null;
       if (!isGM) {
         await interruptInFlightDrag();
@@ -306,7 +310,8 @@ export async function setupTimeStop(): Promise<void> {
   );
 
   unsubs.push(
-    OBR.broadcast.onMessage(BROADCAST_OFF, async () => {
+    OBR.broadcast.onMessage(BROADCAST_OFF, async (event) => {
+      if (!isFromGM(event)) return; // REMOTE from the GM's turnOff()
       await hideOverlay();
       notifyClusterState(false);
     })

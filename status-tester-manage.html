@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Status Tester</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;width:100%;overflow:hidden;background:#141a2c;color:#e6e8ee;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;font-size:13px}
+.wrap{display:flex;flex-direction:column;height:100%}
+header{flex:none;display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.1)}
+header .title{font-weight:800;font-size:14px}
+header .sub{flex:1;min-width:0;color:#8a90a3;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.x{flex:none;width:26px;height:26px;border:none;border-radius:7px;background:transparent;color:#9aa0b3;cursor:pointer;font-size:14px;font-weight:800}
+.x:hover{background:rgba(255,255,255,.1);color:#fff}
+.notice{flex:none;margin:10px 14px 0;padding:8px 10px;border-radius:8px;background:rgba(245,200,118,.14);color:#f5c876;font-size:12px}
+section{padding:10px 14px 0;display:flex;flex-direction:column;gap:6px;min-height:0}
+section.grow{flex:1}
+h3{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#8a90a3}
+.applied{display:flex;flex-direction:column;gap:5px;max-height:170px;overflow-y:auto}
+.row{display:flex;align-items:center;gap:6px}
+.empty{color:#7d8494;font-size:12px;padding:4px 0}
+.chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:999px;font-weight:700;
+  max-width:260px;white-space:nowrap;overflow:hidden;border:1px solid rgba(0,0,0,.3)}
+.chip img{width:16px;height:16px;flex:none}
+.chip .emoji{font-size:15px;line-height:1;flex:none}
+.chip .t{overflow:hidden;text-overflow:ellipsis}
+.chip.is-hidden{border:1px dashed rgba(255,255,255,.8);opacity:.7}
+.chip.unknown{background:#3a3f52;color:#c5cad8;font-style:italic}
+.spacer{flex:1}
+.ibtn{flex:none;height:26px;min-width:26px;padding:0 7px;border:none;border-radius:7px;cursor:pointer;
+  background:rgba(255,255,255,.07);color:#c5cad8;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.ibtn:hover{background:rgba(255,255,255,.16);color:#fff}
+.ibtn.danger:hover{background:rgba(231,76,60,.75)}
+.ibtn.on{background:rgba(156,124,255,.3);color:#e1d6ff}
+.ibtn svg{width:15px;height:15px}
+.addhead{display:flex;align-items:center;gap:8px}
+.addhead h3{flex:1}
+label.chk{display:flex;align-items:center;gap:5px;font-size:12px;color:#c4b0ff;cursor:pointer}
+input.search{width:100%;font-size:12.5px;padding:7px 10px;border-radius:8px;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.16);color:#e6e8ee;outline:none}
+input.search:focus{border-color:#5dade2}
+.pick{flex:1;min-height:0;overflow-y:auto;display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;padding:2px 0 8px}
+.pick .chip{cursor:pointer}
+.pick .chip:hover{box-shadow:0 0 0 2px rgba(255,255,255,.6)}
+footer{flex:none;display:flex;justify-content:flex-end;gap:8px;padding:10px 14px;border-top:1px solid rgba(255,255,255,.1)}
+.btn{font-size:12px;font-weight:700;border:none;border-radius:8px;padding:7px 14px;cursor:pointer;background:#3498db;color:#fff}
+.btn:hover{background:#4aa8e8}
+.btn.sec{background:rgba(255,255,255,.08);color:#c5cad8}
+.btn.sec:hover{background:rgba(255,255,255,.16)}
+.err{color:#ff8b7a;font-size:12px}
+.lv{flex:none;display:flex;align-items:center;gap:2px}
+.lv button{width:22px;height:26px;border:none;border-radius:6px;cursor:pointer;background:rgba(255,255,255,.07);
+  color:#c5cad8;font-size:14px;font-weight:800;line-height:1}
+.lv button:hover{background:rgba(255,255,255,.16);color:#fff}
+.lv input{width:46px;height:26px;text-align:center;font:inherit;font-weight:700;border-radius:6px;
+  background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.16);color:#fff;outline:none;-moz-appearance:textfield}
+.lv input::-webkit-outer-spin-button,.lv input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.lv input:focus{border-color:#5dade2}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="title" id="title"></span>
+    <span class="sub" id="tokenName"></span>
+    <button class="x" id="close" type="button">✕</button>
+  </header>
+  <div class="notice" id="notice" hidden></div>
+  <section>
+    <div class="applied" id="applied"></div>
+    <div class="err" id="err" hidden></div>
+  </section>
+  <section class="grow" id="addSec">
+    <div class="addhead">
+      <h3 id="addH"></h3>
+      <label class="chk" id="hiddenWrap" hidden><input type="checkbox" id="addHidden"><span id="addHiddenLbl"></span></label>
+    </div>
+    <input class="search" id="search" type="text" maxlength="40" autocomplete="off">
+    <div class="pick" id="pick"></div>
+  </section>
+  <footer>
+    <button class="btn sec" id="editLib" type="button"></button>
+    <button class="btn" id="done" type="button"></button>
+  </footer>
+</div>
+<script type="module" src="/src/status-tester-manage-page.ts"></script>
+</body>
+</html>

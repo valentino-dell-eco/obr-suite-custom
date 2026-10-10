@@ -1,5 +1,5 @@
 import OBR from "@owlbear-rodeo/sdk";
-import { startSceneSync, getState, onStateChange, getLocalLang } from "./state";
+import { startSceneSync, getState, onStateChange, getLocalLang, enableSceneMirrorWrites } from "./state";
 import { setupTimeStop, teardownTimeStop } from "./modules/timeStop";
 import { setupFocus, teardownFocus } from "./modules/focus";
 import { setupSearch, teardownSearch } from "./modules/search";
@@ -17,13 +17,15 @@ import { setupCircleImage, teardownCircleImage } from "./modules/circleImage";
 // request. The modules/follow/ source stays on disk (un-wired) in
 // case it's revived later; it's just no longer registered.
 import { setupResourceTracker, teardownResourceTracker } from "./modules/resourceTracker";
+import { setupToolsSuite } from "./modules/toolsSuite";
 import { setupBubbles, teardownBubbles } from "./modules/bubbles";
-import { setupStatusTracker, teardownStatusTracker } from "./modules/statusTracker";
 import { setupHpBar, teardownHpBar } from "./modules/hpBar";
 import {
   setupChaseTracker,
   teardownChaseTracker,
 } from "./modules/chaseTracker";
+import { setupRoomChat, teardownRoomChat } from "./modules/roomChat";
+import { setupStatusTester, teardownStatusTester } from "./modules/statusTester";
 import { setupMetadataInspector, teardownMetadataInspector } from "./modules/metadata-inspector";
 import { setupFullFog, teardownFullFog } from "./modules/fullFog";
 import { setupMusicBoard, teardownMusicBoard } from "./modules/musicBoard";
@@ -454,6 +456,7 @@ OBR.onReady(() => {
     PANEL_IDS.hpBar,
     PANEL_IDS.musicBoard,
     PANEL_IDS.chaseTracker,
+    PANEL_IDS.roomChat,
   ];
   async function collectLayoutEditorBboxes(): Promise<Record<string, { left: number; top: number; width: number; height: number }>> {
     const bboxMap: Record<string, { left: number; top: number; width: number; height: number }> = {};
@@ -608,11 +611,12 @@ const modules: Partial<Record<keyof ReturnType<typeof getState>["enabled"], Modu
   bubbles: { setup: setupBubbles, teardown: teardownBubbles },
   hpBar: { setup: setupHpBar, teardown: teardownHpBar },
   chaseTracker: { setup: setupChaseTracker, teardown: teardownChaseTracker },
+  roomChat: { setup: setupRoomChat, teardown: teardownRoomChat },
+  statusTester: { setup: setupStatusTester, teardown: teardownStatusTester },
   metadataInspector: {
     setup: async () => { await setupMetadataInspector(); },
     teardown: async () => { teardownMetadataInspector(); },
   },
-  statusTracker: { setup: setupStatusTracker, teardown: teardownStatusTracker },
   resourceTracker: { setup: setupResourceTracker, teardown: teardownResourceTracker },
   search: { setup: setupSearch, teardown: teardownSearch },
   // Trickster + circle-image promoted from dev to stable on 2026-05-08.
@@ -702,7 +706,17 @@ function changedEnabledIds(): Set<string> | undefined {
 }
 
 OBR.onReady(async () => {
+  // Umbrella toolbar icons ("Tools Suite" / "GM Tools Suite") must
+  // exist before any module tries to register a mode under them —
+  // always-on infrastructure, not gated by a user toggle.
+  await setupToolsSuite();
+
   // Sync state, then open cluster + activate all enabled modules.
+  // The GM's background iframe is the single writer that copies the
+  // cross-scene room mirror onto the scene (see state.ts).
+  try {
+    enableSceneMirrorWrites((await OBR.player.getRole()) === "GM");
+  } catch {}
   startSceneSync();
   onStateChange(() => {
     const changed = changedEnabledIds();

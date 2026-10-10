@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Status Tracker</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  height:100%;width:100%;overflow:hidden;background:rgba(15,20,36,0.96);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;
+  color:#e6e8ee;font-size:13px;border-radius:14px;
+}
+.pal{display:flex;flex-direction:column;height:100%;border:1px solid rgba(255,255,255,0.14);border-radius:14px;overflow:hidden}
+.head{
+  display:flex;align-items:center;gap:6px;flex:none;height:40px;padding:8px 8px 8px 12px;
+  border-bottom:1px solid rgba(255,255,255,0.08);font-size:13px;font-weight:800;user-select:none;
+}
+.drag-handle{
+  flex-shrink:0;width:14px;height:18px;display:flex;align-items:center;justify-content:center;
+  cursor:grab;color:rgba(255,255,255,0.3);opacity:0.55;transition:opacity .12s,color .12s;touch-action:none;
+}
+.drag-handle:hover{opacity:1;color:rgba(255,255,255,0.85)}
+.drag-handle.is-dragging{cursor:grabbing;opacity:1;color:#5dade2}
+.drag-handle svg{width:12px;height:18px;display:block;pointer-events:none}
+.head .title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ibtn{
+  flex:none;width:24px;height:24px;border:none;border-radius:6px;background:transparent;display:flex;
+  align-items:center;justify-content:center;color:rgba(255,255,255,0.55);cursor:pointer;font-size:14px;font-weight:800;
+}
+.ibtn:hover{background:rgba(255,255,255,0.1);color:#fff}
+.ibtn:focus-visible{outline:2px solid #5dade2;outline-offset:1px}
+.ibtn svg{width:15px;height:15px;pointer-events:none}
+.search{flex:none;padding:8px 10px 4px}
+.search input{
+  width:100%;font-size:12.5px;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.16);color:#e6e8ee;outline:none;
+}
+.search input:focus{border-color:#5dade2}
+.chips{
+  flex:1;min-height:0;overflow-y:auto;padding:6px 10px 8px;display:flex;flex-wrap:wrap;align-content:flex-start;gap:6px;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.18) transparent;
+}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px 0 9px;border-radius:999px;font-weight:700;
+  font-size:12.5px;max-width:100%;white-space:nowrap;overflow:hidden;border:1px solid rgba(0,0,0,.3);
+  cursor:grab;user-select:none;touch-action:none;transition:transform .1s,filter .1s,box-shadow .1s;
+}
+.chip:hover{filter:brightness(1.12);box-shadow:0 0 0 2px rgba(255,255,255,0.35)}
+.chip.lifted{opacity:.45;transform:scale(.96)}
+body.view-only .chip{cursor:default}
+body.view-only .chip:hover{filter:none;box-shadow:none}
+.chip img{width:16px;height:16px;flex:none;pointer-events:none}
+.chip .emoji{font-size:15px;line-height:1;flex:none}
+.chip .t{overflow:hidden;text-overflow:ellipsis}
+.empty{margin:auto;font-size:12px;color:#7d8494;text-align:center;padding:10px}
+.foot{
+  flex:none;padding:6px 12px 8px;font-size:11px;line-height:1.35;color:#8a90a3;
+  border-top:1px solid rgba(255,255,255,0.08);
+}
+.foot.flash{color:#9be7a8}
+.foot.warn{color:#f5c876}
+</style>
+</head>
+<body>
+<div class="pal">
+  <div class="head">
+    <div class="drag-handle" id="dragHandle">
+      <svg viewBox="0 0 12 18" aria-hidden="true">
+        <circle cx="3" cy="3" r="1.2" fill="currentColor"/><circle cx="9" cy="3" r="1.2" fill="currentColor"/>
+        <circle cx="3" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/>
+        <circle cx="3" cy="15" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/>
+      </svg>
+    </div>
+    <span class="title" id="title"></span>
+    <button class="ibtn" id="lib" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+      </svg>
+    </button>
+    <button class="ibtn" id="close" type="button">✕</button>
+  </div>
+  <div class="search"><input id="search" type="text" maxlength="40" autocomplete="off"></div>
+  <div class="chips" id="chips"></div>
+  <div class="foot" id="foot"></div>
+</div>
+<script type="module" src="/src/status-tester-palette-page.ts"></script>
+</body>
+</html>

@@ -124,6 +124,16 @@ const cleanups: Array<() => Promise<void> | void> = [];
 
 // path id → array of local item ids representing its current overlays.
 const overlayItemsByPath = new Map<string, string[]>();
+// Signature of the inputs each path's overlays were built from — when
+// unchanged, the rebuild is skipped (token moves fire items.onChange
+// too, and rebuilding meant 3 local items deleted + re-added per door).
+const overlaySigByPath = new Map<string, string>();
+
+function hashStr(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
 
 // ---------------------------------------------------------------------------
 // Outline-path helpers
@@ -477,6 +487,7 @@ async function syncOverlays(): Promise<void> {
     if (!desiredIds.has(pid)) {
       try { await OBR.scene.local.deleteItems(ids); } catch {}
       overlayItemsByPath.delete(pid);
+      overlaySigByPath.delete(pid);
     }
   }
 
@@ -497,6 +508,18 @@ async function syncOverlays(): Promise<void> {
     const openings: Opening[] = Array.isArray(md[OPENINGS_KEY])
       ? md[OPENINGS_KEY]
       : [];
+
+    // Skip the rebuild when nothing that shapes the overlays changed:
+    // path geometry, openings, and the map's transform (billboards are
+    // placed relative to it).
+    const mp: any = mapItem;
+    const sig = hashStr(
+      JSON.stringify(cmds) + "|" + JSON.stringify(openings) + "|" +
+      JSON.stringify([mp.position, mp.scale, mp.rotation]),
+    );
+    if (overlaySigByPath.get(path.id) === sig && overlayItemsByPath.has(path.id)) continue;
+    if (overlaySigByPath.get(path.id) === sig && openings.length === 0) continue;
+    overlaySigByPath.set(path.id, sig);
 
     // Drop existing overlay items for this path; rebuild from scratch
     // (cheap — at most a few dozen openings per path in practice).
@@ -538,13 +561,41 @@ async function syncOverlays(): Promise<void> {
   }
 }
 
+
+// ONE sync at a time. The debounce above only delays the START; a sync
+// is long and awaits often, and it records the ids of the items it
+// created only after addItems resolves. A second sync started meanwhile
+// could not see them, built a duplicate set, and the first set was never
+// tracked again (stale walls that kept blocking vision until reload).
+// Requests arriving mid-sync just set a "run again" flag; the running
+// loop picks it up with fresh scene state.
+let overlaySyncRunning = false;
+let overlaySyncAgain = false;
+async function runOverlaySync(): Promise<void> {
+  if (overlaySyncRunning) {
+    overlaySyncAgain = true;
+    return;
+  }
+  overlaySyncRunning = true;
+  try {
+    do {
+      overlaySyncAgain = false;
+      await syncOverlays();
+    } while (overlaySyncAgain);
+  } catch (e) {
+    console.warn("[fullFog] syncOverlays failed", e);
+  } finally {
+    overlaySyncRunning = false;
+  }
+}
+
 let syncQueued = false;
 function scheduleOverlaySync(): void {
   if (syncQueued) return;
   syncQueued = true;
   setTimeout(() => {
     syncQueued = false;
-    void syncOverlays();
+    void runOverlaySync();
   }, 60);
 }
 
@@ -839,6 +890,7 @@ export async function setupFullFogDoor(): Promise<void> {
   try {
     const offReady = OBR.scene.onReadyChange((ready) => {
       overlayItemsByPath.clear();
+      overlaySigByPath.clear();
       if (ready) scheduleOverlaySync();
     });
     cleanups.push(offReady);
@@ -861,6 +913,7 @@ export async function teardownFullFogDoor(): Promise<void> {
     try { await OBR.scene.local.deleteItems(allIds); } catch {}
   }
   overlayItemsByPath.clear();
+  overlaySigByPath.clear();
   registered = false;
 }
 

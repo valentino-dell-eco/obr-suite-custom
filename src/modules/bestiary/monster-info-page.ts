@@ -2,6 +2,7 @@ import OBR from "@owlbear-rodeo/sdk";
 import { installDebugOverlay } from "../../utils/debugOverlay";
 import { ICONS } from "../../icons";
 import { formatTagsClickable, resolveClickRollTarget } from "../dice/tags";
+import { escapeHtml } from "../../utils/html";
 import { bindRollableContextMenu, bindRollableClickPopup } from "../dice/context-menu";
 import { subscribeToSfx } from "../dice/sfx-broadcast";
 import { bindPanelDrag } from "../../utils/panelDrag";
@@ -239,12 +240,6 @@ const FULL: Record<string, string> = {
 };
 const ORDER: Array<"str" | "dex" | "con" | "int" | "wis" | "cha"> =
   ["str", "dex", "con", "int", "wis", "cha"];
-
-function escapeHtml(s: unknown) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!)
-  );
-}
 
 function renderNameButton(name: string, clickable: boolean): string {
   if (!clickable) {
@@ -532,7 +527,11 @@ function renderSpellList(arr: any): string {
 function renderSpellLevels(spells: any): string {
   if (!spells || typeof spells !== "object") return "";
   const en = _curLang === "en";
-  const levels = Object.keys(spells).sort((a, b) => Number(a) - Number(b));
+  // Only numeric level keys ("0".."9", optionally "Ne") — anything
+  // else in untrusted data is skipped.
+  const levels = Object.keys(spells)
+    .filter((k) => /^\d+e?$/.test(k))
+    .sort((a, b) => Number(a) - Number(b));
   return levels.map((lv) => {
     const slot = spells[lv];
     if (!slot) return "";
@@ -540,7 +539,7 @@ function renderSpellLevels(spells: any): string {
     const slotInfo = typeof slot.slots === "number" ? (en ? ` (${slot.slots} slots)` : ` (${slot.slots}次)`) : "";
     const sp = renderSpellList(slot.spells);
     if (!sp) return "";
-    return `<div class="spell-line"><span class="sl">${label}${slotInfo}</span>${sp}</div>`;
+    return `<div class="spell-line"><span class="sl">${escapeHtml(label)}${escapeHtml(slotInfo)}</span>${sp}</div>`;
   }).filter(Boolean).join("");
 }
 
@@ -548,19 +547,20 @@ function renderSpellDaily(daily: any): string {
   if (!daily || typeof daily !== "object") return "";
   const en = _curLang === "en";
   return Object.entries(daily).map(([k, v]) => {
+    if (!/^\d+e?$/.test(k)) return "";
     const label = k.endsWith("e")
       ? (en ? `${k.slice(0, -1)}/day (each)` : `${k.slice(0, -1)}次/日（每个）`)
       : (en ? `${k}/day` : `${k}次/日`);
     const sp = renderSpellList(v);
     if (!sp) return "";
-    return `<div class="spell-line"><span class="sl">${label}</span>${sp}</div>`;
+    return `<div class="spell-line"><span class="sl">${escapeHtml(label)}</span>${sp}</div>`;
   }).filter(Boolean).join("");
 }
 
 function renderSpellGroup(label: string, arr: any): string {
   const sp = renderSpellList(arr);
   if (!sp) return "";
-  return `<div class="spell-line"><span class="sl">${label}</span>${sp}</div>`;
+  return `<div class="spell-line"><span class="sl">${escapeHtml(label)}</span>${sp}</div>`;
 }
 
 function renderSpellcasting(sc: any): string {

@@ -2,15 +2,53 @@
 
 All notable changes to this project follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased — dev branch]
+## [2.0.0] — 2026-10-10
 
-### Changed
-
-- **License changed from PolyForm Noncommercial 1.0.0 → GNU GPL-3.0.** Strong copyleft. Done deliberately so the new `bubbles` module can derive from [Stat Bubbles for D&D](https://github.com/SeamusFinlayson/Bubbles-for-Owlbear-Rodeo) (also GPL-3.0) without an incompatibility. README, store listing, settings UI, and changelog all updated to reflect the new terms.
+Breaking: the old full-screen Status Tracker is replaced by the new Status Tracker (status chips). Buffs stored by the old tracker on tokens are no longer drawn.
 
 ### Added
 
 - **`bubbles` module** — HP / temp-HP / AC indicators on tokens, derived from the upstream Stat Bubbles plugin. Per-client toggle in Settings → 头顶气泡.
+- **Chase Tracker module.** GM right-click entries "Add to Chase as Quarry" (starts a new chase) and "Add to Chase as Pursuer" (modal listing the existing chases by quarry). Tokens in a chase carry `com.obr-suite/chase-tracker/memberOf`, which hides both entries. A draggable popover (`chase-tracker.html`, default bottom-center, part of the layout editor / reset flow) shows each chase as a 1-D track: quarry on the right, position 0 on the left, pursuers placed by their gap from the quarry. Clicking a pin — or that token's initiative turn starting — opens an inline distance editor docked in the footer. Trash icon deletes a chase, ✕ removes a participant, the list scrolls when there are many chases. Hidden on mobile clients.
+- **Tools Suite / GM Tools Suite.** Two umbrella toolbar buttons replace the individual module icons. Each opens a side flyout (`suite-menu.html`) next to the right toolbar; modules add their rows with `registerSuiteItem()` / `unregisterSuiteItem()`. Canvas tools keep a hidden `createMode` that the menu activates, so drag/click handlers work unchanged. New icons: backpack (Tools Suite), GM screen (GM Tools Suite).
+- **Room Chat module.** Draggable chat popover with three channels — All, GM (whisper to the GM) and Player (whisper to one chosen player). Whispers are filtered client-side. Per-room history; the trash button clears your own history, and the GM can also clear it for everyone. New icon: two speech bubbles.
+- **Spell casting from character cards.** ✨ on a spell in the full sheet, or a click on a spell chip in the mini panel, opens the "Activation: Casting Spell" modal (`spell-cast.html` for the mini panel). It shows the spell, the level select (from the spell's level up to 9th) and an editable Save DC prefilled from the card. Confirming posts a cast card to Room Chat: spell name, cast level, school · casting time · range · components · duration, source, the full description, and "(DC X)" — or "(DC X - Edited)" when the DC was changed — when the spell forces a saving throw.
+- **Spell details in the sheet and in chat.** A ▾ toggle shows or hides the full description; 🔍 opens the spell in the search bar. In edit mode the toggle exposes school, casting time, range, components, duration and description; editing a library spell marks it as `Homebrew`. When a spell exists in several library sources, a Source select picks which one to use.
+- **Clickable dice and upcasting in chat.** Dice expressions in a cast description (`2d6`, `1d10+3`, …) open the quick-roll popup. Casting above the base level rewrites the dice from the library's `{@scaledamage}` / `{@scaledice}` tags (Fireball at 5th: 8d6 → 10d6); cantrips scale with the caster's character level via `scalingLevelDice` (Fire Bolt at level 5: 1d10 → 2d10). Rewritten dice are highlighted in gold with an "Upcast" / "Scaled" line. Hand-edited descriptions are not rescaled.
+- **New Status Tracker** (module id `statusTester`, replaces the old full-screen tracker). Statuses are chips with an icon (built-in SVG or emoji), a colour and a title, with an optional image overlaid on the token. Room-wide library (Tools Suite → Status Tracker, or Shift+S — `]` needed AltGr on non-US layouts); GM edits it, players apply statuses to their own tokens via right-click. Several statuses rotate every 5 s; hovering a chip lists every status on that token, no selection needed; clicking it shows a gear that opens the per-token manager. The GM can hide a status from players. Chips pause while the camera or a token moves. Ships the 15 D&D 5e (2014) conditions and 12 common buffs as presets with dedicated icons, plus a "Restore D&D 5e" button.
+- **Status palette with drag-and-drop.** Shift+S / Tools Suite → Status Tracker opens a draggable palette of the library's chips (`status-tester-palette.html`). Dragging a chip hands the gesture to a fullscreen drop modal (`status-tester-drop.html`) that outlines every token you may manage and adds the status to the one you release on (GM: Shift = hidden from players; no duplicates). Clicking a chip adds it to the selected tokens. The palette and the Chase Tracker dock are now layout-editor panels, shown even while closed.
+- **Status Tracker settings** (Settings → Status Tracker). Personal: rotation interval (off / 3–12 s; off shows the first status with “+N”), chip / icon / text size, hover list, attachment images, GM “hidden by default”. Room-wide (GM): chip position (top / bottom / left / right of the token) and player permissions (view only / own tokens / + edit library).
+- **Status levels.** A library status can have levels (“Has levels”); its chip reads “Exhaustion 3” and the level (whole number, negatives allowed) is edited in the token's manage window. The Exhaustion preset has levels on (existing rooms are upgraded once). A status can no longer be added twice to the same token.
+- **Chase Tracker settings** (Settings → Chase Tracker). Room-wide (GM): −/+ step (grid scale or 1 / 5 / 10 / 30), unit label (scene / ft / m / none), what players see (all / distances only — quarry hidden / nothing), who moves (GM / token owners). Personal: follow initiative, open automatically. New Tools Suite row “Chase Tracker” shows / hides the panel by hand.
+- **`src/utils/libraryIndex.ts`** — shared library-index loading (enabled libraries, disabled sources, data version, local content, localStorage cache) used by both the search bar and the spell picker.
+
+### Changed
+
+- **Old Status Tracker removed from the suite** (module no longer registered, settings tab dropped; source kept in `src/modules/statusTracker/`). Buffs stored by it on tokens are no longer drawn.
+- **License changed from PolyForm Noncommercial 1.0.0 → GNU GPL-3.0.** Strong copyleft. Done deliberately so the new `bubbles` module can derive from [Stat Bubbles for D&D](https://github.com/SeamusFinlayson/Bubbles-for-Owlbear-Rodeo) (also GPL-3.0) without an incompatibility. README, store listing, settings UI, and changelog all updated to reflect the new terms.
+- **Spell picker** shows English names only when the UI language is English.
+- **Spell lookup follows the same library sources** as the search bar: enabled libraries, disabled sources and Data Version (2014 / 2024 / all).
+- **Cast modal lists every level** from the spell's own level up to 9th, regardless of the slots recorded on the card.
+
+### Fixed
+
+- **Tools Suite keybinds did nothing.** OBR only fires an action shortcut while the action is available for the active tool: CapsLock (character sheet) used a never-matching filter, and Shift+A (bestiary) / `]` (status) ignored the default Move tool. All shortcuts now share `SHORTCUT_TOOLS` (Move, Select, Tools Suite, GM Tools Suite).
+- **Spell descriptions shown in Chinese in the full sheet.** The nested `cc-fullscreen` iframe has no working OBR SDK and fell back to the default library settings; `cc-panel` now relays the real suite state (`cc-request-suite-state` / `cc-suite-state`), and `state.ts` gains `whenStateReady()`, `gateStateOn()`, `expectRelayedState()` and `applyRelayedState()`.
+- **Library spells not found.** Rows are now matched on `ENG_name` (the `name` field is localized on some libraries).
+
+### Security
+
+- **Anti-cheat redaction of GM hidden rolls.** Other clients now receive only the dice count/types (for the sound), with `redacted: true` and an explicit `redactedReason`; values, total, modifier, label and token never leave the GM's client.
+- **XSS hardening.** Dice history / panel / replay sanitise every received or stored roll (`sanitizeRollPayload`); search preview, monster info popover, character-card info popover and the charges-recharge modal escape all library / card / player-supplied values. New shared `src/utils/html.ts` `escapeHtml`.
+- **Broadcast sender checks** (`src/utils/broadcastAuth.ts`): local-only channels (portals, trickster, transform, quick roll, dice panel toggle, chat popover relays) accept only messages from the same client; GM actions (time stop, chat clear-for-everyone, recovery trigger, camera focus, portal blink) accept only messages from a GM. Chat messages get their sender id/name/colour/role from the real connection, not from the payload.
+
+### Fixed (review)
+
+- **"Bulk bind to bestiary"** removed bindings instead of opening the monster picker.
+- **Fullscreen character sheet** never received updates and silently overwrote concurrent edits: updates are now relayed by cc-panel (reload, or a "changed by another user" banner while editing), broadcasts from the sheet go through cc-panel, and saves check `_saved_at` on the server before overwriting.
+- **Cross-scene settings sync** bounced changes and could not be turned off: the room mirror is written before the scene, and only the GM's background iframe copies it onto the scene.
+- **World-pack "replace" import** deleted the scene before knowing the import would succeed: the pack is validated first, new items are added before the old ones are removed, and a partial import can be rolled back.
+- **Fog walls / door markers** duplicated by overlapping syncs (stale walls blocking vision): one sync at a time, and door markers are rebuilt only when their path, openings or map transform change.
 
 ## [1.0.7] — 2026-04-29
 

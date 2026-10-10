@@ -3,6 +3,7 @@ import { getLocalLang } from "../../state";
 import { t } from "../../i18n";
 import { assetUrl } from "../../asset-base";
 import { onViewportResize } from "../../utils/viewportAnchor";
+import { registerSuiteItem, unregisterSuiteItem, SHORTCUT_TOOLS } from "../toolsSuite";
 import {
   BC_RECOVERY_TRIGGER,
   BC_RECOVERY_NOTICE,
@@ -14,6 +15,7 @@ import {
   mergeRecoveryRollItems,
 } from "./recovery";
 import { showModal } from "./recovery-ui";
+import { initBroadcastAuth, isFromGM } from "../../utils/broadcastAuth";
 import {
   PANEL_IDS,
   getPanelOffset,
@@ -561,6 +563,7 @@ async function propagateCardRefresh(cardId: string): Promise<void> {
 
 export async function setupCharacterCards(): Promise<void> {
   const en = getLocalLang() === "en";
+  await initBroadcastAuth();
   console.log(
     "%c[CC-FLOW] setupCharacterCards() CALLED — module is initializing",
     "color: #0f0; font-weight: bold",
@@ -670,6 +673,8 @@ export async function setupCharacterCards(): Promise<void> {
   unsubs.push(
     OBR.broadcast.onMessage(BC_RECOVERY_TRIGGER, async (event) => {
       if (ccRole !== "PLAYER") return;
+      // REMOTE from the GM's cc-panel runGlobalRecovery() only.
+      if (!isFromGM(event)) return;
       const payload = event.data as RecoveryTriggerPayload;
       if (!payload?.items?.length) return;
       try {
@@ -767,29 +772,39 @@ export async function setupCharacterCards(): Promise<void> {
       await openMainPopover();
     }),
   );
-  // 角色卡界面 — a standalone TOOL in OBR's toolbar (its own top-level
-  // icon, not an action nested under Select/etc.). `onClick` returns
-  // false so the tool is never actually "selected" — the active tool
-  // stays whatever it was; clicking just toggles the panel like a
-  // button. CapsLock triggers it too. Replaces the cluster button.
+  // 角色卡界面 — a row in the shared "Tools Suite" side flyout (see
+  // src/modules/toolsSuite) instead of its own top-level toolbar icon
+  // / OBR mode. CapsLock still needs a real OBR tool-action to bind
+  // to (registerSuiteItem is background-only), so it's kept as a
+  // hidden action (filter that never matches any real tool, so it
+  // never renders a duplicate icon anywhere) whose sole purpose is
+  // carrying the shortcut.
   try {
-    await OBR.tool.create({
+    await OBR.tool.createAction({
       id: CC_TOOL_ID,
       shortcut: "CapsLock",
       icons: [
         {
           icon: ICON_URL,
           label: en ? "Character sheet" : "角色卡界面",
+          filter: { activeTools: SHORTCUT_TOOLS },
         },
       ],
       onClick: async () => {
         await toggleMainPanel();
-        return false; // don't switch the active tool — act as a button
       },
     });
   } catch (e) {
-    console.error("[obr-suite/character-cards] create tool failed", e);
+    console.error("[obr-suite/character-cards] create shortcut action failed", e);
   }
+  registerSuiteItem({
+    id: CC_TOOL_ID,
+    suite: "shared",
+    label: en ? "Character sheet" : "角色卡界面",
+    icon: ICON_URL,
+    hint: "CapsLock",
+    onPick: () => toggleMainPanel(),
+  });
 
   // CapsLock from inside the panel iframe also toggles (panel listens
   // for window keydown and broadcasts).
@@ -981,7 +996,8 @@ export async function teardownCharacterCards(): Promise<void> {
     await OBR.contextMenu.remove(CTX_BIND);
   } catch {}
   try {
-    await OBR.tool.remove(CC_TOOL_ID);
+    await OBR.tool.removeAction(CC_TOOL_ID);
+    unregisterSuiteItem(CC_TOOL_ID);
   } catch {}
   for (const u of unsubs.splice(0)) u();
 }

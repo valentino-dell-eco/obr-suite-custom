@@ -15,6 +15,13 @@ import { BC_LOCAL_CONTENT_CHANGED } from "../../utils/localContent";
 import { clearMonsterCache, loadAllMonsters, getRawMonster } from "./data";
 import { onStateChange, getState, getLocalLang } from "../../state";
 import { createCanvasDragMode } from "../../utils/canvasDragMode";
+import {
+  GM_TOOLS_SUITE_ID,
+  registerSuiteItem,
+  SHORTCUT_TOOLS,
+  unregisterSuiteItem,
+  activateHiddenMode,
+} from "../toolsSuite";
 
 // Per-client language for context-menu / tool labels, read once at
 // module load (matches when context menus are registered).
@@ -471,57 +478,70 @@ export async function setupBestiary(): Promise<void> {
     }),
   );
 
-  // Tool: GM-only left-rail icon. Clicking activates our tool which opens
-  // the panel via onToolChange below.
-  await OBR.tool.create({
-    id: TOOL_ID,
-    icons: [
-      {
-        icon: ICON_URL,
-        label: en ? "Bestiary" : "怪物图鉴",
-        filter: { roles: ["GM"] },
-      },
-    ],
-    // Without `defaultMode`, OBR doesn't auto-activate any mode when
-    // the tool becomes active — its modes only fire if the user
-    // manually clicks one. Pointing this at our drag mode means the
-    // moment the GM activates the bestiary tool, the drag handlers
-    // are live.
-    defaultMode: `${TOOL_ID}/mode`,
-    onClick: async () => {
-      await OBR.tool.activateTool(TOOL_ID);
-      return false;
-    },
-  });
-
-  // Browse mode — uses the shared canvasDragMode util so the GM can
-  // drag tokens / box-select while the bestiary panel is open. The
-  // util implements token-move + marquee + transformer no-op the
-  // same way the bubble-guard mode under Select does.
+  // Mode: nested directly under the shared "GM Tools Suite" umbrella
+  // tool (no private TOOL_ID top-level icon anymore — see
+  // src/modules/toolsSuite). Uses the shared canvasDragMode util so
+  // the GM can drag tokens / box-select while the bestiary panel is
+  // open. The util implements token-move + marquee + transformer
+  // no-op the same way the bubble-guard mode under Select does.
   //
   // (Earlier rounds tried `preventDrag: never-match`, hoping OBR's
   // canvas-level token-move fallback would kick in. Empirically that
   // fallback doesn't run for plugin-owned tools, so token drags
   // silently no-oped. The util takes over the gesture explicitly.)
+  const BESTIARY_MODE_ID = `${TOOL_ID}/mode`;
   await createCanvasDragMode({
-    modeId: `${TOOL_ID}/mode`,
-    toolId: TOOL_ID,
+    modeId: BESTIARY_MODE_ID,
+    toolId: GM_TOOLS_SUITE_ID,
     icon: ICON_URL,
     label: en ? "Browse" : "浏览",
   });
 
-  // Track previous tool + open/close panel based on which tool is active.
-  unsubs.push(
-    OBR.tool.onToolChange(async (activeId) => {
-      if (activeId === TOOL_ID) {
+  registerSuiteItem({
+    id: TOOL_ID,
+    suite: "gm",
+    label: en ? "Bestiary" : "怪物图鉴",
+    icon: ICON_URL,
+    onPick: () => activateHiddenMode(GM_TOOLS_SUITE_ID, BESTIARY_MODE_ID),
+  });
+
+  // Track previous tool + open/close panel based on whether OUR mode
+  // (under the shared GM suite) is the active one. Needs both
+  // onToolChange (leaving the suite entirely) and onToolModeChange
+  // (switching to a sibling mode, e.g. Portals) — same pattern as
+  // metadata-inspector.
+  let activeToolNow: string | null = null;
+  let activeModeNow = "";
+  const syncBestiaryFromActive = async (): Promise<void> => {
+    try {
+      const [tool, mode] = await Promise.all([
+        OBR.tool.getActiveTool(),
+        OBR.tool.getActiveToolMode(),
+      ]);
+      const wasUs = activeToolNow === GM_TOOLS_SUITE_ID && activeModeNow === BESTIARY_MODE_ID;
+      activeToolNow = tool;
+      activeModeNow = mode ?? "";
+      const isUs = tool === GM_TOOLS_SUITE_ID && activeModeNow === BESTIARY_MODE_ID;
+      if (isUs) {
         if (!isOpen) await openPanel();
       } else {
-        // Remember the tool the user was on so CapsLock can return there.
-        previousTool = activeId;
+        // Remember the tool the user was on so Shift+A can return
+        // there. If they switched to a SIBLING suite mode instead of
+        // a real tool, this ends up as GM_TOOLS_SUITE_ID itself —
+        // activating it just re-opens the suite with no mode picked,
+        // an acceptable fallback for that edge case.
+        if (wasUs || previousTool === null) previousTool = tool;
         if (isOpen) await closePanel();
       }
-    }),
+    } catch {}
+  };
+  unsubs.push(
+    OBR.tool.onToolChange(() => { void syncBestiaryFromActive(); }),
   );
+  unsubs.push(
+    OBR.tool.onToolModeChange(() => { void syncBestiaryFromActive(); }),
+  );
+  await syncBestiaryFromActive();
 
   // ② CapsLock shortcut. Two paths to the same toggle:
   //   a) OBR tool action shortcut (works when keyboard focus is on OBR's
@@ -530,12 +550,12 @@ export async function setupBestiary(): Promise<void> {
   //      has clicked into the panel) → broadcasts to here.
   const performShortcutToggle = async () => {
     try {
-      const cur = await OBR.tool.getActiveTool();
-      if (cur === TOOL_ID) {
+      const isUsNow = activeToolNow === GM_TOOLS_SUITE_ID && activeModeNow === BESTIARY_MODE_ID;
+      if (isUsNow) {
         await OBR.tool.activateTool(previousTool ?? MOVE_TOOL);
       } else {
-        previousTool = cur;
-        await OBR.tool.activateTool(TOOL_ID);
+        previousTool = activeToolNow;
+        await activateHiddenMode(GM_TOOLS_SUITE_ID, BESTIARY_MODE_ID);
       }
     } catch (e) {
       console.error("[obr-suite/bestiary] CapsLock toggle failed", e);
@@ -543,10 +563,11 @@ export async function setupBestiary(): Promise<void> {
   };
 
   // Player clients don't get the bestiary shortcut registered — the
-  // bestiary tool itself is GM-only (filter.roles = ["GM"] above), so
-  // wiring up Shift+A on Select for non-GMs would just light up a
-  // shortcut that activates a hidden tool. Snapshot role here; a mid-
-  // session role flip is rare and the action survives a reload.
+  // bestiary mode itself is GM-only (GM Tools Suite's icon is
+  // role-gated), so wiring up Shift+A on Select for non-GMs would just
+  // light up a shortcut that activates a hidden mode. Snapshot role
+  // here; a mid-session role flip is rare and the action survives a
+  // reload.
   let bestiaryRoleAtSetup: "GM" | "PLAYER" = "PLAYER";
   try {
     bestiaryRoleAtSetup = (await OBR.player.getRole()) as "GM" | "PLAYER";
@@ -560,7 +581,7 @@ export async function setupBestiary(): Promise<void> {
           {
             icon: ICON_URL,
             label: en ? "Toggle bestiary" : "切换怪物图鉴",
-            filter: { activeTools: [SELECT_TOOL, TOOL_ID] },
+            filter: { activeTools: SHORTCUT_TOOLS, roles: ["GM"] },
           },
         ],
         onClick: performShortcutToggle,
@@ -865,24 +886,12 @@ export async function setupBestiary(): Promise<void> {
         },
       ],
       onClick: async (ctx) => {
+        // Open the monster picker for every CHARACTER-layer token in
+        // the selection (bound or not — the picker overwrites).
         const ids = ctx.items
-          .filter(
-            (it) =>
-              it.layer === "CHARACTER" &&
-              (it.metadata as any)?.[BESTIARY_SLUG_KEY] != null,
-          )
+          .filter((it) => it.layer === "CHARACTER")
           .map((i) => i.id);
-        if (ids.length === 0) return;
-        try {
-          await OBR.scene.items.updateItems(ids, (drafts) => {
-            for (const d of drafts) {
-              delete d.metadata[BESTIARY_SLUG_KEY];
-              delete d.metadata[MONSTER_OVERRIDE_META];
-            }
-          });
-        } catch (e) {
-          console.error("[obr-suite/bestiary] group unbind failed", e);
-        }
+        if (ids.length) void openPicker(ids);
       },
     });
     await OBR.contextMenu.create({
@@ -1055,9 +1064,7 @@ export async function teardownBestiary(): Promise<void> {
   try {
     await OBR.tool.removeMode(`${TOOL_ID}/mode`);
   } catch {}
-  try {
-    await OBR.tool.remove(TOOL_ID);
-  } catch {}
+  unregisterSuiteItem(TOOL_ID);
   try {
     await OBR.contextMenu.remove(CTX_BIND);
   } catch {}

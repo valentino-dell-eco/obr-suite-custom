@@ -148,6 +148,20 @@ export default defineConfig(({ command }) => ({
         // registration is gated in background.ts).
         "music-board": resolve(__dirname, "music-board.html"),
         "chase-tracker": resolve(__dirname, "chase-tracker.html"),
+        "suite-menu": resolve(__dirname, "suite-menu.html"),
+        "room-chat": resolve(__dirname, "room-chat.html"),
+        "status-tester-chip": resolve(__dirname, "status-tester-chip.html"),
+        "status-tester-palette": resolve(__dirname, "status-tester-palette.html"),
+        "status-tester-drop": resolve(__dirname, "status-tester-drop.html"),
+        "status-tester-manage": resolve(
+          __dirname,
+          "status-tester-manage.html",
+        ),
+        "status-tester-library": resolve(
+          __dirname,
+          "status-tester-library.html",
+        ),
+        "spell-cast": resolve(__dirname, "spell-cast.html"),
         "chase-tracker-pursuer": resolve(
           __dirname,
           "chase-tracker-pursuer.html",

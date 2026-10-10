@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Status Tester chip</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  height:100%;width:100%;overflow:hidden;background:transparent;
+  font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  user-select:none;
+}
+#chip{
+  position:absolute;left:50%;top:var(--chip-cy,50%);transform:translate(-50%,-50%);
+  display:flex;align-items:center;border-radius:999px;cursor:pointer;
+  box-shadow:0 2px 8px rgba(0,0,0,.45);border:1px solid rgba(0,0,0,.35);
+  white-space:nowrap;overflow:hidden;
+  transition:opacity .17s ease, box-shadow .12s;
+}
+#chip:hover{box-shadow:0 0 0 2px rgba(255,255,255,.55),0 2px 8px rgba(0,0,0,.45)}
+#chip.fading{opacity:0}
+#chip.hidden-status{border:1px dashed rgba(255,255,255,.85);opacity:.75}
+#chip img{flex:none;display:block;pointer-events:none}
+#chip .emoji{flex:none;display:flex;align-items:center;justify-content:center;line-height:1;
+  font-family:"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif}
+#chip .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-weight:700;line-height:1}
+#chip .count{flex:none;font-size:.7em;font-weight:800;opacity:.75;margin-left:.35em}
+/* Ghost mode: the chip you SEE is the one drawn on the map; this HTML
+   chip is only an invisible hit area sitting on top of it (hover/click).
+   Drawing it too caused a double, slightly misaligned image ("smear"),
+   worst while the two cross-faded at different moments. */
+#chip.ghost{background:transparent!important;color:transparent!important;
+  border-color:transparent!important;box-shadow:none;opacity:1!important}
+#chip.ghost > *{visibility:hidden}
+#chip.ghost:hover{box-shadow:0 0 0 2px rgba(255,255,255,.75)}
+#gear{
+  position:absolute;top:var(--chip-cy,50%);transform:translateY(-50%);
+  display:none;align-items:center;justify-content:center;
+  border:none;border-radius:999px;cursor:pointer;
+  background:rgba(20,26,44,.95);box-shadow:0 2px 8px rgba(0,0,0,.5);
+  border:1px solid rgba(255,255,255,.25);
+}
+#gear.visible{display:flex}
+#gear:hover{background:rgba(52,152,219,.95)}
+#gear img{width:70%;height:70%;pointer-events:none}
+/* Hover popup: every status on the token */
+#list{
+  position:absolute;left:50%;transform:translateX(-50%);
+  display:none;flex-direction:column;gap:4px;min-width:160px;max-width:340px;
+  padding:6px;border-radius:10px;
+  background:rgba(15,20,36,.96);border:1px solid rgba(255,255,255,.18);
+  box-shadow:0 6px 18px rgba(0,0,0,.55);
+}
+#list.visible{display:flex}
+#list .row{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;
+  font-size:12px;font-weight:700;line-height:1.2;white-space:nowrap}
+#list .row img{width:14px;height:14px;flex:none}
+#list .row .emoji{width:14px;text-align:center;flex:none;
+  font-family:"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif}
+#list .row .t{overflow:hidden;text-overflow:ellipsis}
+#list .row.cur{box-shadow:0 0 0 2px rgba(255,255,255,.7)}
+#list .row.hid{border:1px dashed rgba(255,255,255,.85);opacity:.8}
+#list .row .tag{font-size:10px;font-weight:600;opacity:.8;margin-left:auto}
+</style>
+</head>
+<body>
+<div id="chip" class="ghost" role="button"></div>
+<button id="gear" type="button"><img alt=""></button>
+<div id="list"></div>
+<script type="module" src="/src/status-tester-chip-page.ts"></script>
+</body>
+</html>

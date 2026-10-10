@@ -1,5 +1,5 @@
 import OBR from "@owlbear-rodeo/sdk";
-import { DieResult, sidesOf } from "./types";
+import { DieResult, sidesOf, sanitizeRollList } from "./types";
 import { applyI18nDom } from "../../i18n";
 import { getLocalLang } from "../../state";
 
@@ -64,8 +64,7 @@ function loadHistory(): HistoryEntry[] {
   try {
     const v = localStorage.getItem(LS_HISTORY);
     if (!v) return [];
-    const p = JSON.parse(v);
-    if (Array.isArray(p)) return p;
+    return sanitizeRollList(JSON.parse(v)) as HistoryEntry[];
   } catch {}
   return [];
 }
@@ -168,7 +167,7 @@ function buildOverlays(): void {
     const el = document.createElement("div");
     el.className = "overlay";
     const bubbleClass = dimDark ? "bubble dim-dark" : "bubble";
-    el.innerHTML = `<div class="${bubbleClass}" style="--player-color:${entry.rollerColor}">${buildBubbleInner(entry)}</div>`;
+    el.innerHTML = `<div class="${bubbleClass}" style="--player-color:${escapeHtml(String(entry.rollerColor))}">${buildBubbleInner(entry)}</div>`;
     el.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();

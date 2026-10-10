@@ -64,6 +64,8 @@ function panelLabel(panelId: string): string {
     case "bestiary-info": return t(getLocalLang(), "dragPreviewBestiaryInfo");
     case "cc-info": return t(getLocalLang(), "dragPreviewCcInfo");
     case "chase-tracker": return t(getLocalLang(), "dragPreviewChaseTracker");
+    case "room-chat": return t(getLocalLang(), "dragPreviewRoomChat");
+    case "status-palette": return t(getLocalLang(), "dragPreviewStatusPalette");
     default: return t(getLocalLang(), "dragPreviewFallback");
   }
 }

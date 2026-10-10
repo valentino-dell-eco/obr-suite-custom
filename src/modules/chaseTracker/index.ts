@@ -40,6 +40,13 @@ import {
   BC_PANEL_RESET,
 } from "../../utils/panelLayout";
 import { PLUGIN_ID, MEMBER_KEY, ChaseEntry } from "./types";
+import { registerSuiteItem, unregisterSuiteItem } from "../toolsSuite";
+import {
+  getChaseLocalSettings,
+  initChaseRoomSettings,
+  mayViewPanel,
+  onChaseLocalSettingsChange,
+} from "./settings";
 import {
   readChases,
   writeChases,
@@ -69,8 +76,16 @@ const DOCK_W = 480;
 const DOCK_H = 300;
 const DOCK_INSET_BOTTOM = 16;
 
+const SUITE_ITEM_ID = `${PLUGIN_ID}/suite-item`;
+
 const unsubs: Array<() => void> = [];
 let overlayOpen = false;
+/** Opened from the Tools Suite: stays open even with no chase. */
+let manualOpen = false;
+/** Closed from the Tools Suite while chases run: no auto-reopen until
+ *  a NEW chase starts. */
+let userClosed = false;
+let lastChaseCount = 0;
 let pursuerModalOpen = false;
 let isGM = false;
 
@@ -93,13 +108,40 @@ async function dockAnchor(): Promise<{ left: number; top: number; w: number; h: 
 }
 
 async function refreshOverlay(): Promise<void> {
-  if (IS_MOBILE) {
+  if (IS_MOBILE || !mayViewPanel(isGM)) {
+    manualOpen = false;
     await closeOverlay();
     return;
   }
-  const chases = await readChases();
-  if (chases.length > 0) await openOverlay();
+  const n = (await readChases()).length;
+  if (n > lastChaseCount) userClosed = false; // a new chase started
+  lastChaseCount = n;
+  const auto = getChaseLocalSettings().autoOpen && n > 0 && !userClosed;
+  if (auto || manualOpen) await openOverlay();
   else await closeOverlay();
+}
+
+/** Tools Suite row: show / hide the dock by hand. */
+async function toggleOverlay(): Promise<void> {
+  if (overlayOpen) {
+    manualOpen = false;
+    userClosed = true;
+    await closeOverlay();
+    return;
+  }
+  if (IS_MOBILE) return;
+  if (!mayViewPanel(isGM)) {
+    try {
+      await OBR.notification.show(
+        getLocalLang() === "en" ? "The GM keeps the Chase Tracker hidden from players." : "GM 已对玩家隐藏追逐战追踪器。",
+        "INFO",
+      );
+    } catch {}
+    return;
+  }
+  manualOpen = true;
+  userClosed = false;
+  await openOverlay();
 }
 
 async function openOverlay(): Promise<void> {
@@ -262,8 +304,20 @@ async function removeContextMenus(): Promise<void> {
 export async function setupChaseTracker(): Promise<void> {
   try { isGM = (await OBR.player.getRole()) === "GM"; } catch {}
   unsubs.push(OBR.player.onChange((p) => { isGM = p.role === "GM"; }));
+  unsubs.push(await initChaseRoomSettings(() => { void refreshOverlay(); }));
+  unsubs.push(onChaseLocalSettingsChange(() => { void refreshOverlay(); }));
 
   await registerContextMenus();
+
+  const en = getLocalLang() === "en";
+  registerSuiteItem({
+    id: SUITE_ITEM_ID,
+    suite: "shared",
+    label: en ? "Chase Tracker" : "追逐战追踪器",
+    icon: ICON_URL,
+    hint: en ? "Show / hide the chase panel" : "显示 / 隐藏追逐战面板",
+    onPick: () => toggleOverlay(),
+  });
 
   unsubs.push(OBR.scene.onMetadataChange(() => { void refreshOverlay(); }));
   unsubs.push(
@@ -278,7 +332,9 @@ export async function setupChaseTracker(): Promise<void> {
 
   // Panel-layout integration — bbox for the layout editor's proxy.
   registerPanelBbox(PANEL_IDS.chaseTracker, async () => {
-    if (!overlayOpen) return null; // hide from layout editor when closed
+    // Always report the expected bbox so the layout editor can place
+    // the dock even when no chase is running.
+    if (IS_MOBILE) return null;
     const { left, top, w, h } = await dockAnchor();
     return { left, top, width: w, height: h };
   });
@@ -316,7 +372,11 @@ export async function teardownChaseTracker(): Promise<void> {
     try { u(); } catch {}
   }
   await removeContextMenus();
+  unregisterSuiteItem(SUITE_ITEM_ID);
   overlayOpen = false;
+  manualOpen = false;
+  userClosed = false;
+  lastChaseCount = 0;
   pursuerModalOpen = false;
   try { await OBR.popover.close(POPOVER_ID); } catch {}
   try { await OBR.modal.close(MODAL_PURSUER_ID); } catch {}

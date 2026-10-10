@@ -13,8 +13,23 @@ import { subscribeToSfx } from "../dice/sfx-broadcast";
 import { patchBubbles } from "../../utils/statEdit";
 import { normalizeCombatGearFlags, readBooleanFlag } from "./data-normalize";
 import { reconcileUploadedCardShieldState } from "./xlsx-shield-state";
+import {
+  effectiveSpellDetail,
+  readStoredSpell,
+  SPELL_FIELD_KEYS,
+  HOMEBREW_SOURCE,
+  type SpellDetail,
+} from "./spell-detail";
+import { buildCast, castLevelOptions, cardSaveDc, type SlotMap } from "./cast-core";
+import { loadSpellRefs, passesVersion } from "./spell-library";
 import { t } from "../../i18n";
-import { getLocalLang, onLangChange, type Language } from "../../state";
+import {
+  getLocalLang,
+  onLangChange,
+  expectRelayedState,
+  applyRelayedState,
+  type Language,
+} from "../../state";
 // Resources tab (2026-07) — reuses the REAL resourceTracker panel's CSS
 // injector + icon set so this iframe's rendering is pixel-identical to
 // info-page.ts's own resource panel, without duplicating either. The
@@ -51,6 +66,17 @@ let _lang: Language = (() => {
   }
 })();
 const T = (k: Parameters<typeof t>[1]) => t(_lang, k);
+
+// No working OBR SDK in this nested iframe → the real suite state
+// (library list, disabled sources, Data Version) comes from the parent
+// cc-panel. Library reads (spell picker / spell details) wait for it.
+expectRelayedState(4000);
+window.addEventListener("message", (e) => {
+  if (e.data?.type === "cc-suite-state") applyRelayedState(e.data.payload);
+});
+try {
+  window.parent.postMessage({ type: "cc-request-suite-state" }, "*");
+} catch {}
 
 // Token-binding metadata key — must mirror modules/characterCards/index.ts
 // so we can locate every token in the scene that's bound to the
@@ -380,45 +406,23 @@ interface SpellEntry {
   label: string;
   en: string;
 }
-let _spellNamesCache: SpellEntry[] | null = null;
+// Spell names for the "+" picker. Same reach as the global search
+// bar (spell-library.ts: enabled libraries, each library's disabled
+// sources, local content, Data Version). One row per name — the
+// specific source is chosen later in the spell's edit panel. English
+// UI → English names only; Chinese UI → Chinese name preferred.
 async function loadSpellNames(): Promise<SpellEntry[]> {
-  if (_spellNamesCache) return _spellNamesCache;
-  let bases: string[] = [];
-  try {
-    const { getState } = await import("../../state");
-    const libs = ((getState() as any).libraries || []) as any[];
-    bases = libs
-      .filter(
-        (l) =>
-          l && l.enabled && typeof l.baseUrl === "string" && l.baseUrl.trim(),
-      )
-      .map((l) => String(l.baseUrl).replace(/\/+$/, ""));
-  } catch {}
-  if (bases.length === 0) bases = ["https://5e.kiwee.top"];
+  const en = _lang === "en";
+  const refs = await loadSpellRefs();
   const byLabel = new Map<string, string>();
-  await Promise.all(
-    bases.map(async (base) => {
-      try {
-        const res = await fetch(`${base}/search/index.json`, {
-          cache: "force-cache",
-        });
-        if (!res.ok) return;
-        const idx = await res.json();
-        const arr = Array.isArray(idx?.x) ? idx.x : [];
-        for (const e of arr) {
-          if (!e || e.c !== 2) continue;
-          const en = typeof e.n === "string" ? e.n.trim() : "";
-          const cn = typeof e.cn === "string" ? e.cn.trim() : "";
-          const label = cn || en;
-          if (label && !byLabel.has(label)) byLabel.set(label, en);
-        }
-      } catch {}
-    }),
-  );
-  _spellNamesCache = [...byLabel.entries()]
-    .map(([label, en]) => ({ label, en }))
-    .sort((a, b) => a.label.localeCompare(b.label, "zh"));
-  return _spellNamesCache;
+  for (const r of refs) {
+    if (!passesVersion(r.code)) continue;
+    const label = en ? r.engName : r.cnName || r.engName;
+    if (label && !byLabel.has(label)) byLabel.set(label, r.engName);
+  }
+  return [...byLabel.entries()]
+    .map(([label, eng]) => ({ label, en: eng }))
+    .sort((a, b) => a.label.localeCompare(b.label, en ? "en" : "zh"));
 }
 
 function EditText({
@@ -928,7 +932,8 @@ function SpellPickModal({
     return spells
       .filter(
         (s) =>
-          s.label.toLowerCase().includes(q) || s.en.toLowerCase().includes(q),
+          s.label.toLowerCase().includes(q) ||
+          (_lang !== "en" && s.en.toLowerCase().includes(q)),
       )
       .slice(0, 60);
   }, [query, spells]);
@@ -968,7 +973,7 @@ function SpellPickModal({
             matches.map((s) => (
               <button class="cc-modal-row" onClick={() => onPick(s.label)}>
                 <span>{s.label}</span>
-                {s.en && s.en !== s.label && (
+                {_lang !== "en" && s.en && s.en !== s.label && (
                   <span class="cc-modal-row-en">{s.en}</span>
                 )}
               </button>
@@ -2103,6 +2108,275 @@ function CombatSection({ data }: { data: CharacterData }) {
   );
 }
 
+function postToHost(type: string, payload: unknown) {
+  try {
+    window.parent.postMessage({ type, payload }, "*");
+  } catch (e) {
+    console.error(`[cc-fullscreen] postMessage ${type} failed`, e);
+  }
+}
+
+/** This document is a nested iframe whose OBR SDK never becomes ready,
+ *  so OBR.broadcast calls made here fail silently. Ask the host
+ *  (cc-panel, which has a working SDK) to send the broadcast for us.
+ *  The host only relays a whitelist of card channels. */
+function relayBroadcast(
+  channel: string,
+  data: unknown,
+  destination: "LOCAL" | "REMOTE",
+): void {
+  postToHost("cc-relay-broadcast", { channel, data, destination });
+}
+
+function spellLevelLabel(lv: number): string {
+  if (lv === 0) return _lang === "en" ? "Cantrip" : "戏法";
+  return _lang === "en" ? `Level ${lv}` : `${lv}环`;
+}
+
+// Library + stored-override detail for one spell. `undefined` while
+// loading. Re-resolves when the spell's name or any stored field
+// changes (so homebrew edits show up immediately).
+function useSpellDetail(spell: any, active: boolean): SpellDetail | undefined {
+  const st = readStoredSpell(spell);
+  const key = active ? JSON.stringify([spell?.name ?? "", st, _lang]) : "";
+  const [state, setState] = useState<{ key: string; detail: SpellDetail } | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    void effectiveSpellDetail(spell).then((detail) => {
+      if (!cancelled) setState({ key, detail });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return state && state.key === key ? state.detail : undefined;
+}
+
+// Read-only spell detail: meta chips + full description + source.
+function SpellDetailView({ spell }: { spell: any }) {
+  const d = useSpellDetail(spell, true);
+  if (d === undefined) {
+    return <div class="spell-detail spell-detail-loading">{T("ccSpellDetailLoading")}</div>;
+  }
+  const f = d.fields;
+  const has = d.meta || d.description;
+  return (
+    <div class="spell-detail">
+      {has ? (
+        <>
+          <div class="meta">
+            {f.school && <span>{f.school}</span>}
+            {f.casting_time && <span>{T("ccCastingTime")} {f.casting_time}</span>}
+            {f.range && <span>{T("ccRange")} {f.range}</span>}
+            {f.components && <span>{f.components}</span>}
+            {f.duration && <span>{T("ccDuration")} {f.duration}</span>}
+            {d.source && <span class="spell-src">{d.source}</span>}
+          </div>
+          {d.description && <div class="spell-desc">{d.description}</div>}
+        </>
+      ) : (
+        <div class="spell-detail-empty">{T("ccSpellDetailNone")}</div>
+      )}
+    </div>
+  );
+}
+
+function CastSpellModal({
+  spell,
+  slots,
+  saveDc,
+  characterLevel,
+  onClose,
+}: {
+  spell: any;
+  slots: SlotMap;
+  saveDc: unknown;
+  /** Total character level — scales cantrip dice. */
+  characterLevel: number | null;
+  onClose: () => void;
+}) {
+  const baseLevel = Math.max(0, Math.floor(spell?.level ?? 0));
+  const isCantrip = baseLevel === 0;
+  const levelOptions = castLevelOptions(baseLevel, slots);
+  const cardDc = cardSaveDc(saveDc);
+  const [castLevel, setCastLevel] = useState(baseLevel);
+  const [dcText, setDcText] = useState(cardDc != null ? String(cardDc) : "");
+  const [sending, setSending] = useState(false);
+  const detail = useSpellDetail(spell, true);
+  // The DC field is always shown; when the spell has no saving throw a
+  // note says so and buildCast() leaves the DC out of the chat message.
+  const noSave = detail !== undefined && !detail.hasSave;
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !sending) { e.preventDefault(); onClose(); }
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose, sending]);
+
+  const confirm = async () => {
+    if (sending) return;
+    setSending(true);
+    // Best-effort: if the library is unreachable the announcement
+    // still goes out with whatever the card itself stores.
+    let d: SpellDetail | null = detail ?? null;
+    if (!d) {
+      try { d = await effectiveSpellDetail(spell); } catch {}
+    }
+    const n = parseInt(dcText, 10);
+    const cast = buildCast({
+      spellName: String(spell?.name ?? ""),
+      baseLevel,
+      castLevel,
+      dcInput: Number.isFinite(n) ? n : null,
+      cardDc,
+      detail: d,
+      characterLevel,
+    });
+    postToHost("cc-cast-spell", { cast });
+    onClose();
+  };
+
+  return (
+    <div class="cc-modal-backdrop" onClick={() => !sending && onClose()}>
+      <div class="cc-modal" onClick={(e) => e.stopPropagation()}>
+        <div class="cc-modal-h">
+          <h3 class="cast-title">{T("ccCastTitle")}</h3>
+        </div>
+        <div class="cast-spellbox">
+          <span class="cast-spellname">✨ {spell?.name}</span>
+          <span class="cast-spelllvl">{spellLevelLabel(baseLevel)}</span>
+          {detail?.meta && <div class="cast-spellmeta">{detail.meta}</div>}
+        </div>
+        <p class="cast-intro">
+          {T("ccCastIntro").split("{name}")[0]}
+          <b>{spell?.name}</b>
+          {T("ccCastIntro").split("{name}")[1] ?? ""}
+          {!isCantrip && ` ${T("ccCastIntroLevel")}`}
+        </p>
+        {!isCantrip && (
+          <div class="cast-field">
+            <select
+              class="cc-edit-text"
+              value={String(castLevel)}
+              disabled={sending}
+              onChange={(e: any) => setCastLevel(parseInt(e.target.value, 10))}
+            >
+              {levelOptions.map((lv) => (
+                <option value={lv}>
+                  {spellLevelLabel(lv)}
+                  {lv === baseLevel ? ` (${T("ccCastBaseLevel")})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div class="cast-field">
+          <div class="cc-modal-hint">
+            {T("ccCastDcLabel")}
+            {cardDc != null && parseInt(dcText, 10) !== cardDc && (
+              <span class="cast-dc-edited"> · {T("ccCastDcEdited")}</span>
+            )}
+          </div>
+          <input
+            class="cc-edit-num"
+            type="number"
+            value={dcText}
+            disabled={sending}
+            onInput={(e: any) => setDcText(e.target.value)}
+          />
+          {noSave && <div class="cast-dc-note">{T("ccCastDcNoSave")}</div>}
+        </div>
+        <div class="cc-modal-foot">
+          <button class="cc-btn" onClick={onClose} disabled={sending}>
+            {T("ccCancel")}
+          </button>
+          <button class="cc-btn primary" onClick={confirm} disabled={sending}>
+            {sending ? T("ccCastSending") : T("ccCastConfirm")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const SPELL_FIELD_LABEL: Record<string, Parameters<typeof t>[1]> = {
+  school: "ccSpellSchoolChip",
+  casting_time: "ccCastingTimeChip",
+  range: "ccRange",
+  components: "ccComponentsChip",
+  duration: "ccDuration",
+};
+
+// Edit-mode extra fields for one spell. Prefilled with the effective
+// value (card override, else library). Editing a field stores it on
+// the spell; the caller adds `source: "Homebrew"` to the same patch.
+function SpellFieldsEditor({
+  spell,
+  onPatch,
+  onPickSource,
+}: {
+  spell: any;
+  onPatch: (patch: Record<string, string>) => void;
+  /** Library source choice — NOT a homebrew edit, stored as lib_source. */
+  onPickSource: (code: string) => void;
+}) {
+  const d = useSpellDetail(spell, true);
+  const st = readStoredSpell(spell);
+  const value = (k: string): string =>
+    (st.fields as any)[k] ?? (d ? (d.fields as any)[k] : "") ?? "";
+  return (
+    <div class="spell-edit-fields">
+      {d === undefined && <div class="spell-detail-loading">{T("ccSpellDetailLoading")}</div>}
+      {SPELL_FIELD_KEYS.map((k) => (
+        <label class="spell-edit-row">
+          <span>{T(SPELL_FIELD_LABEL[k])}</span>
+          <input
+            class="cc-edit-text"
+            type="text"
+            value={value(k)}
+            onInput={(e: any) => onPatch({ [k]: e.target.value })}
+          />
+        </label>
+      ))}
+      <label class="spell-edit-row spell-edit-desc">
+        <span>{T("ccSpellDescLabel")}</span>
+        <textarea
+          class="cc-edit-text"
+          rows={6}
+          value={st.description ?? (d ? d.description : "")}
+          onInput={(e: any) => onPatch({ description: e.target.value })}
+        />
+      </label>
+      <label class="spell-edit-row">
+        <span>{T("ccSpellSourceLabel")}</span>
+        <span class="spell-src-pick">
+          {d && d.sources.length > 1 ? (
+            <select
+              class="cc-edit-text"
+              value={d.libSource}
+              onChange={(e: any) => onPickSource(e.target.value)}
+              title={T("ccSpellSourcePickTip")}
+            >
+              {d.sources.map((code) => (
+                <option value={code}>{code}</option>
+              ))}
+            </select>
+          ) : (
+            <span class="spell-src-fixed">{d ? d.libSource || "—" : "…"}</span>
+          )}
+          {st.source === HOMEBREW_SOURCE && (
+            <span class="spell-src-hb">{HOMEBREW_SOURCE}</span>
+          )}
+        </span>
+      </label>
+    </div>
+  );
+}
+
 function SpellsSection({ data }: { data: CharacterData }) {
   const { editing, onPatch } = useEdit();
   const sp = data.spellcasting || {};
@@ -2115,6 +2389,12 @@ function SpellsSection({ data }: { data: CharacterData }) {
   const prepared: any[] = Array.isArray(sp.prepared) ? sp.prepared : [];
 
   const [openSpell, setOpenSpell] = useState<string | null>(null);
+  // 2026-09 — spell-cast prompt (item #4 of the room-chat spec): which
+  // spell the "✨" button on a row is currently confirming a cast for.
+  // null = no modal open.
+  const [castFor, setCastFor] = useState<any | null>(null);
+  // Edit mode: which spell rows have their extra-field editor open.
+  const [editOpen, setEditOpen] = useState<string | null>(null);
   // 2026-05-14 (#14 f2) — which list + level the SpellPickModal is
   // currently adding into. null = modal closed.
   const [pickFor, setPickFor] = useState<{
@@ -2212,105 +2492,103 @@ function SpellsSection({ data }: { data: CharacterData }) {
   ) => {
     const key = `${prefix}-${idx}`;
     const isOpen = openSpell === key;
-    // 2026-05-14 (#14 f3) — edit-mode spell row. Per user spec spells
-    // store ONLY { name, level } now — no description (the library is
-    // the source of truth for spell text). Row has: level input ·
-    // name input · × delete. The per-row 🔍 button was removed — it
-    // broadcast to the global search popover, but the cc panel is a
-    // fullScreen modal that covers it, so the user never saw the
-    // result. Spell lookup happens at ADD time via SpellPickModal,
-    // which searches the library inline.
+    // Edit-mode row: level · name · ▾ (extra fields) · × delete. The
+    // card stores only { name, level } until the user edits one of the
+    // extra fields — editing any of them saves that field on the spell
+    // and silently flips its `source` to "Homebrew".
     if (editing && slot) {
+      const fieldsOpen = editOpen === key;
       return (
-        <div
-          class="spell"
-          style={{ display: "flex", gap: "6px", alignItems: "center" }}
-        >
-          <input
-            class="cc-edit-num"
-            type="number"
-            style={{ width: "48px", textAlign: "center" }}
-            value={s.level ?? 0}
-            onInput={(e: any) => {
-              const n = parseInt(e.target.value, 10);
-              if (Number.isFinite(n)) patchSpell(slot, idx, { level: n });
-            }}
-            title={T("ccSpellLevelTip")}
-          />
-          <input
-            class="cc-edit-text"
-            type="text"
-            style={{ flex: "1" }}
-            value={s.name ?? ""}
-            placeholder={T("ccSpellNamePh")}
-            onInput={(e: any) =>
-              patchSpell(slot, idx, { name: e.target.value })
-            }
-          />
-          <button
-            class="cc-tag-x"
-            onClick={() => removeSpell(slot, idx)}
-            title={T("ccDelete")}
-          >
-            ×
-          </button>
-        </div>
+        <>
+          <div class="spell" style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            <input
+              class="cc-edit-num"
+              type="number"
+              style={{ width: "48px", textAlign: "center" }}
+              value={s.level ?? 0}
+              onInput={(e: any) => {
+                const n = parseInt(e.target.value, 10);
+                if (Number.isFinite(n)) patchSpell(slot, idx, { level: n });
+              }}
+              title={T("ccSpellLevelTip")}
+            />
+            <input
+              class="cc-edit-text"
+              type="text"
+              style={{ flex: "1" }}
+              value={s.name ?? ""}
+              placeholder={T("ccSpellNamePh")}
+              onInput={(e: any) => patchSpell(slot, idx, { name: e.target.value })}
+            />
+            <button
+              class={`spell-icon-btn spell-toggle ${fieldsOpen ? "open" : ""}`}
+              onClick={() => setEditOpen(fieldsOpen ? null : key)}
+              title={T(fieldsOpen ? "ccSpellHideDetails" : "ccSpellShowDetails")}
+            >
+              ▾
+            </button>
+            <button
+              class="cc-tag-x"
+              onClick={() => removeSpell(slot, idx)}
+              title={T("ccDelete")}
+            >
+              ×
+            </button>
+          </div>
+          {fieldsOpen && (
+            <SpellFieldsEditor
+              spell={s}
+              onPatch={(patch) => patchSpell(slot, idx, { ...patch, source: HOMEBREW_SOURCE })}
+              onPickSource={(code) => patchSpell(slot, idx, { lib_source: code })}
+            />
+          )}
+        </>
       );
     }
+    const lv = s.level ?? 0;
     return (
       <>
         <div
           class="spell"
           onClick={() => setOpenSpell(isOpen ? null : key)}
-          title={T("ccSpellExpandTip")}
+          title={T(isOpen ? "ccSpellHideDetails" : "ccSpellShowDetails")}
         >
-          <span class={`spell-lv ${(s.level ?? 0) === 0 ? "cantrip" : ""}`}>
-            {(s.level ?? 0) === 0
-              ? T("ccCantripBadge")
-              : `${s.level}${T("ccRing")}`}
+          <span class={`spell-lv ${lv === 0 ? "cantrip" : ""}`}>
+            {lv === 0 ? T("ccCantripBadge") : `${lv}${T("ccRing")}`}
           </span>
-          {/* 2026-05-15 — the spell-name used to be its own clickable
-              search trigger (`onClick → fireNameSearch + stopPropagation`).
-              User reported the name was blocking the row's detail toggle
-              and the search alone wasn't useful enough to justify it.
-              Removed the inner onClick so clicks anywhere on the row
-              (including the name) open the detail panel. Players who
-              still want to search can use the global search bar. */}
           <span class="spell-name">{s.name}</span>
-          {s.meta?.concentration && (
-            <span class="spell-tag conc">{T("ccConcentration")}</span>
-          )}
-          {s.meta?.ritual && (
-            <span class="spell-tag ritual">{T("ccRitual")}</span>
-          )}
+          <button
+            class={`spell-icon-btn spell-toggle ${isOpen ? "open" : ""}`}
+            onClick={(e: any) => {
+              e.stopPropagation();
+              setOpenSpell(isOpen ? null : key);
+            }}
+            title={T(isOpen ? "ccSpellHideDetails" : "ccSpellShowDetails")}
+          >
+            ▾
+          </button>
+          <button
+            class="spell-icon-btn"
+            onClick={(e: any) => {
+              e.stopPropagation();
+              postToHost("cc-search-spell", { q: s.name });
+            }}
+            title={T("ccSpellSearch")}
+          >
+            🔍
+          </button>
+          <button
+            class="spell-icon-btn spell-cast-btn"
+            onClick={(e: any) => {
+              e.stopPropagation();
+              setCastFor(s);
+            }}
+            title={T("ccCastSpell")}
+          >
+            ✨
+          </button>
         </div>
-        {isOpen && s.description && (
-          <div class="spell-detail">
-            {s.meta && (
-              <div class="meta">
-                {s.meta.school && <span>{s.meta.school}</span>}
-                {s.meta.casting_time && (
-                  <span>
-                    {T("ccCastingTime")} {s.meta.casting_time}
-                  </span>
-                )}
-                {s.meta.range && (
-                  <span>
-                    {T("ccRange")} {s.meta.range}
-                  </span>
-                )}
-                {s.meta.components && <span>{s.meta.components}</span>}
-                {s.meta.duration && (
-                  <span>
-                    {T("ccDuration")} {s.meta.duration}
-                  </span>
-                )}
-                {s.meta.source && <span>《{s.meta.source}》</span>}
-              </div>
-            )}
-            {s.description}
-          </div>
-        )}
+        {isOpen && <SpellDetailView spell={s} />}
       </>
     );
   };
@@ -2494,6 +2772,15 @@ function SpellsSection({ data }: { data: CharacterData }) {
           }
           onCancel={() => setPickFor(null)}
           onPick={commitSpellPick}
+        />
+      )}
+      {castFor && (
+        <CastSpellModal
+          spell={castFor}
+          slots={slots as SlotMap}
+          saveDc={sp.save_dc ?? (cs as any).dc}
+          characterLevel={typeof (data as any).total_level === "number" ? (data as any).total_level : null}
+          onClose={() => setCastFor(null)}
         />
       )}
     </div>
@@ -3804,7 +4091,11 @@ function App() {
 
   const [showOwnersModal, setShowOwnersModal] = useState(false);
 
-  const [obrReady, setObrReady] = useState(false);
+  // Optimistic-concurrency bookkeeping for saves (see checkServerConflict).
+  const loadedSavedAtRef = useRef<string | null>(null);
+  const lastOwnSavedAtRef = useRef<string | null>(null);
+  // Someone else saved this card while we have unsaved edits open.
+  const [remoteChanged, setRemoteChanged] = useState(false);
   const [showOwnersDropdown, setShowOwnersDropdown] = useState(false);
 
   const [myId, setMyId] = useState(qsMyId);
@@ -3854,7 +4145,6 @@ function App() {
     {
       roomId,
       cardId,
-      obrReady,
       myId,
       isGM,
       canEdit,
@@ -3892,16 +4182,6 @@ function App() {
     return () => window.removeEventListener("message", handler);
   }, []);
 
-  // CORE DATA LISTENER — OBR.broadcast is unusable in this nested-iframe
-  // context (OBR.isReady never becomes true here), so this whole mechanism
-  // is now a no-op placeholder. allPlayers/myId/role arrive instead via the
-  // window.addEventListener("message") handler for "cc-players" added above,
-  // forwarded by panel-page.ts's postPlayersToFullscreenIframe(). Keeping
-  // the empty effect avoids larger refactors to effects that depend on obrReady.
-  useEffect(() => {
-    // intentionally empty — data arrives via postMessage, not OBR broadcast
-  }, [obrReady, cardId]);
-
   const checkOwnership = async (playerId: string) => {
     // ownership is already resolved from qsIsGM (GM) or will come via
     // a future cc-players message. Nothing to do here without OBR.scene.
@@ -3913,6 +4193,11 @@ function App() {
       console.log(`[cc-fullscreen] Committing data for card ${cardId}`);
       setError(null);
       setData(normalized);
+      loadedSavedAtRef.current =
+        typeof (normalized as any)?._saved_at === "string"
+          ? (normalized as any)._saved_at
+          : null;
+      setRemoteChanged(false);
       const isOwner = normalized.owners_id?.indexOf(myId) ?? -1;
       setCanEdit(isOwner !== -1);
       forceRender((x) => x + 1);
@@ -4062,27 +4347,45 @@ function App() {
     void loadData();
   }, [loadData]);
 
+  // Live updates. This iframe has no working OBR SDK, so cc-panel
+  // forwards the relevant broadcasts here via postMessage:
+  //   cc-card-updated  — someone (maybe us) saved / refreshed this card
+  //   cc-dirty-changed — the local unsaved-copy indicator changed
+  //   cc-fullscreen-show — the sheet was re-shown
+  const editingRef = useRef(false);
+  editingRef.current = editing;
   useEffect(() => {
-    if (!obrReady) return;
     const repaint = () => forceRender((x) => x + 1);
     const onVis = () => {
       if (document.visibilityState === "visible") forceRender((x) => x + 1);
     };
     const onMsg = (e: MessageEvent) => {
-      if (e.data?.type === "cc-fullscreen-show") {
+      if (e.source !== window.parent) return;
+      const type = e.data?.type;
+      if (type === "cc-fullscreen-show") {
         forceRender((x) => x + 1);
+        void loadData();
+        return;
+      }
+      if (type === "cc-dirty-changed") {
+        if (!e.data.cardId || e.data.cardId === cardId) repaint();
+        return;
+      }
+      if (type === "cc-card-updated") {
+        if (!cardId || e.data.cardId !== cardId) return;
+        if (cardId.startsWith("imported_")) return;
+        // Echo of our own save — nothing new on the server.
+        if (e.data.savedAt && e.data.savedAt === lastOwnSavedAtRef.current) return;
+        // A local unsaved copy wins until it is re-uploaded.
+        if (localStorage.getItem(`cc-dirty/${cardId}`)) return;
+        // Don't wipe edits in progress: offer a reload instead.
+        if (editingRef.current) {
+          setRemoteChanged(true);
+          return;
+        }
         void loadData();
       }
     };
-    const onDirty = OBR.broadcast.onMessage(
-      "com.obr-suite/cc-dirty-changed",
-      (event) => {
-        const payload = event.data as { cardId?: string } | undefined;
-        if (payload?.cardId && payload.cardId !== cardId) return;
-        forceRender((x) => x + 1);
-      },
-    );
-
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("focus", repaint);
     window.addEventListener("message", onMsg);
@@ -4090,22 +4393,31 @@ function App() {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("focus", repaint);
       window.removeEventListener("message", onMsg);
-      onDirty();
     };
-  }, [cardId, loadData, obrReady]);
+  }, [cardId, loadData]);
 
-  useEffect(() => {
-    if (!cardId || !obrReady || cardId.startsWith("imported_")) return;
-
-    const unsub = OBR.broadcast.onMessage(BC_CARD_UPDATED, (event) => {
-      const payload = event.data as { cardId?: string } | undefined;
-      if (payload?.cardId !== cardId) return;
-      if (localStorage.getItem(`cc-dirty/${cardId}`)) return;
-      void loadData();
-    });
-
-    return unsub;
-  }, [cardId, loadData, obrReady]);
+  /** Optimistic concurrency check before a PUT. Re-reads the server
+   *  copy: if its `_saved_at` differs from the one we loaded, someone
+   *  else saved in the meantime → ask before overwriting.
+   *  Returns true when it is safe (or the user chose) to write. */
+  const checkServerConflict = useCallback(async (): Promise<boolean> => {
+    if (!roomId || !cardId || cardId.startsWith("imported_")) return true;
+    try {
+      const url = `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) return true; // can't tell — don't block the save
+      const remote = await res.json();
+      const remoteTs =
+        typeof remote?._saved_at === "string" ? remote._saved_at : null;
+      if (remoteTs === loadedSavedAtRef.current) return true;
+      if (remoteTs && remoteTs === lastOwnSavedAtRef.current) return true;
+      const overwrite = window.confirm(T("ccConflictConfirm"));
+      if (!overwrite) setRemoteChanged(true);
+      return overwrite;
+    } catch {
+      return true;
+    }
+  }, [roomId, cardId]);
 
   const onPatch = useCallback((patch: Partial<CharacterData>) => {
     setData((prev) => (prev ? safeNormalize({ ...prev, ...patch }) : prev));
@@ -4127,12 +4439,8 @@ function App() {
         cardId,
         url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`,
       };
-      OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
-        destination: "LOCAL",
-      });
-      OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
-        destination: "REMOTE",
-      });
+      relayBroadcast(BC_CARD_UPDATED, updatedPayload, "LOCAL");
+      relayBroadcast(BC_CARD_UPDATED, updatedPayload, "REMOTE");
     } catch (e) {
       console.warn("[cc-fullscreen] refresh broadcast failed", e);
     }
@@ -4216,11 +4524,7 @@ function App() {
             JSON.stringify(parsed),
           );
           try {
-            OBR.broadcast.sendMessage(
-              BC_CARD_UPDATED,
-              { cardId },
-              { destination: "LOCAL" },
-            );
+            relayBroadcast(BC_CARD_UPDATED, { cardId }, "LOCAL");
           } catch {}
           const name =
             parsed?.identity?.display_name ||
@@ -4233,6 +4537,11 @@ function App() {
       }
 
       const dirtyKey = `cc-dirty/${cardId}`;
+      if (!(await checkServerConflict())) {
+        return `✕ ${source} ${T("ccConflictAborted")}`;
+      }
+      const savedAt = new Date().toISOString();
+      parsed = { ...parsed, _saved_at: savedAt };
       try {
         const url = `${SERVER_ORIGIN}/api/character/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data`;
         const controller = new AbortController();
@@ -4252,15 +4561,13 @@ function App() {
             new Date().toISOString(),
           );
           try {
-            OBR.broadcast.sendMessage(
-              "com.obr-suite/cc-dirty-changed",
-              { cardId, render: true },
-              { destination: "LOCAL" },
-            );
+            relayBroadcast("com.obr-suite/cc-dirty-changed", { cardId, render: true }, "LOCAL");
           } catch {}
           return `⚠ ${source} ${T("ccSaveFailHttp").replace("{status}", String(res.status)).replace("{body}", body.slice(0, 120))}\n💾 ${T("ccDirtySave")}`;
         }
         const result = await res.json();
+        lastOwnSavedAtRef.current = savedAt;
+        loadedSavedAtRef.current = savedAt;
         try {
           localStorage.removeItem(dirtyKey);
         } catch {}
@@ -4268,23 +4575,16 @@ function App() {
           localStorage.removeItem(`cc-dirty-ts/${cardId}`);
         } catch {}
         try {
-          OBR.broadcast.sendMessage(
-            "com.obr-suite/cc-dirty-changed",
-            { cardId },
-            { destination: "LOCAL" },
-          );
+          relayBroadcast("com.obr-suite/cc-dirty-changed", { cardId }, "LOCAL");
         } catch {}
         try {
           const updatedPayload = {
             cardId,
+            savedAt,
             url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`,
           };
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
-            destination: "LOCAL",
-          });
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
-            destination: "REMOTE",
-          });
+          relayBroadcast(BC_CARD_UPDATED, updatedPayload, "LOCAL");
+          relayBroadcast(BC_CARD_UPDATED, updatedPayload, "REMOTE");
         } catch {}
         let msg = `✓ ${source} → ${result.name || "current card"}`;
         if (result.render_warning)
@@ -4294,16 +4594,12 @@ function App() {
         localStorage.setItem(dirtyKey, JSON.stringify(parsed));
         localStorage.setItem(`cc-dirty-ts/${cardId}`, new Date().toISOString());
         try {
-          OBR.broadcast.sendMessage(
-            "com.obr-suite/cc-dirty-changed",
-            { cardId, render: true },
-            { destination: "LOCAL" },
-          );
+          relayBroadcast("com.obr-suite/cc-dirty-changed", { cardId, render: true }, "LOCAL");
         } catch {}
         return `⚠ ${source} ${T("ccSaveFail").replace("{err}", e?.message || String(e))}\n💾 ${T("ccDirtySave")}`;
       }
     },
-    [roomId, cardId],
+    [roomId, cardId, checkServerConflict],
   );
 
   const createCardFromJson = useCallback(
@@ -4329,12 +4625,8 @@ function App() {
             cardId: entry.id,
             url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(entry.id)}/`,
           };
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
-            destination: "LOCAL",
-          });
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
-            destination: "REMOTE",
-          });
+          relayBroadcast(BC_CARD_UPDATED, payload, "LOCAL");
+          relayBroadcast(BC_CARD_UPDATED, payload, "REMOTE");
         } catch {}
         let msg = `✓ ${fileName} → ${T("ccNewCardArrow").replace("{name}", entry.name || parsed?.identity?.display_name || fileName)}`;
         if (entry.render_warning)
@@ -4392,13 +4684,19 @@ function App() {
               summary.push(`✕ ${f.name} ${T("ccNotCardJson")}`);
               continue;
             }
-            setData(safeNormalize(parsed));
+            if (!(await checkServerConflict())) {
+              summary.push(`✕ ${f.name} ${T("ccConflictAborted")}`);
+              continue;
+            }
+            const importSavedAt = new Date().toISOString();
+            const stamped = { ...parsed, _saved_at: importSavedAt };
+            setData(safeNormalize(stamped));
             try {
               const url = `${SERVER_ORIGIN}/api/character/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data`;
               const res = await fetch(url, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(parsed),
+                body: JSON.stringify(stamped),
               });
               if (!res.ok) {
                 const body = await res.text();
@@ -4407,17 +4705,16 @@ function App() {
                 );
               } else {
                 const result = await res.json();
+                lastOwnSavedAtRef.current = importSavedAt;
+                loadedSavedAtRef.current = importSavedAt;
                 try {
                   const updatedPayload = {
                     cardId,
+                    savedAt: importSavedAt,
                     url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`,
                   };
-                  OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
-                    destination: "LOCAL",
-                  });
-                  OBR.broadcast.sendMessage(BC_CARD_UPDATED, updatedPayload, {
-                    destination: "REMOTE",
-                  });
+                  relayBroadcast(BC_CARD_UPDATED, updatedPayload, "LOCAL");
+                  relayBroadcast(BC_CARD_UPDATED, updatedPayload, "REMOTE");
                 } catch {}
                 summary.push(`✓ ${f.name} → ${result.name || "current card"}`);
                 if (result.render_warning)
@@ -4464,12 +4761,8 @@ function App() {
                     cardId: entry.id,
                     url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(entry.id)}/`,
                   };
-                  OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, {
-                    destination: "LOCAL",
-                  });
-                  OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, {
-                    destination: "REMOTE",
-                  });
+                  relayBroadcast(BC_CARD_UPDATED, reconcilePayload, "LOCAL");
+                  relayBroadcast(BC_CARD_UPDATED, reconcilePayload, "REMOTE");
                 }
               } catch (e: any) {
                 summary.push(
@@ -4591,9 +4884,12 @@ function App() {
         onSaveEdits={async () => {
           if (savingEdits || !data) return;
           setSavingEdits(true);
+          let keepEditing = false;
           try {
             const result = await applyJsonObject(data, T("ccSavedEdit"));
             if (!result.startsWith("✓")) window.alert(result);
+            // Conflict → save aborted: stay in edit mode, nothing lost.
+            if (result.startsWith("✕")) keepEditing = true;
             const cs = data.core_stats;
             if (cs) {
               const bubblesPatch: Record<string, unknown> = {};
@@ -4624,10 +4920,25 @@ function App() {
             }
           } finally {
             setSavingEdits(false);
-            setEditing(false);
+            if (!keepEditing) setEditing(false);
           }
         }}
       />
+      {remoteChanged && (
+        <div class="cc-remote-banner">
+          <span>{T("ccRemoteChanged")}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setRemoteChanged(false);
+              setEditing(false);
+              void loadData();
+            }}
+          >
+            {T("ccReloadNow")}
+          </button>
+        </div>
+      )}
       {pasteOpen && (
         <PasteJsonModal
           onCancel={() => setPasteOpen(false)}

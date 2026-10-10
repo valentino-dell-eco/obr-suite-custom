@@ -85,6 +85,7 @@ const PANEL_LABEL_KEYS: Record<string, I18nKey> = {
   [PANEL_IDS.hpBar]: "layoutHpBar",
   [PANEL_IDS.musicBoard]: "layoutMusicBoard",
   [PANEL_IDS.chaseTracker]: "layoutChaseTracker",
+  [PANEL_IDS.roomChat]: "layoutRoomChat",
 };
 
 function setHintKey(key: I18nKey): void {
@@ -147,11 +148,12 @@ const PANEL_ANCHOR: Record<string, { h: AnchorH; v: AnchorV }> = {
   [PANEL_IDS.bestiaryPanel]:  { h: "right", v: "top" },    // bestiary/index.ts
   [PANEL_IDS.diceHistory]:    { h: "right", v: "bottom" }, // dice/index.ts
   [PANEL_IDS.perfWindow]:     { h: "left",  v: "top" },    // perfWindow/index.ts
-  [PANEL_IDS.statusPalette]:  { h: "left",  v: "top" },    // statusTracker/index.ts
+  [PANEL_IDS.statusPalette]:  { h: "right", v: "top" },    // statusTester/palette.ts — right-anchored
   [PANEL_IDS.hpBar]:          { h: "left",  v: "top" },    // hpBar/index.ts
   [PANEL_IDS.musicBoard]:     { h: "right", v: "top" },    // musicBoard/index.ts — right-anchored
   [PANEL_IDS.portalEdit]:     { h: "left",  v: "top" },    // portals/index.ts (CENTER → treat as left)
   [PANEL_IDS.chaseTracker]:   { h: "left",  v: "bottom" }, // chaseTracker/index.ts — bottom-center dock (h approximated as left)
+  [PANEL_IDS.roomChat]:       { h: "left",  v: "bottom" }, // roomChat/index.ts — bottom-left chat
 };
 
 // Min size for resizable panels — smaller than this and the panels
@@ -172,11 +174,12 @@ const PANEL_MIN: Record<string, { w: number; h: number }> = {
   [PANEL_IDS.bestiaryPanel]: { w: 340, h: 280 }, // monster list rows + search input
   [PANEL_IDS.diceHistory]:   { w: 280, h: 200 }, // row text + roll history scroll
   [PANEL_IDS.perfWindow]:    { w: 220, h: 140 }, // small fps / mem readout
-  [PANEL_IDS.statusPalette]: { w: 220, h: 200 }, // buff palette grid
+  [PANEL_IDS.statusPalette]: { w: 220, h: 160 }, // header + search + a few chips
   [PANEL_IDS.hpBar]:         { w: 200, h: 60 },  // single-line bar
   [PANEL_IDS.musicBoard]:    { w: 300, h: 200 }, // now-playing + volume + pair
   [PANEL_IDS.portalEdit]:    { w: 260, h: 200 }, // form fields
   [PANEL_IDS.chaseTracker]:  { w: 360, h: 150 }, // one chase row + inline editor, no clipping
+  [PANEL_IDS.roomChat]:      { w: 280, h: 240 }, // messages + composer
 };
 function minFor(panelId: string): { w: number; h: number } {
   return PANEL_MIN[panelId] ?? { w: MIN_W, h: MIN_H };
@@ -473,6 +476,7 @@ OBR.onReady(() => {
     PANEL_IDS.hpBar,
     PANEL_IDS.musicBoard,
     PANEL_IDS.chaseTracker,
+    PANEL_IDS.roomChat,
   ];
   for (const panelId of order) {
     const bbox = bboxMap[panelId];

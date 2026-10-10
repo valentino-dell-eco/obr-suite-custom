@@ -13,6 +13,13 @@ import {
 } from "./modules/chaseTracker/storage";
 import { PANEL_IDS } from "./utils/panelLayout";
 import { bindPanelDrag } from "./utils/panelDrag";
+import {
+  getChaseLocalSettings,
+  getChaseRoomSettings,
+  initChaseRoomSettings,
+  mayMoveParticipant,
+  onChaseLocalSettingsChange,
+} from "./modules/chaseTracker/settings";
 
 const INIT_METADATA_KEY = "com.initiative-tracker/data";
 const INIT_COMBAT_KEY = "com.initiative-tracker/combat";
@@ -39,6 +46,9 @@ const editorCancelEl = document.getElementById(
 ) as HTMLButtonElement;
 
 let isGM = false;
+let playerId = "";
+/** The scene grid's unit label ("ft", "m", …) for unit = "scene". */
+let gridUnit = "";
 let selectedTokenId: string | null = null;
 let lastActiveTokenId: string | null = null;
 let draftDistance: number | null = null;
@@ -60,9 +70,34 @@ async function refreshGridStep(): Promise<void> {
     const scale = await OBR.scene.grid.getScale();
     const m = Math.abs(scale?.parsed?.multiplier ?? 0);
     gridStep = m > 0 ? m : 5;
+    gridUnit = String(scale?.parsed?.unit ?? "").trim();
   } catch {
     gridStep = 5;
+    gridUnit = "";
   }
+}
+
+/** −/+ step: the room setting, or the scene's grid scale. */
+function stepSize(): number {
+  return getChaseRoomSettings().step || gridStep;
+}
+
+function unitLabel(): string {
+  const u = getChaseRoomSettings().unit;
+  if (u === "none") return "";
+  if (u === "scene") return gridUnit;
+  return u;
+}
+
+/** "30 ft" (or just "30" without a unit). */
+function fmt(n: number): string {
+  const u = unitLabel();
+  return u ? `${n} ${u}` : String(n);
+}
+
+/** Players under "distances only" don't learn who the quarry is. */
+function quarryMasked(): boolean {
+  return !isGM && getChaseRoomSettings().playerView === "distances";
 }
 
 async function deleteChase(chaseId: string): Promise<void> {
@@ -110,7 +145,13 @@ function findActiveParticipantId(
 }
 
 async function confirmEdit(): Promise<void> {
-  if (!isGM || !selectedTokenId || draftDistance === null) return;
+  if (!selectedTokenId || draftDistance === null) return;
+  if (!isGM) {
+    // Players (when allowed) may only move their own tokens.
+    let item: any;
+    try { [item] = await OBR.scene.items.getItems([selectedTokenId]); } catch {}
+    if (!mayMoveParticipant(isGM, playerId, item)) return;
+  }
   const chases = await readChases();
   const idx = chases.findIndex((c) =>
     c.participants.some((p) => p.tokenId === selectedTokenId),
@@ -212,9 +253,10 @@ function renderEditor(
   en: boolean,
 ): void {
   const found = findSelected(chases);
+  const movable = !!found && mayMoveParticipant(isGM, playerId, itemsById.get(found.participant.tokenId));
 
-  // Nessuna selezione (o utente non-GM): footer visibile ma disabilitato.
-  if (!found || !isGM) {
+  // Nessuna selezione (o pedina non modificabile): footer visibile ma disabilitato.
+  if (!found || !movable) {
     editorEl.classList.add("disabled");
     editorNameEl.textContent = en ? "Select a token" : "Seleziona una pedina";
     editorInputEl.value = "";
@@ -241,7 +283,7 @@ function renderEditor(
   editorCancelEl.disabled = false;
 
   editorNameEl.textContent =
-    item?.name ||
+    (participant.role === "quarry" && quarryMasked() ? "" : item?.name) ||
     (participant.role === "quarry"
       ? en
         ? "Quarry"
@@ -258,8 +300,8 @@ function renderEditor(
   editorCancelEl.textContent = en ? "Cancel" : "取消";
   editorConfirmEl.disabled = draftDistance === null;
 
-  editorDecEl.onclick = () => stepEdit(-gridStep, participant.distance);
-  editorIncEl.onclick = () => stepEdit(gridStep, participant.distance);
+  editorDecEl.onclick = () => stepEdit(-stepSize(), participant.distance);
+  editorIncEl.onclick = () => stepEdit(stepSize(), participant.distance);
   editorInputEl.oninput = () => {
     const v = Number(editorInputEl.value);
     draftDistance = Math.max(0, Number.isFinite(v) ? v : 0);
@@ -304,7 +346,9 @@ async function render(): Promise<void> {
 
   // Auto-follow iniziativa: quando cambia il turno attivo, seleziona
   // la pedina e (vedi sotto) scrolla alla chase che la contiene.
-  const activeId = findActiveParticipantId(chases, itemsById, inCombat);
+  const activeId = getChaseLocalSettings().autoSelect
+    ? findActiveParticipantId(chases, itemsById, inCombat)
+    : null;
   let shouldScrollToSelection = false;
   if (activeId !== lastActiveTokenId) {
     lastActiveTokenId = activeId;
@@ -392,7 +436,7 @@ function renderChase(
     const closest = Math.min(
       ...pursuers.map((p) => Math.max(0, quarryDistance - p.distance)),
     );
-    gapEl.textContent = en ? `${closest} away` : `距离 ${closest}`;
+    gapEl.textContent = en ? `${fmt(closest)} away` : `距离 ${fmt(closest)}`;
   } else {
     gapEl.textContent = en ? "no pursuers yet" : "暂无追击者";
   }
@@ -423,7 +467,9 @@ function renderChase(
     const item = itemsById.get(p.tokenId);
     const pin = document.createElement("div");
     pin.className = `pin ${p.role}`;
-    if (item?.image?.url) pin.style.backgroundImage = `url(${item.image.url})`;
+    const masked = p.role === "quarry" && quarryMasked();
+    if (masked) pin.classList.add("masked");
+    else if (item?.image?.url) pin.style.backgroundImage = `url(${item.image.url})`;
     if (p.tokenId === selectedTokenId) pin.classList.add("selected");
     const active = !!(item?.metadata?.[INIT_METADATA_KEY] as any)?.active;
     if (inCombat && active) pin.classList.add("active-turn");
@@ -433,10 +479,10 @@ function renderChase(
     const label = document.createElement("div");
     label.className = "pin-label";
     if (p.role === "quarry") {
-      label.textContent = item?.name || (en ? "Quarry" : "猎物");
+      label.textContent = (masked ? "" : item?.name) || (en ? "Quarry" : "猎物");
     } else {
       const gap = Math.max(0, quarryDistance - p.distance);
-      label.textContent = `${gap} ${en ? "away" : ""}`;
+      label.textContent = en ? `${fmt(gap)} away` : fmt(gap);
     }
     pin.appendChild(label);
 
@@ -477,6 +523,9 @@ async function init(): Promise<void> {
   try {
     isGM = (await OBR.player.getRole()) === "GM";
   } catch {}
+  try { playerId = await OBR.player.getId(); } catch {}
+  await initChaseRoomSettings(() => queueRender());
+  onChaseLocalSettingsChange(() => queueRender());
   OBR.player.onChange((p) => {
     const was = isGM;
     isGM = p.role === "GM";

@@ -27,7 +27,6 @@ export type ModuleId =
   | "dice"
   | "portals"
   | "bubbles"
-  | "statusTracker"
   | "resourceTracker"
   | "hpBar"
   | "metadataInspector"
@@ -37,7 +36,9 @@ export type ModuleId =
   | "follow"
   | "musicBoard"
   | "transform"
-  | "chaseTracker";
+  | "chaseTracker"
+  | "roomChat"
+  | "statusTester";
 
 export type DataVersion = "2014" | "2024" | "all";
 export type Language = "zh" | "en";
@@ -160,11 +161,6 @@ export const DEFAULT_STATE: SuiteState = {
     dice: true,
     portals: true,
     bubbles: true,
-    // Status tracker — promoted to stable. Default ON in all channels.
-    // The right-click "状态追踪" pill on the Select tool + the new
-    // toolbar tool both work for everyone (no role gate); per-token
-    // buff metadata is enforced by OBR's normal item-edit permissions.
-    statusTracker: true,
     // Resource tracker — per-token consumable / progress / numeric
     // resources, plus a DM-only toolbar tool that opens a full-screen
     // stats panel of every player character's resources. Default ON.
@@ -223,6 +219,12 @@ export const DEFAULT_STATE: SuiteState = {
     // has its own GM-only context menus so it stays inert until the
     // GM actually starts a chase.
     chaseTracker: true,
+    // Room Chat — popover chat with whispers to the GM / a player.
+    roomChat: true,
+    // Status Tracker (module id "statusTester") — icon/colour status
+    // chips + image overlays on tokens, library in room metadata.
+    // Replaced the old full-screen status tracker (2026-10).
+    statusTester: true,
   },
   dataVersion: "2024",
   allowPlayerMonsters: false,
@@ -351,6 +353,15 @@ function suiteStateEqual(a: SuiteState, b: SuiteState): boolean {
 // enabled in any scene it propagates to all.
 const ROOM_STATE_KEY = "com.obr-suite/state-room";
 
+// Only ONE iframe per room should copy the room mirror back onto the
+// scene: the GM's background iframe (see background.ts). Every other
+// iframe — and every player client — only reads. Without this, each of
+// the ~8 iframes on each client raced to write the scene on every change.
+let sceneMirrorWriter = false;
+export function enableSceneMirrorWrites(on = true): void {
+  sceneMirrorWriter = on;
+}
+
 export async function refreshFromScene(): Promise<SuiteState> {
   let next: SuiteState;
   try {
@@ -372,7 +383,7 @@ export async function refreshFromScene(): Promise<SuiteState> {
         // reported severe flicker / freeze when toggling sync on,
         // and that's the root cause.
         const currentScene = merge(sceneMeta[SCENE_KEY]);
-        if (!suiteStateEqual(currentScene, next)) {
+        if (sceneMirrorWriter && !suiteStateEqual(currentScene, next)) {
           try { await OBR.scene.setMetadata({ [SCENE_KEY]: next }); } catch {}
         }
       } else {
@@ -402,6 +413,46 @@ export async function refreshFromScene(): Promise<SuiteState> {
   return cached;
 }
 
+// --- State for iframes WITHOUT a working OBR SDK ----------------------
+// The nested fullscreen character sheet (cc-fullscreen.html inside
+// cc-panel.html) can't call startSceneSync(), so getState() there would
+// stay DEFAULT_STATE (default kiwee libraries, default Data Version) —
+// which made spell lookups ignore the user's real library settings.
+// Its parent panel relays the real state; consumers that depend on it
+// (utils/libraryIndex) await whenStateReady() first.
+let readyGate: Promise<void> = Promise.resolve();
+let relayResolve: (() => void) | null = null;
+
+/** Resolves once the real suite state is known in this iframe (or the
+ *  gate's timeout passed). Already resolved in iframes that never set
+ *  a gate — they either sync from the scene or don't need it. */
+export function whenStateReady(): Promise<void> {
+  return readyGate;
+}
+
+/** Hold whenStateReady() until `p` settles (max `timeoutMs`). */
+export function gateStateOn(p: Promise<unknown>, timeoutMs = 3000): void {
+  readyGate = Promise.race([
+    p.then(() => {}, () => {}),
+    new Promise<void>((r) => setTimeout(r, timeoutMs)),
+  ]);
+}
+
+/** This iframe will receive its state via applyRelayedState(). */
+export function expectRelayedState(timeoutMs = 3000): void {
+  gateStateOn(new Promise<void>((r) => { relayResolve = r; }), timeoutMs);
+}
+
+/** Adopt a state snapshot relayed by a parent that has the OBR SDK. */
+export function applyRelayedState(partial: unknown): void {
+  const next = merge(partial);
+  const changed = !suiteStateEqual(cached, next);
+  cached = next;
+  if (changed) for (const fn of listeners) fn(cached);
+  relayResolve?.();
+  relayResolve = null;
+}
+
 export function onStateChange(fn: (s: SuiteState) => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
@@ -419,25 +470,29 @@ export async function setState(partial: Partial<SuiteState>): Promise<void> {
 
   if (suiteStateEqual(prev, next)) return;
 
-  await OBR.scene.setMetadata({ [SCENE_KEY]: next });
-  lastSceneStateJson = JSON.stringify(next);
-  cached = next;
-
+  // ORDER MATTERS: room mirror FIRST, scene second. Every iframe reacts
+  // to the scene change by re-reading the room; if the room still held
+  // the old state it would be written back over the scene (the change
+  // "bounced", and turning sync OFF re-enabled itself).
   // Cross-scene sync mirror: write to room when ON, clear when
   // transitioning ON → OFF so other scenes don't keep hydrating from
   // a stale mirror.
   try {
     if (next.crossSceneSyncSettings) {
-      await OBR.room.setMetadata({ [ROOM_STATE_KEY]: next });
       lastRoomStateJson = JSON.stringify(next);
+      await OBR.room.setMetadata({ [ROOM_STATE_KEY]: next });
     } else if (prev.crossSceneSyncSettings) {
       // Was on, now off — clear so scene-loads stop seeing it.
-      await OBR.room.setMetadata({ [ROOM_STATE_KEY]: undefined });
       lastRoomStateJson = JSON.stringify(null);
+      await OBR.room.setMetadata({ [ROOM_STATE_KEY]: undefined });
     }
   } catch (e) {
     console.warn("[obr-suite/state] room mirror write failed", e);
   }
+
+  lastSceneStateJson = JSON.stringify(next);
+  cached = next;
+  await OBR.scene.setMetadata({ [SCENE_KEY]: next });
 
   for (const fn of listeners) fn(cached);
   // Explicit broadcast for cross-iframe sync. OBR.scene.onMetadataChange

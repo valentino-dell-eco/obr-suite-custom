@@ -8,6 +8,8 @@
 // checkboxes, a per-resource recharge list, a grouped offline-owner
 // list) that would otherwise mean 3+ near-duplicate static overlays.
 
+import { escapeHtml } from "../../utils/html";
+
 export interface ModalButton {
   label: string;
   variant?: "primary" | "secondary";
@@ -204,17 +206,17 @@ export function showChargesRollModal(opts: {
   const bodyParts: string[] = [];
   for (const g of opts.groups) {
     if (g.label) {
-      bodyParts.push(`<div style="font-weight:600;color:#fff;margin-top:4px">${g.label}</div>`);
+      bodyParts.push(`<div style="font-weight:600;color:#fff;margin-top:4px">${escapeHtml(g.label)}</div>`);
     }
     for (const r of g.rows) {
       const key = rowKey(r.itemId, r.resourceId);
       bodyParts.push(`
-        <div class="chg-row" data-key="${key}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(255,255,255,0.04);border-radius:6px;padding:6px 8px;">
+        <div class="chg-row" data-key="${escapeHtml(key)}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(255,255,255,0.04);border-radius:6px;padding:6px 8px;">
           <div style="min-width:0">
-            <div style="color:#eee;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
-            <div class="chg-meta" style="color:#999;font-size:11px">${r.current} / ${r.max} · ${r.formula}</div>
+            <div style="color:#eee;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(r.name)}</div>
+            <div class="chg-meta" style="color:#999;font-size:11px">${escapeHtml(r.current)} / ${escapeHtml(r.max)} · ${escapeHtml(r.formula)}</div>
           </div>
-          <button type="button" class="chg-recharge-btn" data-key="${key}" style="flex:none;padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;border:1px solid #5865f2;background:#5865f2;color:#fff;">${opts.rechargeLabel}</button>
+          <button type="button" class="chg-recharge-btn" data-key="${escapeHtml(key)}" style="flex:none;padding:4px 10px;border-radius:5px;font-size:11px;cursor:pointer;border:1px solid #5865f2;background:#5865f2;color:#fff;">${escapeHtml(opts.rechargeLabel)}</button>
         </div>
       `);
     }
@@ -239,7 +241,7 @@ export function showChargesRollModal(opts: {
           btn.style.opacity = "0.5";
           const result = await row.onRecharge();
           if (result) {
-            const wrapper = root.querySelector<HTMLElement>(`.chg-row[data-key="${key}"]`);
+            const wrapper = root.querySelector<HTMLElement>(`.chg-row[data-key="${CSS.escape(key ?? "")}"]`);
             const meta = wrapper?.querySelector<HTMLElement>(".chg-meta");
             if (meta) meta.textContent = `${result.current} / ${result.max} (+${result.total})`;
           }

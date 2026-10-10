@@ -782,7 +782,7 @@ export async function setupGroupSaves(): Promise<void> {
   unsubs.push(
     OBR.broadcast.onMessage(BROADCAST_DICE_ROLL, (event) => {
       const data = event.data as DiceRollPayload | undefined;
-      if (!data || !data.collectiveId) return;
+      if (!data || !data.collectiveId || data.redacted) return;
       recordResolveResult(data);
     }),
   );

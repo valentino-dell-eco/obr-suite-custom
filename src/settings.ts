@@ -38,6 +38,12 @@ import {
   type LocalFileMeta,
 } from "./utils/localContent";
 import { repairLegacyHiddenBubbles } from "./modules/bubbles";
+import {
+  chaseOptionsHtml,
+  initModuleOptionSettings,
+  sttOptionsHtml,
+  wireModuleOptions,
+} from "./settingsModuleOptions";
 
 // Merged Settings + About panel.
 //
@@ -3290,29 +3296,9 @@ const TABS: TabDef[] = [
     },
   },
   {
-    id: "statusTracker",
-    zh: `${ICONS.statusWheel} 状态追踪`,
-    en: `${ICONS.statusWheel} Status Tracker`,
-    moduleId: "statusTracker",
-    body: {
-      zh: `<p><b>全屏追踪</b>：状态、buff 一站式管理。</p>
-<ul>
-  <li><b>打开</b>：Select 工具下按 <kbd>]</kbd>，或点击工具栏的状态追踪按钮</li>
-  <li><b>右下调色板</b>：拖状态到角色 = 应用；状态文字会以弧形气泡浮在 token 头顶</li>
-  <li>已应用的 buff <b>拖到别人</b> = 转移，<b>拖到空白</b> = 删除</li>
-</ul>`,
-      en: `<p><b>Full-screen tracker</b> for status effects + buffs — one place to manage them all.</p>
-<ul>
-  <li><b>Open</b>: press <kbd>]</kbd> while in the Select tool, or click the toolbar action</li>
-  <li><b>Bottom-right palette</b>: drag a status onto a character to apply it. The buff label appears as an arc-style bubble above the token</li>
-  <li>Applied buffs: <b>drag to another</b> = transfer, <b>drag to empty space</b> = remove</li>
-</ul>`,
-    },
-  },
-  {
     id: "resourceTracker",
-    zh: `📊 资源追踪`,
-    en: `📊 Resource Tracker`,
+    zh: `${ICONS.ledger} 资源追踪`,
+    en: `${ICONS.ledger} Resource Tracker`,
     moduleId: "resourceTracker",
     body: {
       zh: `<p><b>资源追踪</b>：为 token 配置消耗品 / 进度 / 数值资源（法术位、生命骰、灵感…）。</p>
@@ -3329,16 +3315,16 @@ const TABS: TabDef[] = [
   },
   {
     id: "chaseTracker",
-    zh: `🏃 追逐战追踪器`,
-    en: `🏃 Chase Tracker`,
+    zh: `${ICONS.chase} 追逐战追踪器`,
+    en: `${ICONS.chase} Chase Tracker`,
     moduleId: "chaseTracker",
-    body: {
+    dynamicBody: (lang, gm) => chaseOptionsHtml(lang, gm) + ({
       zh: `<p><b>追逐战追踪器</b>：在地图上追踪一场或多场追逐战（猎物 + 追击者）。</p>
 <ul>
   <li><b>开始追逐</b>：右键 token → 「加入追逐战（作为猎物）」</li>
   <li><b>加入追击</b>：右键另一个 token → 「加入追逐战（作为追击者）」，选择要加入的追逐战</li>
   <li><b>选择 / 调整位置</b>：点击面板上的图钉即可选中该 token（先攻轮到谁时也会自动选中它），面板底部会出现该 token 的距离编辑区：用「−」「+」按钮（步长取自当前场景网格比例）或直接点击数字输入，编辑完成后按「确认」写入，或按「取消」放弃修改</li>
-  <li><b>面板</b>：屏幕底部的追逐战追踪器会显示每场追逐战的进度条</li>
+  <li><b>面板</b>：屏幕底部的追逐战追踪器会显示每场追逐战的进度条；「工具套件」→「追逐战追踪器」可手动显示 / 隐藏</li>
   <li><b>删除</b>：DM 点击面板上每场追逐战最右侧的垃圾桶图标即可结束该追逐战</li>
   <li>与角色卡面板一样，该面板不会在手机 / 平板客户端上显示</li>
 </ul>`,
@@ -3347,11 +3333,75 @@ const TABS: TabDef[] = [
   <li><b>Start a chase</b>: right-click a token → "Add to Chase as Quarry"</li>
   <li><b>Join as pursuer</b>: right-click another token → "Add to Chase as Pursuer", then pick which chase to join</li>
   <li><b>Select / adjust position</b>: click a pin in the panel to select that token (it's also auto-selected the moment its initiative turn starts) — a distance editor appears at the bottom of the panel with "−"/"+" buttons (stepping by the scene's grid scale), a directly-editable number, and Confirm/Cancel</li>
-  <li><b>Panel</b>: a dock at the bottom of the screen shows every active chase as a bar</li>
+  <li><b>Panel</b>: a dock at the bottom of the screen shows every active chase as a bar; "Tools Suite" → "Chase Tracker" shows / hides it by hand</li>
   <li><b>Delete</b>: as the DM, click the trash icon at the right end of any chase row to end it</li>
   <li>Just like the Character Sheet, this panel doesn't show up on mobile / tablet clients</li>
 </ul>`,
+    } as Record<string, string>)[lang],
+    afterRender: (root, gm) => wireModuleOptions(root, gm, () => { if (activeTab === "chaseTracker") renderContent(); }),
+  },
+  {
+    id: "roomChat",
+    zh: `${ICONS.chatBubbles} 房间聊天`,
+    en: `${ICONS.chatBubbles} Room Chat`,
+    moduleId: "roomChat",
+    body: {
+      zh: `<p><b>房间聊天</b>：在房间里发文字消息，支持悄悄话。</p>
+<ul>
+  <li><b>打开</b>：点击右侧工具栏的「工具套件」→「房间聊天」</li>
+  <li><b>发送给所有人</b>：选择「所有人」，所有人都能看到</li>
+  <li><b>悄悄话 → GM</b>（玩家）：选择「GM」，只有 GM 能看到</li>
+  <li><b>悄悄话 → 玩家</b>：选择「玩家」并在下拉框里选人，只有该玩家和 GM 能看到</li>
+  <li>GM 可以看到所有悄悄话</li>
+  <li>面板可拖动（左上角的抓手），位置可在「编辑面板布局」里调整</li>
+  <li>聊天记录按房间保存在本机浏览器中（最多 300 条）</li>
+  <li>⚠️ 悄悄话只是在界面上对其他人隐藏，并非加密：消息实际会发送到房间里所有客户端</li>
+</ul>`,
+      en: `<p><b>Room Chat</b> — text chat for the room, with whispers.</p>
+<ul>
+  <li><b>Open</b>: right-hand toolbar → "Tools Suite" → "Room Chat"</li>
+  <li><b>To everyone</b>: pick "All" — everybody sees it</li>
+  <li><b>Whisper to the GM</b> (players): pick "GM" — only the GM sees it</li>
+  <li><b>Whisper to a player</b>: pick "Player" and choose who in the dropdown — only that player and the GM see it</li>
+  <li>The GM can read every whisper</li>
+  <li>The panel is draggable (grip at the top-left) and can be repositioned from "Edit panel layout"</li>
+  <li>History is stored per room in this browser (last 300 messages)</li>
+  <li>⚠️ Whispers are only hidden in other people's UI, not encrypted: the message is still delivered to every client in the room</li>
+</ul>`,
     },
+  },
+  {
+    id: "statusTester",
+    zh: `${ICONS.statusChip} 状态追踪`,
+    en: `${ICONS.statusChip} Status Tracker`,
+    moduleId: "statusTester",
+    dynamicBody: (lang, gm) => sttOptionsHtml(lang, gm) + ({
+      zh: `<p><b>状态追踪</b>：带图标、颜色和名称的状态标签，可选附加图像覆盖在 token 上。</p>
+<ul>
+  <li><b>状态面板</b>：「工具套件」→「状态追踪」或快捷键 <kbd>Shift+S</kbd>。把状态拖到 token 上即可添加（GM 松开时按住 <kbd>Shift</kbd> = 对玩家隐藏）；点击状态 = 添加到选中的 token。面板可拖动，也可在「调整面板布局」中移动和缩放</li>
+  <li><b>状态库</b>：面板上的书本按钮。GM 可新建 / 编辑 / 删除（图标或 emoji、颜色、附加图像）；状态库保存在房间中，所有场景共用</li>
+  <li><b>预设</b>：内置 D&amp;D 5e (2014) 的 15 种状态与 12 种增益；状态库中的「恢复 D&amp;D 5e」可找回被删除的预设</li>
+  <li><b>添加状态</b>：右键 token →「状态追踪」（GM：任意 token；玩家：仅自己的 token）</li>
+  <li><b>悬停</b>：鼠标悬停在状态标签上可查看该 token 的全部状态（无需选中）</li>
+  <li><b>快速管理</b>：点击状态标签显示齿轮，点击齿轮打开管理窗口</li>
+  <li>多个状态时每 5 秒轮换显示；移动镜头或 token 时标签暂时隐藏</li>
+  <li>GM 可将状态设为对玩家隐藏，之后可随时切换为可见</li>
+  <li><b>等级</b>：在状态库中为状态开启「有等级」（如力竭），标签显示为「力竭 3」，可在 token 的管理窗口中修改等级（整数，可为负）</li>
+</ul>`,
+      en: `<p><b>Status Tracker</b> — status chips with an icon, colour and title, plus an optional image overlaid on the token.</p>
+<ul>
+  <li><b>Palette</b>: "Tools Suite" → "Status Tracker", or shortcut <kbd>Shift+S</kbd>. Drag a status onto a token to add it (GM: hold <kbd>Shift</kbd> on release = hidden from players); click a status to add it to the selected tokens. Move it by its grip, or move / resize it from "Edit panel layout"</li>
+  <li><b>Library</b>: the book button on the palette. The GM can create / edit / delete statuses (icon or emoji, colour, attachment image); the library is stored in the room and shared by every scene</li>
+  <li><b>Presets</b>: the 15 D&amp;D 5e (2014) conditions and 12 common buffs are built in; "Restore D&amp;D 5e" in the library brings back deleted presets</li>
+  <li><b>Apply</b>: right-click a token → "Status Tracker" (GM: any token; players: their own tokens)</li>
+  <li><b>Hover</b> a chip to list every status on that token (no selection needed)</li>
+  <li><b>Quick manage</b>: click a chip to reveal the gear, click the gear to manage</li>
+  <li>Several statuses rotate every 5 seconds; chips hide while the camera or a token is moving</li>
+  <li>The GM can hide a status from players and make it visible later</li>
+  <li><b>Levels</b>: turn on "Has levels" for a status in the library (e.g. Exhaustion) — the chip reads "Exhaustion 3" and the level is edited in the token's manage window (whole numbers, negatives allowed)</li>
+</ul>`,
+    } as Record<string, string>)[lang],
+    afterRender: (root, gm) => wireModuleOptions(root, gm, () => { if (activeTab === "statusTester") renderContent(); }),
   },
   {
     id: "search",
@@ -3772,6 +3822,10 @@ const TABS: TabDef[] = [
               else if (p.phase === "done") writeImpProg(p.message ?? "完成");
             },
           });
+          if (result.aborted) {
+            writeImpProg("↩ 导入已取消 / Import cancelled — scene unchanged");
+            return;
+          }
           writeImpProg(
             `✅ 已导入 ${result.applied} 个 item（场景：${result.manifest.meta.sceneName ?? "(无名)"}，导出于 ${new Date(result.manifest.meta.exportedAt).toLocaleString()})`,
           );
@@ -3839,9 +3893,6 @@ function moduleLabelKey(id: ModuleId): string {
     case "bubbles":
       label = lang === "zh" ? "血量气泡" : "HP Bubbles";
       break;
-    case "statusTracker":
-      label = lang === "zh" ? "状态追踪" : "Status Tracker";
-      break;
     case "resourceTracker":
       label = lang === "zh" ? "资源追踪" : "Resource Tracker";
       break;
@@ -3865,6 +3916,9 @@ function moduleLabelKey(id: ModuleId): string {
       break;
     case "musicBoard":
       label = lang === "zh" ? "音乐板" : "Music Board";
+      break;
+    case "statusTester":
+      label = lang === "zh" ? "状态追踪" : "Status Tracker";
       break;
   }
   return label;
@@ -4142,6 +4196,11 @@ OBR.onReady(async () => {
     m.installDebugOverlay();
   } catch {}
   startSceneSync();
+  // Status / Chase Tracker room settings (room metadata) — re-render
+  // their tab when the GM changes them from any client.
+  void initModuleOptionSettings(() => {
+    if (activeTab === "statusTester" || activeTab === "chaseTracker") renderContent();
+  });
   OBR.scene.onMetadataChange((meta) => {
     const m = meta as Record<string, unknown>;
     const next = readBubbleThresholdFromMeta(m);

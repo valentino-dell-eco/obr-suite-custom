@@ -1066,6 +1066,172 @@
         color: var(--ink);
         min-width: 0;
       }
+      .spell-cast-btn {
+        flex: none;
+        border: none;
+        background: transparent;
+        font-size: 12px;
+        line-height: 1;
+        padding: 2px 4px;
+        border-radius: 4px;
+        cursor: pointer;
+        opacity: 0.55;
+        transition: opacity 0.12s, background 0.12s;
+      }
+      .spell-cast-btn:hover {
+        opacity: 1;
+        background: rgba(156, 124, 255, 0.18);
+      }
+      /* 2026-10 — per-row icon buttons (▾ details / 🔍 search / ✨ cast). */
+      .spell-icon-btn {
+        flex: none;
+        border: none;
+        background: transparent;
+        color: var(--ink-mute);
+        font-size: 12px;
+        line-height: 1;
+        padding: 3px 5px;
+        border-radius: 4px;
+        cursor: pointer;
+        opacity: 0.6;
+        transition: opacity 0.12s, background 0.12s, transform 0.15s;
+      }
+      .spell-icon-btn:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .spell-toggle.open {
+        transform: rotate(180deg);
+        opacity: 1;
+      }
+      .spell-desc {
+        margin-top: 6px;
+        white-space: pre-wrap;
+        line-height: 1.45;
+      }
+      .spell-src {
+        font-weight: 700;
+        color: var(--gold);
+      }
+      .spell-detail-loading,
+      .spell-detail-empty {
+        color: var(--ink-mute);
+        font-style: italic;
+      }
+      .spell-edit-fields {
+        margin: 4px 0 8px 54px;
+        padding: 8px 10px;
+        background: var(--bg);
+        border-left: 2px solid var(--gold-soft);
+        border-radius: 0 6px 6px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .spell-edit-row {
+        display: grid;
+        grid-template-columns: 96px 1fr;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--ink-mute);
+      }
+      .spell-edit-row.spell-edit-desc {
+        align-items: start;
+      }
+      .spell-edit-row textarea {
+        resize: vertical;
+        min-height: 90px;
+        font-family: inherit;
+        line-height: 1.4;
+      }
+      .spell-edit-src {
+        font-size: 10.5px;
+        color: var(--ink-mute);
+        text-align: right;
+      }
+      .spell-src-pick {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .spell-src-pick select {
+        width: auto;
+        min-width: 110px;
+        padding: 4px 8px;
+      }
+      .spell-src-fixed {
+        color: var(--gold);
+        font-weight: 700;
+      }
+      .spell-src-hb {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--gold);
+        border: 1px solid var(--gold-soft);
+        border-radius: 999px;
+        padding: 1px 7px;
+      }
+      .cast-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .cast-field select,
+      .cast-field input {
+        width: 100%;
+        padding: 7px 10px;
+        font-size: 13px;
+        box-sizing: border-box;
+      }
+      .cast-title {
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+      }
+      .cast-spellbox {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 4px 8px;
+        padding: 9px 11px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+        background: rgba(156, 124, 255, 0.12);
+        border: 1px solid rgba(156, 124, 255, 0.35);
+      }
+      .cast-spellname {
+        font-size: 14px;
+        font-weight: 800;
+      }
+      .cast-spelllvl {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--ink-mute);
+      }
+      .cast-spellmeta {
+        flex-basis: 100%;
+        font-size: 11px;
+        font-style: italic;
+        color: var(--ink-mute);
+      }
+      .cast-intro {
+        font-size: 12.5px;
+        line-height: 1.45;
+        margin: 0 0 10px;
+      }
+      .cast-dc-note {
+        font-size: 11px;
+        font-style: italic;
+        color: var(--ink-mute);
+      }
+      .cast-dc-edited {
+        color: var(--gold);
+        font-weight: 700;
+      }
       .spell-tag {
         font-size: 9.5px;
         color: var(--ink-mute);
@@ -1518,6 +1684,34 @@
         justify-content: flex-end;
         gap: 8px;
         margin-top: 10px;
+      }
+
+      /* === Remote-change banner (card saved by someone else) === */
+      .cc-remote-banner {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 6px 12px 0;
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: rgba(245, 200, 118, 0.16);
+        border: 1px solid rgba(245, 200, 118, 0.55);
+        color: #f5c876;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .cc-remote-banner span {
+        flex: 1;
+      }
+      .cc-remote-banner button {
+        flex: none;
+        border: none;
+        border-radius: 7px;
+        padding: 5px 12px;
+        background: #f5c876;
+        color: #1a2036;
+        font-weight: 800;
+        cursor: pointer;
       }
 
       /* === Empty / error === */

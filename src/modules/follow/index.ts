@@ -25,13 +25,19 @@ import { t } from "../../i18n";
 import {
   FOLLOW_PLUGIN_ID,
   FOLLOW_KEY,
-  FOLLOW_TOOL_ID,
   FOLLOW_MODE_ID,
   CTX_FOLLOW_ADD,
   CTX_FOLLOW_REMOVE,
   type FollowConfig,
 } from "./types";
 import { findPath, wallsToSegments, type WallSegment } from "./pathfinding";
+import {
+  GM_TOOLS_SUITE_ID,
+  suiteModeFilter,
+  registerSuiteItem,
+  unregisterSuiteItem,
+  activateHiddenMode,
+} from "../toolsSuite";
 
 const ICON_URL = assetUrl("follow-icon.svg");
 
@@ -52,7 +58,7 @@ async function ctxAddFollow(itemIds: string[]): Promise<void> {
   if (itemIds.length === 0) return;
   pendingSourceId = itemIds[0];
   try {
-    await OBR.tool.activateTool(FOLLOW_TOOL_ID);
+    await activateHiddenMode(GM_TOOLS_SUITE_ID, FOLLOW_MODE_ID);
   } catch (e) {
     console.warn("[follow] activate tool failed", e);
   }
@@ -536,24 +542,18 @@ export async function setupFollow(): Promise<void> {
       console.warn("[follow] remove ctx menu failed", e);
     }
 
-    // Custom tool + its single mode. Tool sits in the sidebar so the
-    // GM can re-enter the binding flow without bouncing through the
-    // context menu, but the activation typically comes from the
-    // ctxAddFollow path which sets pendingSourceId first.
+    // Single hidden mode, nested directly under the shared "GM Tools
+    // Suite" umbrella tool (no private FOLLOW_TOOL_ID top-level icon
+    // anymore — see src/modules/toolsSuite). Activated from the
+    // context menu (ctxAddFollow, which pre-sets pendingSourceId) or
+    // from the flyout row below.
     try {
-      await OBR.tool.create({
-        id: FOLLOW_TOOL_ID,
-        icons: [{
-          icon: ICON_URL,
-          label: en ? "Follow binding" : "跟随绑定",
-        }],
-      });
       await OBR.tool.createMode({
         id: FOLLOW_MODE_ID,
         icons: [{
           icon: ICON_URL,
           label: en ? "Bind target" : "绑定目标",
-          filter: { activeTools: [FOLLOW_TOOL_ID] },
+          filter: suiteModeFilter(GM_TOOLS_SUITE_ID),
         }],
         cursors: [{ cursor: "crosshair" }],
         async onToolMove(_, event) {
@@ -588,6 +588,24 @@ export async function setupFollow(): Promise<void> {
     } catch (e) {
       console.warn("[follow] tool create failed", e);
     }
+
+    // Flyout entry point. Right-click → Follow is the primary flow
+    // (it pre-selects a source token); picking this row directly has
+    // no source yet, so it just surfaces the same hint notification
+    // ctxAddFollow shows rather than entering a mode that would
+    // immediately bounce back to Move on the very next click.
+    registerSuiteItem({
+      id: FOLLOW_MODE_ID,
+      suite: "gm",
+      label: en ? "Follow binding" : "跟随绑定",
+      icon: ICON_URL,
+      hint: en ? "Right-click a token first" : "请先右键点击一个 token",
+      onPick: async () => {
+        try {
+          await OBR.notification.show(t(getLocalLang(), "followClickHint"), "INFO");
+        } catch {}
+      },
+    });
   }
 
   // Watcher (everyone). When a target moves we update its followers
@@ -614,7 +632,8 @@ export async function teardownFollow(): Promise<void> {
   if (!registered) return;
   try { await OBR.contextMenu.remove(CTX_FOLLOW_ADD); } catch {}
   try { await OBR.contextMenu.remove(CTX_FOLLOW_REMOVE); } catch {}
-  try { await OBR.tool.remove(FOLLOW_TOOL_ID); } catch {}
+  try { await OBR.tool.removeMode(FOLLOW_MODE_ID); } catch {}
+  unregisterSuiteItem(FOLLOW_MODE_ID);
   for (const u of unsubs.splice(0)) u();
   await clearBindingLine();
   pendingSourceId = null;

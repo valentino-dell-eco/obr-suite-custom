@@ -1,9 +1,10 @@
 import OBR from "@owlbear-rodeo/sdk";
-import { DiceType, DieResult, sidesOf } from "./types";
+import { DiceType, DieResult, sidesOf, sanitizeRollPayload, sanitizeRollList, rollDisplayName } from "./types";
 import { subscribeToSfx } from "./sfx-broadcast";
 import { applyI18nDom, t } from "../../i18n";
 import { getLocalLang, onLangChange } from "../../state";
 import { assetUrl } from "../../asset-base";
+import { initBroadcastAuth, isFromGM } from "../../utils/broadcastAuth";
 import {
   writeSkin,
   isVideoSkin,
@@ -32,6 +33,25 @@ const ALL_TYPES: DiceType[] = ["d4", "d6", "d8", "d10", "d12", "d20", "d100"];
 const BROADCAST_DICE_ROLL = "com.obr-suite/dice-roll";
 const BC_DICE_FORCE_CLEAR = "com.obr-suite/dice-force-clear";
 const BC_DICE_FADE_START = "com.obr-suite/dice-fade-start";
+const BC_DICE_HISTORY_REVEAL = "com.obr-suite/dice-history-reveal";
+// Rolls received but not yet shown: committed to the history tab (and
+// localStorage) when the dice animation reveals them.
+const PANEL_PENDING_TIMEOUT_MS = 6500;
+const pendingPanelRolls = new Map<string, { entry: DiceRollPayload; timer: number }>();
+function commitPanelRoll(rollId: string): void {
+  const p = pendingPanelRolls.get(rollId);
+  if (!p) return;
+  pendingPanelRolls.delete(rollId);
+  clearTimeout(p.timer);
+  if (history.some((h) => h.rollId === rollId)) return;
+  history.unshift(p.entry);
+  if (history.length > HISTORY_CAP) history.length = HISTORY_CAP;
+  saveHistory();
+  if (activeTab === "history") {
+    renderHistorySeg();
+    renderHistoryList();
+  }
+}
 // Sent by the bottom-left history popover when a row is clicked. Tells
 // the panel to switch to the History tab + select that player as the
 // filter. Always sent LOCAL — only this client's panel reacts.
@@ -112,6 +132,7 @@ interface DiceRollPayload {
   rollerColor: string;
   rollId: string;
   ts: number;
+  tokenName?: string;
   hidden?: boolean;
   // Set once at broadcast time from the SENDER's own resolved role.
   // Labelling hint ONLY — a GM's hidden roll renders the "暗骰" tag, a
@@ -273,8 +294,8 @@ function loadHistory(): DiceRollPayload[] {
   try {
     const v = localStorage.getItem(LS_HISTORY);
     if (!v) return [];
-    const p = JSON.parse(v);
-    if (Array.isArray(p)) return p;
+    // Sanitise on load: older entries may carry crafted HTML.
+    return sanitizeRollList(JSON.parse(v)) as DiceRollPayload[];
   } catch {}
   return [];
 }
@@ -1919,9 +1940,9 @@ function renderEntrySolo(h: DiceRollPayload): string {
   const darkTag = h.hidden
     ? `<span class="dark-tag">${h.rollerIsGM ? tt("diceHistDarkTag") : tt("diceHistSecretTag")}</span>`
     : "";
-  const titleText = escapeHtml(h.label || h.rollerName);
+  const titleText = escapeHtml(h.label || rollDisplayName(h));
   return `
-    <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${h.rollerColor}" title="${tt("diceHistoryReplayTooltip")}">
+    <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${escapeHtml(String(h.rollerColor))}" title="${tt("diceHistoryReplayTooltip")}">
       <button class="entry-del" data-cid="${escapeHtml(cid)}" title="${tt("diceHistDelTitle")}" aria-label="${tt("diceHistDelAriaLabel")}">×</button>
       <div class="body">
         <div class="line1">
@@ -1955,9 +1976,9 @@ function renderEntryCollective(
     ? `<span class="dark-tag">${head.rollerIsGM ? tt("diceHistDarkTag") : tt("diceHistSecretTag")}</span>`
     : "";
   const collTag = `<span class="coll-tag">${tt("diceHistColl")} ${members.length}</span>`;
-  const labelOrName = escapeHtml(head.label || head.rollerName);
+  const labelOrName = escapeHtml(head.label || rollDisplayName(head));
   return `
-    <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${head.rollerColor}" title="${tt("diceHistoryReplayTooltip")}">
+    <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${escapeHtml(String(head.rollerColor))}" title="${tt("diceHistoryReplayTooltip")}">
       <button class="entry-del" data-cid="${escapeHtml(cid)}" title="${tt("diceHistDelTitleColl").replace("{n}", String(members.length))}" aria-label="${tt("diceHistDelAriaLabel")}">×</button>
       <div class="body">
         <div class="line1">
@@ -2935,6 +2956,17 @@ function generateRollNotes(parsed: ParsedExpr): string {
   return notes.join(", ");
 }
 
+/** True when the expression reads token stats — save()/check()
+ *  wrappers or textual modifiers like `dex` / `prof` — which resolve
+ *  to 0 when no token is selected. */
+function exprUsesStats(parsed: ParsedExpr): boolean {
+  for (const seg of parsed.segments) {
+    if (seg.wrappers.some((w) => w.kind === "save" || w.kind === "check")) return true;
+    if (seg.plain.customModifiers?.length) return true;
+  }
+  return !!parsed.outerPlain.customModifiers?.length;
+}
+
 async function computeParsedModifier(
   parsed: ParsedExpr,
   itemId: string | null,
@@ -2993,25 +3025,10 @@ async function getOwnedSelectedTokenIds(): Promise<string[]> {
       }
     }
 
-    // 2. Fallback estremo per Player: tutti i token visibili su CHARACTER/MOUNT
-    if (!isGm) {
-      const myItems = await OBR.scene.items.getItems(
-        (it: any) =>
-          it.type === "IMAGE" &&
-          (it.layer === "CHARACTER" || it.layer === "MOUNT") &&
-          it.visible
-      );
-
-      console.log("[dice] Player visible CHARACTER/MOUNT tokens found:", myItems.length);
-
-      if (myItems.length > 0) {
-        // Prendi il primo visibile (il più semplice possibile)
-        console.log("[dice] Using first visible token:", myItems[0].id);
-        return [myItems[0].id];
-      }
-    }
-
-    console.log("[dice] No valid token found at all");
+    // No fallback: without a selection the roll is token-less. (It used
+    // to pick the first visible CHARACTER/MOUNT token, which could be
+    // another player's PC or a monster.)
+    console.log("[dice] No token selected — rolling without a token");
     return [];
   } catch (e) {
     console.error("[dice] getOwnedSelectedTokenIds crashed", e);
@@ -3167,8 +3184,21 @@ async function emitOneRoll(opts: {
     }
   }
 
+  // Token name for the history ("Token (Player)"). Skipped for tokens
+  // hidden from players so a normal roll can't reveal them.
+  let tokenName = "";
+  if (opts.itemId) {
+    try {
+      const [it] = await OBR.scene.items.getItems([opts.itemId]);
+      if (it && it.visible !== false) {
+        tokenName = ((it as any).text?.plainText || it.name || "").trim();
+      }
+    } catch {}
+  }
+
   const payload: DiceRollPayload = {
     itemId: opts.itemId,
+    ...(tokenName ? { tokenName } : {}),
     dice: opts.dice,
     winnerIdx: opts.winnerIdx,
     modifier: opts.modifier,
@@ -3319,19 +3349,20 @@ async function performRoll(opts: { hidden: boolean }): Promise<void> {
     return;
   }
 
-  // Resolve target tokens.
-  //   - Normal roll: REQUIRES at least one owned-and-visible selected
-  //     token. Empty selection → shake and bail.
-  //   - Hidden roll (dark/secret): tokens are optional — the roller
-  //     can roll without any selection (anchored at viewport center
-  //     for them only).
+  // Resolve target tokens. A selection is OPTIONAL for every roll:
+  // with selected tokens each one rolls (token modifiers, anchoring,
+  // camera focus); with nothing selected the roll still goes out with
+  // no token — empty itemId → dice anchor at the viewport centre and
+  // no token-derived modifiers are applied.
   let targetTokens = await getOwnedSelectedTokenIds();
-  if (!opts.hidden && targetTokens.length === 0) {
-    shakeButtonWithReason(btnSelf, tt("diceShakeNoToken"));
-    return;
-  }
-  if (opts.hidden && targetTokens.length === 0) {
-    targetTokens = [""]; // empty itemId → effect-page anchors at viewport center
+  if (targetTokens.length === 0) {
+    // Stats can't be read without a token — they would silently count
+    // as 0, so refuse those rolls (plain dice still roll).
+    if (exprUsesStats(parsed)) {
+      shakeButtonWithReason(btnSelf, tt("diceShakeNoTokenStats"));
+      return;
+    }
+    targetTokens = [""];
   }
 
   // Save expression for "上一次" BEFORE clearing the input.
@@ -3419,15 +3450,14 @@ async function rollFromCombo(
     return;
   }
 
+  // Selection optional (same rule as performRoll): no token selected →
+  // roll with no token, anchored at the viewport centre.
   let targetTokens = await getOwnedSelectedTokenIds();
-  if (!hidden && targetTokens.length === 0) {
-    shakeButtonWithReason(btnSelf, tt("diceShakeNoToken"));
-    return;
-  }
-  // Hidden roll (dark/secret): tokens optional — the roller can roll
-  // a combo with no selection (anchored at viewport center on their
-  // client only).
-  if (hidden && targetTokens.length === 0) {
+  if (targetTokens.length === 0) {
+    if (exprUsesStats(parsed)) {
+      shakeButtonWithReason(btnSelf, tt("diceShakeNoTokenStats"));
+      return;
+    }
     targetTokens = [""];
   }
 
@@ -3878,9 +3908,14 @@ OBR.onReady(async () => {
     if (activeTab === "skins") scheduleRenderSkinsTab();
   });
 
+  await initBroadcastAuth();
   OBR.broadcast.onMessage(BROADCAST_DICE_ROLL, (event) => {
-    const data = event.data as DiceRollPayload | undefined;
-    if (!data || !Array.isArray(data.dice) || !data.rollId) return;
+    // Untrusted: any player can craft this message.
+    const data = sanitizeRollPayload(event.data) as DiceRollPayload | null;
+    if (!data) return;
+    // "Dark roll" vs "secret roll" tag follows the real sender's role.
+    if (isFromGM(event)) data.rollerIsGM = true;
+    else delete data.rollerIsGM;
     // 2026-05-10 fix — same dark-roll redact gate as history-page.ts.
     // The bg's quick-roll fan-out sends hidden rolls to REMOTE so
     // player clients can play SFX without seeing the values. Earlier
@@ -3894,13 +3929,22 @@ OBR.onReady(async () => {
     if (data.hidden && !isDM && data.rollerId !== myPlayerId) {
       return;
     }
-    history.unshift(data);
-    if (history.length > HISTORY_CAP) history.length = HISTORY_CAP;
-    saveHistory();
-    if (activeTab === "history") {
-      renderHistorySeg();
-      renderHistoryList();
-    }
+    // Anti-cheat redacted copy of a GM hidden roll: no real values.
+    if ((data as any).redacted) return;
+    // Don't show (or save — the history popover reads the same
+    // localStorage key) the result before the dice animation lands:
+    // hold it until the effect's BC_DICE_HISTORY_REVEAL, with a
+    // fallback timer in case the effect never runs.
+    if (pendingPanelRolls.has(data.rollId)) return;
+    const timer = window.setTimeout(
+      () => commitPanelRoll(data.rollId),
+      PANEL_PENDING_TIMEOUT_MS,
+    );
+    pendingPanelRolls.set(data.rollId, { entry: data, timer });
+  });
+  OBR.broadcast.onMessage(BC_DICE_HISTORY_REVEAL, (event) => {
+    const id = (event.data as { rollId?: string } | undefined)?.rollId;
+    if (typeof id === "string") commitPanelRoll(id);
   });
 
   // Right-click "添加到骰盘" — pre-fill the expression input AND the

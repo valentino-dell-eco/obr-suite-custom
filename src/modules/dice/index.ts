@@ -1,12 +1,13 @@
 import OBR, { isImage } from "@owlbear-rodeo/sdk";
 import { getLocalLang } from "../../state";
 import { t } from "../../i18n";
-import { DiceType, DIE_SIDES, DieResult, rollDie, sidesOf } from "./types";
+import { DiceType, DIE_SIDES, DieResult, rollDie, sidesOf, safeColor } from "./types";
 import { readSkinsForPlayer } from "./dice-skins";
 import { assetUrl } from "../../asset-base";
 import { onViewportResize } from "../../utils/viewportAnchor";
 import { updateResource } from "../resourceTracker/storage";
 import { broadcastChanged } from "../resourceTracker/panel";
+import { initBroadcastAuth, isFromSelf, isFromGM } from "../../utils/broadcastAuth";
 import {
   PANEL_IDS,
   getPanelOffset,
@@ -215,6 +216,8 @@ export interface DiceRollPayload {
   rollerColor: string;
   rollId: string;
   ts: number;
+  /** Token the roll was made for — shown as "Token (Player)". */
+  tokenName?: string;
   // Dark roll — GM-and-roller-only visibility. Sender broadcasts
   // LOCAL-only so other players never receive it; receiver renders it
   // at lower opacity to visually denote "hidden from the table".
@@ -228,6 +231,14 @@ export interface DiceRollPayload {
   // NEVER be consulted to decide who can see a roll. Visibility is
   // governed exclusively by `hidden` + `rollerId`.
   rollerIsGM?: boolean;
+  // ANTI-CHEAT REDACTION. Set only on the copy of a GM's hidden roll
+  // that is broadcast to OTHER clients. Its dice values, total,
+  // modifier, label and token are deliberately blanked BEFORE the
+  // message leaves the GM's client, so a player reading broadcast
+  // traffic in the devtools sees nothing useful. Receivers must treat
+  // a redacted roll as "play the dice sound only".
+  redacted?: boolean;
+  redactedReason?: string;
   // Auto-dismiss — the effect modal self-closes shortly after the
   // climax (single-die punch, or final scale-pop in the rush path).
   // Used by initiative rolls so they don't linger on the canvas.
@@ -616,6 +627,7 @@ export async function setupDice(): Promise<void> {
   if (setupDiceRegistered) return;
   const en = getLocalLang() === "en";
   setupDiceRegistered = true;
+  await initBroadcastAuth();
 
   // Clear any stale `LS_AUTO_DICE_HISTORY="0"` from the era when the
   // cluster's "投骰记录" toggle / dedicated trigger button could disable
@@ -711,6 +723,11 @@ export async function setupDice(): Promise<void> {
     OBR.broadcast.onMessage(BROADCAST_DICE_ROLL, (event) => {
       const data = normalizePayload(event.data);
       if (!data) return;
+      // The "GM roll" label comes from the REAL sender's role, never
+      // from the payload. (rollerId is NOT checked against the sender:
+      // characterCards/recovery.ts legitimately sets it to a token id.)
+      if (isFromGM(event)) data.rollerIsGM = true;
+      else delete data.rollerIsGM;
       const now = Date.now();
       // Sweep stale entries.
       if (seenRollsModuleScope.size > 400) {
@@ -728,7 +745,9 @@ export async function setupDice(): Promise<void> {
       // the roller's own client always shows their own roll too.)
       const isReceiverDmOrRoller =
         myRoleForDice === "GM" || data.rollerId === myPlayerIdForDice;
-      if (data.hidden && !isReceiverDmOrRoller) {
+      // A redacted (anti-cheat) copy carries no real values: sound only,
+      // even on a second GM's client.
+      if (data.hidden && (!isReceiverDmOrRoller || data.redacted)) {
         // Lazy-import so the SFX module loads only when actually
         // needed in this iframe.
         void (async () => {
@@ -749,6 +768,9 @@ export async function setupDice(): Promise<void> {
         return; // skip showDiceEffect + history auto-open
       }
 
+      // Remember it for a history popover that opens AFTER this
+      // broadcast (it would otherwise never see the roll).
+      rememberRecentRoll(data);
       showDiceEffect(data).catch(() => {});
       // Auto-open the bottom-right history modal on every new roll if
       // it isn't already showing. The modal is non-interactive
@@ -761,6 +783,17 @@ export async function setupDice(): Promise<void> {
     })
   );
 
+  // History popover asks (on load) for the rolls it may have missed.
+  unsubs.push(
+    OBR.broadcast.onMessage(BC_DICE_HISTORY_SYNC_REQUEST, (event) => {
+      if (!isFromSelf(event)) return;
+      pruneRecentRolls();
+      OBR.broadcast
+        .sendMessage(BC_DICE_HISTORY_SYNC, { rolls: [...recentRolls.values()] }, { destination: "LOCAL" })
+        .catch(() => {});
+    }),
+  );
+
   // 2. Toggle the dice panel via OBR.action (top-left d20 button).
   // The cluster's dice button + history-popover row clicks +
   // right-click "添加到骰盘" all broadcast BC_PANEL_TOGGLE. Payload
@@ -769,6 +802,7 @@ export async function setupDice(): Promise<void> {
   // toggle the panel closed.
   unsubs.push(
     OBR.broadcast.onMessage(BC_PANEL_TOGGLE, async (event) => {
+      if (!isFromSelf(event)) return; // LOCAL from our own iframes only
       const data = event.data as {
         open?: boolean;
         prefill?: string;
@@ -962,6 +996,10 @@ export async function setupDice(): Promise<void> {
   const QUICK_ROLL_DEDUPE_MS = 250;
   unsubs.push(
     OBR.broadcast.onMessage(BC_QUICK_ROLL, async (event) => {
+      // LOCAL-only from our own iframes (tags.ts, dice-quick-popup,
+      // dice-rollable-menu). A remote sender could otherwise make this
+      // client roll / spend resources with its own permissions.
+      if (!isFromSelf(event)) return;
       const req = event.data as QuickRollRequest | undefined;
       if (!req || typeof req.expression !== "string" || !req.expression.trim()) return;
 
@@ -1258,17 +1296,62 @@ function normalizePayload(raw: unknown): DiceRollPayload | null {
     label: data.label ?? "",
     total,
     rollerId: data.rollerId ?? "",
-    rollerName: data.rollerName ?? "",
-    rollerColor: data.rollerColor ?? "#5dade2",
+    rollerName: typeof data.rollerName === "string" ? data.rollerName : "",
+    rollerColor: safeColor(data.rollerColor),
     rollId: data.rollId,
     ts: data.ts ?? Date.now(),
     hidden: !!(data as any).hidden,
+    ...(((data as any).redacted) ? { redacted: true } : {}),
     ...(((data as any).rollerIsGM) ? { rollerIsGM: true } : {}),
     ...(((data as any).autoDismiss) ? { autoDismiss: true } : {}),
     ...(Array.isArray((data as any).rowStarts) ? { rowStarts: ((data as any).rowStarts as number[]).filter((n) => Number.isFinite(n)) } : {}),
     ...(((data as any).sameHighlight) ? { sameHighlight: true } : {}),
     ...(((data as any).collectiveId) ? { collectiveId: String((data as any).collectiveId) } : {}),
   };
+}
+
+/** ANTI-CHEAT: copy of a GM hidden roll that is safe to broadcast to
+ *  other players. Keeps only what the sound effect needs (the number
+ *  and type of kept dice) and blanks everything that would reveal the
+ *  result. The reason is spelled out in the payload itself so anyone
+ *  inspecting broadcast traffic sees the omission is intentional. */
+function redactForAntiCheat(p: DiceRollPayload): DiceRollPayload {
+  const kept = p.dice.filter((d) => !d.loser);
+  return {
+    itemId: null,
+    dice: kept.map((d) => ({ type: d.type, value: 1 })),
+    winnerIdx: -1,
+    modifier: 0,
+    label: "",
+    total: 0,
+    rollerId: p.rollerId,
+    rollerName: p.rollerName,
+    rollerColor: p.rollerColor,
+    rollId: p.rollId,
+    ts: p.ts,
+    hidden: true,
+    rollerIsGM: true,
+    redacted: true,
+    redactedReason:
+      "Anti-cheat: GM hidden roll. Real dice values, total, modifier, label and token were removed on the GM's client before broadcasting. Only the dice count is sent, for the sound effect.",
+  };
+}
+
+// Rolls received in the last few seconds, for history popovers that
+// open after the roll broadcast already went by (the background opens
+// the popover in reaction to that very broadcast).
+const BC_DICE_HISTORY_SYNC_REQUEST = "com.obr-suite/dice-history-sync-request";
+const BC_DICE_HISTORY_SYNC = "com.obr-suite/dice-history-sync";
+const RECENT_ROLL_MS = 15000;
+const recentRolls = new Map<string, DiceRollPayload>();
+function pruneRecentRolls(): void {
+  const cutoff = Date.now() - RECENT_ROLL_MS;
+  for (const [id, r] of recentRolls) if ((r.ts ?? 0) < cutoff) recentRolls.delete(id);
+}
+function rememberRecentRoll(p: DiceRollPayload): void {
+  if (!p.rollId || p.redacted) return;
+  pruneRecentRolls();
+  recentRolls.set(p.rollId, { ...p, ts: p.ts || Date.now() });
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -1339,8 +1422,21 @@ export async function broadcastDiceRoll(opts: {
     + modifier;
 
   const rollId = opts.rollId ?? `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  // Token name for the history ("Token (Player)"); skipped for tokens
+  // hidden from players so a normal roll can't reveal them.
+  let tokenName = "";
+  if (opts.itemId) {
+    try {
+      const [it] = await OBR.scene.items.getItems([opts.itemId]);
+      if (it && it.visible !== false) {
+        tokenName = ((it as any).text?.plainText || it.name || "").trim();
+      }
+    } catch {}
+  }
+
   const payload: DiceRollPayload = {
     itemId: opts.itemId,
+    ...(tokenName ? { tokenName } : {}),
     dice,
     winnerIdx,
     modifier,
@@ -1359,15 +1455,22 @@ export async function broadcastDiceRoll(opts: {
 
   try {
     if (opts.hidden) {
-      // Dark roll — DM still sees their own translucent dice modal
-      // locally, but the broadcast also fans out to REMOTE so every
-      // player's client plays the SFX (handled in the receive listener
-      // below: hidden roll on non-DM client → play tumble/punch SFX
-      // but skip the modal entirely). This way the table HEARS the
-      // roll without seeing what was hidden.
+      // Hidden roll. The sender's own client gets the full payload
+      // (LOCAL). What goes to everyone else (REMOTE) depends on who
+      // rolled:
+      //  - GM dark roll (暗骰): nobody else may see it, so REMOTE gets
+      //    an ANTI-CHEAT REDACTED copy — same dice count/types so the
+      //    table still HEARS the roll, but values, total, modifier,
+      //    label, expression and token are stripped before sending.
+      //  - Player secret roll (密骰): the GM must see it, and OBR
+      //    broadcast can't address a single client, so the full payload
+      //    still goes REMOTE (other players' UIs hide it).
+      let senderIsGM = !!opts.rollerIsGM;
+      try { senderIsGM = (await OBR.player.getRole()) === "GM"; } catch {}
+      const remotePayload = senderIsGM ? redactForAntiCheat(payload) : payload;
       await Promise.all([
         OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "LOCAL" }),
-        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, payload, { destination: "REMOTE" }),
+        OBR.broadcast.sendMessage(BROADCAST_DICE_ROLL, remotePayload, { destination: "REMOTE" }),
       ]);
     } else {
       await Promise.all([
