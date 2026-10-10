@@ -14,6 +14,7 @@
 //
 // Room (GM decides, room metadata, same for everyone):
 //   position         chip side: top / bottom / left / right of the token
+//   offsetX/offsetY  extra shift of the chips, in scene px (−200 … 200)
 //   playerPerm       players may: "view" | "apply" (own tokens) |
 //                    "library" (apply + edit the library)
 
@@ -35,6 +36,8 @@ export interface SttLocalSettings {
 
 export interface SttRoomSettings {
   position: ChipPosition;
+  offsetX: number;
+  offsetY: number;
   playerPerm: PlayerPerm;
 }
 
@@ -54,6 +57,8 @@ export const LOCAL_DEFAULTS: SttLocalSettings = {
 
 export const ROOM_DEFAULTS: SttRoomSettings = {
   position: "top",
+  offsetX: 0,
+  offsetY: 0,
   playerPerm: "apply",
 };
 
@@ -81,12 +86,20 @@ function cleanLocal(raw: unknown): SttLocalSettings {
   };
 }
 
+export const OFFSET_LIMIT = 200;
+function offset(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(-OFFSET_LIMIT, Math.min(OFFSET_LIMIT, Math.round(n))) : 0;
+}
+
 function cleanRoom(raw: unknown): SttRoomSettings {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const pos = r.position;
   const perm = r.playerPerm;
   return {
     position: pos === "bottom" || pos === "left" || pos === "right" ? pos : "top",
+    offsetX: offset(r.offsetX),
+    offsetY: offset(r.offsetY),
     playerPerm: perm === "view" || perm === "library" ? perm : "apply",
   };
 }

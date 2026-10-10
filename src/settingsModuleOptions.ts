@@ -6,6 +6,7 @@
 
 import type { Language } from "./state";
 import {
+  OFFSET_LIMIT,
   ROTATE_CHOICES,
   getLocalSettings as getSttLocal,
   getRoomSettings as getSttRoom,
@@ -57,6 +58,12 @@ function tog(opt: string, on: boolean, disabled = false): string {
   return `<button type="button" class="tog ${on ? "on" : ""}" data-opt="${esc(opt)}" aria-pressed="${on}" ${disabled ? "disabled" : ""}></button>`;
 }
 
+function num(opt: string, value: number, min: number, max: number, unit: string, disabled: boolean): string {
+  return `<input type="number" min="${min}" max="${max}" step="1" value="${value}" data-opt="${esc(opt)}" ${disabled ? "disabled" : ""}
+      style="flex:0 0 72px;align-self:center;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.12);border-radius:4px;padding:3px 6px;color:#fff;font:inherit;text-align:right${disabled ? ";opacity:0.45" : ""}"/>
+    <span style="flex:0 0 22px;text-align:right;color:#9aa0b3;font-size:11px">${esc(unit)}</span>`;
+}
+
 function range(opt: string, value: number, min: number, max: number, step: number): string {
   return `<input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-opt="${esc(opt)}"
       style="flex:1 1 auto;align-self:center;max-width:140px"/>
@@ -96,6 +103,16 @@ export function sttOptionsHtml(lang: L, isGM: boolean): string {
         ["right", tr(lang, "右", "Right")],
       ], !isGM, lang),
     )}
+    ${row(
+      tr(lang, "水平偏移", "Horizontal offset"),
+      `${R}${tr(lang, "标签左右移动（场景像素）。负值向左，正值向右。", "Moves the chips sideways (scene px). Negative = left, positive = right.")}`,
+      num("stt.offsetX", rs.offsetX, -OFFSET_LIMIT, OFFSET_LIMIT, "px", !isGM),
+    )}
+    ${row(
+      tr(lang, "垂直偏移", "Vertical offset"),
+      `${R}${tr(lang, "标签上下移动（场景像素）。负值向上（远离 token），正值向下。", "Moves the chips up / down (scene px). Negative = up, positive = down.")}`,
+      num("stt.offsetY", rs.offsetY, -OFFSET_LIMIT, OFFSET_LIMIT, "px", !isGM),
+    )}
     ${row(tr(lang, "悬停列表", "Hover list"), `${P}${tr(lang, "鼠标悬停在标签上时列出该 token 的全部状态。", "Hovering a chip lists every status on that token.")}`, tog("stt.hoverList", ls.hoverList))}
     ${row(tr(lang, "附加图像", "Attachment images"), `${P}${tr(lang, "在 token 上显示状态的附加图像。", "Draw status images over tokens.")}`, tog("stt.showAttachments", ls.showAttachments))}
     ${row(
@@ -118,7 +135,7 @@ export function sttOptionsHtml(lang: L, isGM: boolean): string {
 const STT_LOCAL_KEYS = new Set<keyof SttLocalSettings>([
   "rotateSec", "chipScale", "iconScale", "textScale", "hoverList", "showAttachments", "gmDefaultHidden",
 ]);
-const STT_ROOM_KEYS = new Set<keyof SttRoomSettings>(["position", "playerPerm"]);
+const STT_ROOM_KEYS = new Set<keyof SttRoomSettings>(["position", "playerPerm", "offsetX", "offsetY"]);
 
 // --- Chase Tracker ---------------------------------------------------------
 
@@ -223,6 +240,28 @@ export function wireModuleOptions(root: HTMLElement, isGM: boolean, rerender: ()
       if (btn.disabled) return;
       await write(field, !btn.classList.contains("on"));
       rerender();
+    });
+  });
+
+  // Number fields: commit on change / blur / Enter (not on every key).
+  root.querySelectorAll<HTMLInputElement>('input[type="number"][data-opt]').forEach((input) => {
+    const { ns, field } = split(input.dataset.opt ?? "");
+    const write = writerFor(ns, isGM);
+    if (!write) return;
+    const min = Number(input.min);
+    const max = Number(input.max);
+    let last = input.value;
+    const commit = async () => {
+      const n = Math.round(Number(input.value));
+      const v = Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : 0;
+      input.value = String(v);
+      if (input.value === last) return;
+      last = input.value;
+      await write(field, v);
+    };
+    input.addEventListener("change", () => { void commit(); });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); input.blur(); }
     });
   });
 

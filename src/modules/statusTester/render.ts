@@ -125,15 +125,17 @@ export function chipAnchor(
 ): { x: number; y: number; h: number; align: ChipAlign } {
   const h = chipHeight(bounds, sceneDpi, chipScale);
   const gap = h * 0.3;
+  // Room-wide offset (scene px): negative = left / up.
+  const { offsetX: dx, offsetY: dy } = getRoomSettings();
   switch (position) {
     case "bottom":
-      return { x: bounds.center.x, y: bounds.max.y + gap + h / 2, h, align: "center" };
+      return { x: bounds.center.x + dx, y: bounds.max.y + gap + h / 2 + dy, h, align: "center" };
     case "right":
-      return { x: bounds.max.x + gap, y: bounds.center.y, h, align: "start" };
+      return { x: bounds.max.x + gap + dx, y: bounds.center.y + dy, h, align: "start" };
     case "left":
-      return { x: bounds.min.x - gap, y: bounds.center.y, h, align: "end" };
+      return { x: bounds.min.x - gap + dx, y: bounds.center.y + dy, h, align: "end" };
     default:
-      return { x: bounds.center.x, y: bounds.min.y - gap - h / 2, h, align: "center" };
+      return { x: bounds.center.x + dx, y: bounds.min.y - gap - h / 2 + dy, h, align: "center" };
   }
 }
 
@@ -254,6 +256,8 @@ function tokenSig(token: Image, statuses: Array<{ applied: AppliedStatus; def: S
   return JSON.stringify([
     statuses.map((s) => [s.applied.uid, !!s.applied.hidden, s.applied.level ?? null, s.def]),
     getRoomSettings().position,
+    getRoomSettings().offsetX,
+    getRoomSettings().offsetY,
     ls.chipScale, ls.iconScale, ls.textScale, ls.showAttachments, ls.rotateSec > 0,
     token.scale,
     token.rotation,
