@@ -189,15 +189,22 @@ async function dropAt(x: number, y: number, shift: boolean): Promise<void> {
   const target = hot;
   if (target && def) {
     try {
-      await addStatusToTokens([target.id], def.id, {
+      const n = await addStatusToTokens([target.id], def.id, {
         isGM,
         playerId,
         hidden: isGM && shift !== defaultHidden,
         levels: !!def.levels,
       });
+      console.info(`[status-tester] drop "${def.id}" on ${target.id}: ${n ? "added" : "not added (already there / not allowed)"}`);
+      if (!n) {
+        void OBR.notification.show(t(lang, "sttNothingAdded"), "INFO").catch(() => {});
+      }
     } catch (err) {
       console.warn("[status-tester] drop apply failed", err);
+      void OBR.notification.show(`${t(lang, "sttSaveFailed")}: ${String((err as Error)?.message ?? err)}`, "ERROR").catch(() => {});
     }
+  } else {
+    console.info(`[status-tester] drop at ${Math.round(x)},${Math.round(y)}: no token there (${targets.length} targets)`);
   }
   end();
 }
