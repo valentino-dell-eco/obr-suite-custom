@@ -189,7 +189,7 @@ export function chipRichText(def: StatusDef, applied: AppliedStatus, extra = 0):
   const tail = extra > 0 ? ` +${extra}` : "";
   const children: FormattedText[] = [];
   if (p.title) children.push({ text: p.level ? `${p.title} ` : p.title + tail, bold: true });
-  if (p.level) children.push({ text: p.level, bold: true, italic: p.hasUnit });
+  if (p.level) children.push({ text: p.level, bold: !p.hasUnit, italic: p.hasUnit });
   if (p.level && tail) children.push({ text: tail, bold: true });
   if (!children.length) children.push({ text: tail.trim(), bold: true });
   return [{ type: "paragraph", children }];
