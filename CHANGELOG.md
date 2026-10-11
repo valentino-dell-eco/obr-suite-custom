@@ -4,6 +4,8 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-10-11
+
 ### Added
 
 - **The character sheet minimizes after an action.** Casting a spell or using a feature (once the card is in chat), a roll started from the sheet (once it actually fires, not when the advantage popup opens) and a short rest that opens the hit dice window close the sheet and show a small bar with the character's name at the bottom of the screen. Clicking it reopens the sheet on the same card, tab and scroll position; ✕ hides the bar. Opening the sheet any other way hides it too.

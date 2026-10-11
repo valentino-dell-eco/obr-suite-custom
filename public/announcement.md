@@ -20,6 +20,15 @@ The original Full Suite was created by **FullPeople** — heartfelt thanks to th
 If you enjoy the tool, please follow and support the original author: <span style="color:#5dade2">**https://ko-fi.com/fullpeople**</span>
 Original source code: <span style="color:#5dade2">**https://github.com/FullPeople/obr-suite**</span> (GPL-3.0)
 
+## 2.1 新内容 [highlights] [zh]
+
+- | 法术位与生命骰 | 两种特殊资源（每个 token 一个）：法术位（1–9 环）与生命骰（兼职时可有多种骰子）；角色卡中的数值会自动迁移过来
+- | 激活窗口 | 施法 / 使用特性时先选择「消耗的资源」：优先法术位（自动升环），其次是勾选了「可用于法术 / 特性」的资源，用图标显示消耗多少
+- | 特性像法术一样使用 | 每个特性都有 🔍 和 ⚡「使用」：可消耗资源或法术位，卡片发送到聊天；与特性同名的资源会被预选
+- | 短休投生命骰 | 短休后弹出窗口选择投几个生命骰，自动计算 骰值 + 体质 的回复并加到 HP 条上
+- | 角色卡 | 施法、使用特性、投骰或短休后角色卡会收成底部的小条，点击即可回到原来的页签与位置；编辑模式可按 类型 → 职业 → 特性 浏览资料库添加特性，并可按来源筛选
+- | 房间聊天 | 新消息提示音、气泡布局（自己的 / 别人的 / 工具通知），休息与状态通知不再带表情
+
 ## 2.0 新内容 [highlights] [zh]
 
 - | 全新状态追踪 | 图标 + 颜色 + 名称的状态标签，悬停查看全部状态；状态面板（Shift+S）可直接把状态拖到 token 上；内置 D&D 5e (2014) 状态与增益；支持等级（如「力竭 1.5」）
@@ -28,6 +37,15 @@ Original source code: <span style="color:#5dade2">**https://github.com/FullPeopl
 - | 房间聊天 | 所有人 / 悄悄话给 GM / 悄悄话给玩家；施法、休息、玩家的状态变化都会自动发到聊天
 - | 角色卡施法 | 选择施法环阶与 DC，法术卡片发到聊天，骰子可点击，升环伤害自动计算
 - | 设置 | 状态追踪与追逐战追踪器都有自己的选项（大小、位置、偏移、权限……）
+
+## What's new in 2.1 [highlights] [en]
+
+- | Spell slots & hit dice | Two special resources (one each per token): spell slots (levels 1–9) and hit dice (several die sizes for multiclassing); the character card's values move into them automatically
+- | Activation windows | Casting a spell or using a feature starts with "Resource spent": spell slots first (automatic upcasting), then resources flagged "Eligible for Spells / Features", drawn with their own icons
+- | Features work like spells | Every feature has 🔍 and ⚡ "Use": spend a resource or a spell slot and post a card to chat; a resource named like the feature is preselected
+- | Short rest hit dice | After a short rest a window asks how many hit dice to roll and heals roll + CON straight onto the HP bar
+- | Character sheet | After a cast, a feature use, a roll or a short rest the sheet folds into a small bar — click it to come back to the same tab and scroll position; in edit mode add features by browsing the library (type → class → feature) with a source filter
+- | Room Chat | New-message sound, speech-bubble layout (yours / others / tool notices), no emoji in rest and status notices
 
 ## What's new in 2.0 [highlights] [en]
 
@@ -40,10 +58,12 @@ Original source code: <span style="color:#5dade2">**https://github.com/FullPeopl
 
 ## 更新日志 [changelog] [zh]
 
+- 2.1.0 · 法术位与生命骰特殊资源、激活窗口（资源 / 法术位 / 自动升环）、特性使用与资料库浏览、短休生命骰、角色卡收起为小条、聊天提示音与气泡
 - 2.0.0 · 全新状态追踪（拖放、等级、预设、设置）、追逐战追踪器、工具套件、房间聊天、角色卡施法；休息与状态变化会通知到聊天；安全与稳定性修复（GM 暗骰防作弊、XSS、广播校验）
 
 ## Changelog [changelog] [en]
 
+- 2.1.0 · Spell slot & hit dice special resources, activation windows (resources / spell slots / automatic upcasting), feature use and library browsing, short-rest hit dice, sheet folds into a bar after actions, chat sound and bubbles
 - 2.0.0 · New Status Tracker (drag-and-drop, levels, presets, settings), Chase Tracker, Tools Suite, Room Chat, spell casting from character cards; rests and status changes posted to chat; security and stability fixes (GM hidden-roll anti-cheat, XSS, broadcast checks)
 
 ## 落款 [footer]
