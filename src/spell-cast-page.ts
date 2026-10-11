@@ -37,6 +37,7 @@ import {
 import type { Resource } from "./modules/resourceTracker/types";
 import { sendChat } from "./modules/roomChat/send";
 import { BC_CHAT_OPEN, type ChatCast } from "./modules/roomChat/types";
+import { openQuickPopupAt } from "./modules/dice/context-menu";
 
 const MODAL_ID = "com.obr-suite/spell-cast";
 const lang = getLocalLang();
@@ -270,6 +271,8 @@ async function confirm(): Promise<void> {
     });
   }
 
+  // A "Die Roll" resource also rolls its dice (quick-roll popup).
+  let roll: { expression: string; label: string } | null = null;
   try {
     if (itemId && usingSlot) {
       const spent = await spendSpellSlot(itemId, slotLevel);
@@ -277,8 +280,12 @@ async function confirm(): Promise<void> {
     } else if (itemId && chosenResource()) {
       const pick = cleanSpend({ resourceId: choice, amount });
       if (pick) {
-        const spent = await spendResource(itemId, pick);
-        if (spent) c.spent = spent;
+        const res = await spendResource(itemId, pick);
+        if (res) {
+          const { roll: expr, ...spent } = res;
+          c.spent = spent;
+          if (expr) roll = { expression: expr, label: `${displayName} · ${spent.name}` };
+        }
       }
     }
   } catch (e) {
@@ -294,6 +301,13 @@ async function confirm(): Promise<void> {
       .catch(() => {});
   } catch (e) {
     console.error("[spell-cast] sendChat failed", e);
+  }
+  if (roll && itemId) {
+    try {
+      await openQuickPopupAt({ expression: roll.expression, label: roll.label, itemId }, { x: 0, y: 0 });
+    } catch (e) {
+      console.warn("[spell-cast] resource roll popup failed", e);
+    }
   }
   close();
 }

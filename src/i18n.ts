@@ -2226,6 +2226,8 @@ const TR: Dict = {
   sttRoomFull: { zh: "无法保存：房间元数据已满（所有扩展共用 16 KB）。请删除占用最多的数据", en: "Can't save: the room's metadata is full (16 KB shared by every extension). Free up the biggest entries" },
   sttFieldLevels: { zh: "有等级", en: "Has levels" },
   sttFieldLevelsHint: { zh: "标签显示为「名称 X」，等级可在 token 的管理窗口中修改（步长 0.5，可为负）。", en: "The chip reads “Title X”; the level is set in the token's manage window (steps of 0.5, negatives allowed)." },
+  sttFieldLevelGrid: { zh: "等级是网格距离", en: "Level is a grid distance" },
+  sttFieldLevelGridHint: { zh: "按场景网格比例增减并显示单位（如「飞行 30 尺」）。", en: "Steps by the scene's grid scale and shows its unit (e.g. \"Flying 30 ft\")." },
   sttAddedN: { zh: "已添加到 {n} 个 token", en: "Added to {n} token(s)" },
   sttNoSelection: { zh: "请先选中 token，或把状态拖到 token 上", en: "Select a token first, or drag the status onto one" },
   sttNothingAdded: { zh: "未添加：已有该状态或不是你的 token", en: "Nothing added: already there or not your token" },

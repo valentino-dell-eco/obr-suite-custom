@@ -17,6 +17,15 @@ import {
   type Resource,
 } from "../resourceTracker/types";
 import type { ChatSpent } from "../roomChat/types";
+import { addDice } from "./cast-core";
+
+/** What a "Die Roll" resource rolls when `amount` uses are spent
+ *  ("1d6" × 2 → "2d6"); null for every other resource. */
+export function dieRollFormula(r: Pick<Resource, "type" | "dieInfo">, amount: number): string | null {
+  if (r.type !== "dieRoll" || !r.dieInfo) return null;
+  const n = Math.max(1, Math.floor(amount));
+  return n > 1 ? addDice(r.dieInfo, r.dieInfo, n - 1) : r.dieInfo;
+}
 
 export interface SpendChoice {
   resourceId: string;
@@ -172,7 +181,7 @@ export async function tokenResources(itemId: string | null | undefined): Promise
 export async function spendResource(
   itemId: string,
   choice: SpendChoice,
-): Promise<ChatSpent | null> {
+): Promise<(ChatSpent & { roll?: string }) | null> {
   let prev = 0;
   let special = false;
   const updated = await updateResource(itemId, choice.resourceId, (r) => {
@@ -184,10 +193,14 @@ export async function spendResource(
   if (!updated || special) return null;
   const delta = updated.current - prev;
   if (delta !== 0) void broadcastChanged(itemId, updated, delta, prev);
+  // A "Die Roll" resource rolls its dice when used (like spending it
+  // from the Resource Tracker); the caller opens the quick-roll popup.
+  const roll = dieRollFormula(updated, choice.amount);
   return {
     name: updated.name?.trim() || "?",
     amount: choice.amount,
     left: updated.current,
     max: updated.max,
+    ...(roll ? { roll } : {}),
   };
 }

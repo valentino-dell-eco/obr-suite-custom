@@ -57,6 +57,7 @@ const colorsEl = $("colors");
 const iconsEl = $("icons");
 const fEmoji = $<HTMLInputElement>("fEmoji");
 const fLevels = $<HTMLInputElement>("fLevels");
+const fLevelGrid = $<HTMLInputElement>("fLevelGrid");
 const attPreview = $("attPreview");
 const pickAssetBtn = $<HTMLButtonElement>("pickAsset");
 const removeAttBtn = $<HTMLButtonElement>("removeAtt");
@@ -90,6 +91,8 @@ function applyLabels(): void {
   $("lblEmoji").textContent = t(lang, "sttFieldEmoji");
   $("lblLevels").textContent = t(lang, "sttFieldLevels");
   $("hintLevels").textContent = t(lang, "sttFieldLevelsHint");
+  $("lblLevelGrid").textContent = t(lang, "sttFieldLevelGrid");
+  $("hintLevelGrid").textContent = t(lang, "sttFieldLevelGridHint");
   $("lblAtt").textContent = t(lang, "sttFieldAttachment");
   pickAssetBtn.textContent = t(lang, "sttPickAsset");
   removeAttBtn.textContent = t(lang, "sttRemoveAttachment");
@@ -248,6 +251,8 @@ function renderForm(): void {
   fTitle.value = draft.title;
   fEmoji.value = draft.emoji ?? "";
   fLevels.checked = !!draft.levels;
+  fLevelGrid.checked = !!draft.levelGrid;
+  syncLevelGridRow();
   attUrl.value = "";
   setErr(attErr, "");
   setErr(formErr, "");
@@ -372,9 +377,22 @@ iconsEl.addEventListener("click", (e) => {
   renderIcons();
   renderPreview();
 });
+/** "Level is a grid distance" only makes sense with levels on. */
+function syncLevelGridRow(): void {
+  const on = fLevels.checked;
+  $("rowLevelGrid").style.display = on ? "" : "none";
+  $("hintLevelGrid").style.display = on ? "" : "none";
+}
 fLevels.addEventListener("change", () => {
   if (!draft) return;
   draft.levels = fLevels.checked;
+  if (!draft.levels) { draft.levelGrid = undefined; fLevelGrid.checked = false; }
+  syncLevelGridRow();
+  renderPreview();
+});
+fLevelGrid.addEventListener("change", () => {
+  if (!draft) return;
+  draft.levelGrid = fLevelGrid.checked || undefined;
   renderPreview();
 });
 fEmoji.addEventListener("input", () => {
@@ -449,7 +467,7 @@ saveBtn.addEventListener("click", async () => {
   setErr(formErr, "");
   // Store `levels` explicitly (true / false) so preset upgrades never
   // flip a GM's choice.
-  const def = sanitizeDef({ ...draft, levels: !!draft.levels });
+  const def = sanitizeDef({ ...draft, levels: !!draft.levels, levelGrid: !!draft.levels && !!draft.levelGrid });
   if (!def || !def.title) {
     setErr(formErr, t(lang, "sttTitleRequired"));
     return;

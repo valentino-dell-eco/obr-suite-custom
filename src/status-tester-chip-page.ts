@@ -10,6 +10,7 @@
 // management modal.
 
 import OBR, { type Item } from "@owlbear-rodeo/sdk";
+import { initStatusGridScale } from "./modules/statusTester/grid-scale";
 import { getLocalLang } from "./state";
 import { t } from "./i18n";
 import { escapeHtml } from "./utils/html";
@@ -283,6 +284,7 @@ OBR.onReady(async () => {
   try { playerId = await OBR.player.getId(); } catch {}
   // Room permissions decide whether a player may open the gear.
   await initRoomSettings(() => update(false));
+  await initStatusGridScale(() => update(false));
   onLocalSettingsChange((next) => {
     ls = next;
     update(false);

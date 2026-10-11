@@ -164,6 +164,9 @@ export interface StatusDef {
   /** The status carries a numeric level ("Exhaustion 3"). `false` is
    *  stored explicitly once set, so preset upgrades never re-enable it. */
   levels?: boolean;
+  /** The level is a distance on the scene grid ("Flying 30 ft"): it
+   *  steps by the grid scale and shows the grid unit. */
+  levelGrid?: boolean;
 }
 
 export interface AppliedStatus {
@@ -174,12 +177,13 @@ export interface AppliedStatus {
   level?: number;
 }
 
-export const LEVEL_MIN = -99;
-export const LEVEL_MAX = 99;
+// Wide enough for grid distances ("Flying 120 ft").
+export const LEVEL_MIN = -9999;
+export const LEVEL_MAX = 9999;
 /** − / + step for levels. */
 export const LEVEL_STEP = 0.5;
 
-/** Clamp anything to a valid integer level (undefined if not a number). */
+/** Clamp anything to a valid level (undefined if not a number). */
 export function cleanLevel(v: unknown): number | undefined {
   const n = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
   if (typeof n !== "number" || !Number.isFinite(n)) return undefined;
@@ -187,11 +191,33 @@ export function cleanLevel(v: unknown): number | undefined {
   return Math.max(LEVEL_MIN, Math.min(LEVEL_MAX, Math.round(n * 2) / 2));
 }
 
-/** Title as shown on a chip: "Exhaustion 3" for levelled statuses. */
+// --- Scene grid scale (for grid-distance levels) ---------------------------
+// Kept here (no SDK import) and filled by grid-scale.ts in every page
+// that shows or edits levels.
+let gridScale = { step: 5, unit: "ft" };
+
+export function setStatusGridScale(step: number, unit: string): void {
+  gridScale = { step: step > 0 ? step : 5, unit: unit.trim() };
+}
+
+/** − / + step for this status: the grid scale for distance levels. */
+export function levelStep(def: Pick<StatusDef, "levelGrid"> | null | undefined): number {
+  return def?.levelGrid ? gridScale.step : LEVEL_STEP;
+}
+
+/** Level a status starts at when added: one grid square for distance
+ *  levels, else 1. */
+export function levelStart(def: Pick<StatusDef, "levelGrid"> | null | undefined): number {
+  return def?.levelGrid ? gridScale.step : 1;
+}
+
+/** Title as shown on a chip: "Exhaustion 3", or "Flying 30 ft" for
+ *  grid-distance levels. */
 export function displayTitle(def: StatusDef, applied?: Pick<AppliedStatus, "level"> | null): string {
   if (!def.levels) return def.title;
-  const lv = applied?.level ?? 1;
-  return def.title ? `${def.title} ${lv}` : String(lv);
+  const lv = applied?.level ?? levelStart(def);
+  const val = def.levelGrid && gridScale.unit ? `${lv} ${gridScale.unit}` : String(lv);
+  return def.title ? `${def.title} ${val}` : val;
 }
 
 /** On-disk shape — short keys to save room-metadata bytes. */
@@ -204,6 +230,8 @@ interface CompactDef {
   a?: { u: string; w: number; h: number; m: string; d?: number };
   /** levels: 1 / 0 (absent = never set) */
   l?: number;
+  /** levelGrid: 1 (absent = plain number) */
+  g?: number;
 }
 
 // --- Sanitisers ------------------------------------------------------------
@@ -286,6 +314,7 @@ export function sanitizeDef(raw: unknown): StatusDef | null {
   const att = sanitizeAttachment(r.attachment);
   if (att) def.attachment = att;
   if (typeof r.levels === "boolean") def.levels = r.levels;
+  if (r.levelGrid === true) def.levelGrid = true;
   return def;
 }
 
@@ -299,6 +328,7 @@ function toCompact(d: StatusDef): CompactDef {
     if (a.dpi) c.a.d = a.dpi;
   }
   if (d.levels !== undefined) c.l = d.levels ? 1 : 0;
+  if (d.levelGrid) c.g = 1;
   return c;
 }
 
@@ -314,6 +344,7 @@ function fromCompact(raw: unknown): StatusDef | null {
     emoji: c.e,
     attachment: a ? { url: a.u, width: a.w, height: a.h, mime: a.m, dpi: a.d } : undefined,
     levels: c.l === 1 ? true : c.l === 0 ? false : undefined,
+    levelGrid: c.g === 1,
   });
 }
 

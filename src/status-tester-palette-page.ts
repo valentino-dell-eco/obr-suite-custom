@@ -27,7 +27,8 @@ import { onLibraryChange, readLibrary } from "./modules/statusTester/library";
 import { openLibraryModal } from "./modules/statusTester/open";
 import { addStatusToTokens } from "./modules/statusTester/apply";
 import { announceStatusChange } from "./modules/statusTester/announce";
-import { displayTitle } from "./modules/statusTester/types";
+import { displayTitle, levelStart } from "./modules/statusTester/types";
+import { initStatusGridScale } from "./modules/statusTester/grid-scale";
 import { getLocalSettings, initRoomSettings, playersMayApply } from "./modules/statusTester/settings";
 
 const lang = getLocalLang();
@@ -111,10 +112,11 @@ async function applyToSelection(defId: string): Promise<void> {
       playerId,
       hidden: isGM && getLocalSettings().gmDefaultHidden,
       levels: !!def?.levels,
+      levelStart: levelStart(def),
     });
     const n = names.length;
     if (def) {
-      for (const name of names) void announceStatusChange(isGM, name, { kind: "add", status: displayTitle(def, { level: 1 }) });
+      for (const name of names) void announceStatusChange(isGM, name, { kind: "add", status: displayTitle(def) });
     }
     if (n > 0) setFoot(t(lang, "sttAddedN").replace("{n}", String(n)), "flash");
     else setFoot(t(lang, "sttNothingAdded"), "warn");
@@ -221,6 +223,7 @@ closeBtn.addEventListener("click", () => {
 OBR.onReady(async () => {
   try { isGM = (await OBR.player.getRole()) === "GM"; } catch {}
   try { playerId = await OBR.player.getId(); } catch {}
+  void initStatusGridScale();
   await initRoomSettings(() => {
     document.body.classList.toggle("view-only", !canApply());
     setFoot(hint());

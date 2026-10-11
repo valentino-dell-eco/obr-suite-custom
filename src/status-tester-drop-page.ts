@@ -27,6 +27,7 @@ import {
   BC_DRAG_TARGETS,
   DragTargetRect,
   displayTitle,
+  levelStart,
   StatusDef,
   canManage,
   iconUrl,
@@ -38,6 +39,7 @@ import { readLibrary } from "./modules/statusTester/library";
 import { addStatusToTokens } from "./modules/statusTester/apply";
 import { announceStatusChange } from "./modules/statusTester/announce";
 import { getLocalSettings, initRoomSettings } from "./modules/statusTester/settings";
+import { initStatusGridScale } from "./modules/statusTester/grid-scale";
 
 // GM: new statuses start hidden when that personal setting is on;
 // Shift on release flips it.
@@ -196,9 +198,10 @@ async function dropAt(x: number, y: number, shift: boolean): Promise<void> {
         playerId,
         hidden: isGM && shift !== defaultHidden,
         levels: !!def.levels,
+        levelStart: levelStart(def),
       });
       const n = names.length;
-      if (n) await announceStatusChange(isGM, names[0], { kind: "add", status: displayTitle(def, { level: 1 }) });
+      if (n) await announceStatusChange(isGM, names[0], { kind: "add", status: displayTitle(def) });
       console.info(`[status-tester] drop "${def.id}" on ${target.id}: ${n ? "added" : "not added (already there / not allowed)"}`);
       if (!n) {
         void OBR.notification.show(t(lang, "sttNothingAdded"), "INFO").catch(() => {});
@@ -269,6 +272,7 @@ OBR.onReady(async () => {
   playerId = pid;
   if (tagEl) tagEl.hidden = !(isGM && last.shift !== defaultHidden);
   void initRoomSettings();
+  void initStatusGridScale();
 
   OBR.broadcast.onMessage(BC_DRAG_MOVE, (ev) => {
     if (ended || dropping || !isFromSelf(ev) || !isPoint(ev.data)) return;

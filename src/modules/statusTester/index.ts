@@ -47,6 +47,7 @@ import {
 import { openManageModal } from "./open";
 import { setupPalette, teardownPalette, togglePalette } from "./palette";
 import { getLocalSettings, initRoomSettings, onLocalSettingsChange } from "./settings";
+import { initStatusGridScale } from "./grid-scale";
 
 const CHIP_URL = assetUrl("status-tester-chip.html");
 const MOVE_EPS = 2;
@@ -331,6 +332,8 @@ export async function setupStatusTester(): Promise<void> {
     void rescanCandidates();
   };
   unsubs.push(await initRoomSettings(onSettings));
+  // Grid-distance levels ("Flying 30 ft") follow the scene grid scale.
+  void initStatusGridScale(onSettings);
   unsubs.push(onLocalSettingsChange(onSettings));
   startRenderer();
 

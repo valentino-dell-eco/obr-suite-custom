@@ -20,7 +20,6 @@ import {
   MANAGE_MODAL_ID,
   StatusDef,
   canManage,
-  LEVEL_STEP,
   cleanLevel,
   displayTitle,
   iconUrl,
@@ -35,6 +34,8 @@ import { onLibraryChange, readLibrary } from "./modules/statusTester/library";
 import { openLibraryModal } from "./modules/statusTester/open";
 import { announceStatusChange, type StatusChange } from "./modules/statusTester/announce";
 import { getLocalSettings, getRoomSettings, initRoomSettings } from "./modules/statusTester/settings";
+import { initStatusGridScale } from "./modules/statusTester/grid-scale";
+import { levelStart, levelStep } from "./modules/statusTester/types";
 
 const params = new URLSearchParams(location.search);
 const tokenId = params.get("tokenId") ?? "";
@@ -125,10 +126,11 @@ function render(): void {
           ? `<button class="ibtn danger" type="button" data-act="rm" data-uid="${escapeHtml(a.uid)}" title="${escapeHtml(t(lang, "sttRemove"))}">✕</button>`
           : "";
         // Level stepper for statuses that have levels.
+        const st = levelStep(def);
         const lv = manage && def?.levels
-          ? `<span class="lv"><button type="button" data-act="lv-" data-uid="${escapeHtml(a.uid)}" aria-label="−0.5">−</button>` +
-            `<input type="number" step="0.5" data-uid="${escapeHtml(a.uid)}" value="${a.level ?? 1}" aria-label="${escapeHtml(t(lang, "sttLevel"))}">` +
-            `<button type="button" data-act="lv+" data-uid="${escapeHtml(a.uid)}" aria-label="+0.5">+</button></span>`
+          ? `<span class="lv"><button type="button" data-act="lv-" data-uid="${escapeHtml(a.uid)}" aria-label="−${st}">−</button>` +
+            `<input type="number" step="${st}" data-uid="${escapeHtml(a.uid)}" value="${a.level ?? levelStart(def)}" aria-label="${escapeHtml(t(lang, "sttLevel"))}">` +
+            `<button type="button" data-act="lv+" data-uid="${escapeHtml(a.uid)}" aria-label="+${st}">+</button></span>`
           : "";
         return `<div class="row">${chipHtml(def, { hidden: a.hidden, applied: a })}<span class="spacer"></span>${lv}${eye}${rm}</div>`;
       })
@@ -199,9 +201,9 @@ function addStatus(defId: string): void {
     if (cur.some((a) => a.defId === defId)) return cur;
     const entry: AppliedStatus = { uid: newId("s"), defId };
     if (hidden) entry.hidden = true;
-    if (def?.levels) entry.level = 1;
+    if (def?.levels) entry.level = levelStart(def);
     return [...cur, entry];
-  }, { kind: "add", status: titleOf(defId, 1) });
+  }, { kind: "add", status: titleOf(defId, levelStart(def)) });
 }
 
 function setLevel(uid: string, value: number | ((cur: number) => number)): void {
@@ -252,8 +254,12 @@ appliedEl.addEventListener("click", (e) => {
   const uid = btn.dataset.uid ?? "";
   if (btn.dataset.act === "rm") removeStatus(uid);
   else if (btn.dataset.act === "hide") toggleHidden(uid);
-  else if (btn.dataset.act === "lv+") setLevel(uid, (n) => n + LEVEL_STEP);
-  else if (btn.dataset.act === "lv-") setLevel(uid, (n) => n - LEVEL_STEP);
+  else if (btn.dataset.act === "lv+" || btn.dataset.act === "lv-") {
+    // Grid-distance levels step by the scene's grid scale.
+    const applied = readApplied(token).find((a) => a.uid === uid);
+    const step = levelStep(library.find((d) => d.id === applied?.defId));
+    setLevel(uid, (n) => (btn.dataset.act === "lv+" ? n + step : n - step));
+  }
 });
 
 // Typed level: commit on change / Enter; non-numbers snap back.
@@ -295,6 +301,7 @@ OBR.onReady(async () => {
   try { playerId = await OBR.player.getId(); } catch {}
   addHidden.checked = getLocalSettings().gmDefaultHidden;
   await initRoomSettings(() => render());
+  await initStatusGridScale(() => render());
   library = await readLibrary();
   try { [token] = await OBR.scene.items.getItems([tokenId]); } catch {}
   render();

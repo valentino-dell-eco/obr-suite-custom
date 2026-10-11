@@ -2488,20 +2488,39 @@ OBR.onReady(async () => {
           const out: ChatCast = { ...cast, spellName };
           delete out.spent; // only the host fills this in
           const itemId = cards.find((c) => c.id === cardId)?.boundedTokenId;
+          // A "Die Roll" resource also rolls its dice (quick-roll popup).
+          let roll: string | null = null;
           if ((spend || slot) && typeof itemId === "string" && itemId) {
             try {
               // A spell slot (spell row / feature paid with a slot) or
               // an eligible resource — never both.
-              const spent = slot
-                ? await spendSpellSlot(itemId, slot)
-                : await spendResource(itemId, spend!);
-              if (spent) out.spent = spent;
+              if (slot) {
+                const spent = await spendSpellSlot(itemId, slot);
+                if (spent) out.spent = spent;
+              } else {
+                const res = await spendResource(itemId, spend!);
+                if (res) {
+                  const { roll: expr, ...spent } = res;
+                  out.spent = spent;
+                  roll = expr ?? null;
+                }
+              }
             } catch (err) {
               console.warn("[cc-panel] spend failed", err);
             }
             void sendFreshResources(cardId);
           }
           await sendChat({ scope: "all", text: "", cast: out });
+          if (roll && typeof itemId === "string") {
+            try {
+              await openQuickPopupAt(
+                { expression: roll, label: `${spellName} · ${out.spent?.name ?? ""}`, itemId },
+                { x: 0, y: 0 },
+              );
+            } catch (err) {
+              console.warn("[cc-panel] resource roll popup failed", err);
+            }
+          }
           // Card is in chat now — get the sheet out of the way.
           if (cardId) void minimizeSheet(cardId);
         })();

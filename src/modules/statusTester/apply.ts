@@ -11,7 +11,14 @@ import { APPLIED_KEY, AppliedStatus, canManage, newId, parseApplied } from "./ty
 export async function addStatusToTokens(
   tokenIds: string[],
   defId: string,
-  opts: { isGM: boolean; playerId: string; hidden?: boolean; levels?: boolean },
+  opts: {
+    isGM: boolean;
+    playerId: string;
+    hidden?: boolean;
+    levels?: boolean;
+    /** Starting level (one grid square for distance levels). */
+    levelStart?: number;
+  },
 ): Promise<string[]> {
   if (tokenIds.length === 0 || !defId) return [];
   // Names of the tokens that actually got the status.
@@ -25,7 +32,7 @@ export async function addStatusToTokens(
       if (cur.some((a) => a.defId === defId)) continue;
       const entry: AppliedStatus = { uid: newId("s"), defId };
       if (opts.isGM && opts.hidden) entry.hidden = true;
-      if (opts.levels) entry.level = 1;
+      if (opts.levels) entry.level = opts.levelStart ?? 1;
       meta[APPLIED_KEY] = [...cur, entry];
       added.push(d.name ?? "");
     }
