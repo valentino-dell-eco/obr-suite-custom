@@ -536,8 +536,10 @@ function buildToken(
       const textX = left + m.pad + m.iconSize + m.gap;
       const title = buildText()
         .id(itemId(token.id, applied.uid, "title"))
-        // Rich text only when there's a level to italicise.
-        .textType(titleParts(def, applied).level ? "RICH" : "PLAIN")
+        // Sempre RICH: il peso lo decide chipRichText (bold: true/false),
+        // non il Text item — altrimenti OBR usa fontWeight come base anche
+        // per le run bold:false e l'unità resta grassetto.
+        .textType("RICH")
         .plainText(text)
         .richText(chipRichText(def, applied, drawn.extra))
         .position({ x: textX, y: center.y - h / 2 })
@@ -545,7 +547,7 @@ function buildToken(
         .height(h)
         .fontSize(m.fontSize)
         .fontFamily(FONT)
-        .fontWeight(700)
+        // niente .fontWeight(700) qui
         .textAlign("LEFT")
         .textAlignVertical("MIDDLE")
         .fillColor(fg)
