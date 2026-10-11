@@ -226,7 +226,7 @@ export function titleParts(
 ): { title: string; level: string, hasUnit: boolean } {
   if (!def.levels) return { title: def.title, level: "", hasUnit: false };
   const lv = applied?.level ?? levelStart(def);
-  const level = def.levelGrid && gridScale.unit ? `${lv} ${gridScale.unit}` : String(lv);
+  const level = def.levelGrid && gridScale.unit ? `(${lv} ${gridScale.unit})` : String(lv);
   const hasUnit = def.levelGrid && gridScale.unit? true : false;
   return { title: def.title, level, hasUnit };
 }
