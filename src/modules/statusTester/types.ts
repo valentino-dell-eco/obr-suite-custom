@@ -239,8 +239,8 @@ export function titleParts(
   return { title: def.title, level, hasUnit };
 }
 
-/** displayTitleHtml — stesse run di chipRichText (chip sulla mappa):
- *  titolo → bold, livello numerico → bold, "(unità)" → corsivo non-bold. */
+/** displayTitleHtml — stessa tipografia del chip mappa (chipRichText):
+ *  titolo bold, livello numerico bold, unità fra parentesi corsiva non-bold. */
 export function displayTitleHtml(
   def: StatusDef,
   applied: Pick<AppliedStatus, "level"> | null | undefined,

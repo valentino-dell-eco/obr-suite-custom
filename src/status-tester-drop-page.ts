@@ -34,6 +34,7 @@ import {
   isStatusToken,
   sanitizeDef,
   textColorFor,
+  displayTitleHtml,
 } from "./modules/statusTester/types";
 import { readLibrary } from "./modules/statusTester/library";
 import { addStatusToTokens } from "./modules/statusTester/apply";
@@ -97,7 +98,11 @@ function renderGhost(): void {
   else if (def.icon) icon = `<img src="${escapeHtml(iconUrl(def.icon, fg !== "#ffffff"))}" alt="">`;
   ghost.style.background = def.color;
   ghost.style.color = fg;
-  ghost.innerHTML = `${icon}<span>${escapeHtml(def.title || t(lang, "sttUntitled"))}</span>` +
+  // Stesso markup del chip mappa e della hover list: titolo bold,
+  // livello / unità formattati da displayTitleHtml.
+  const title = displayTitleHtml(def, { level: levelStart(def) }, escapeHtml)
+    || escapeHtml(def.title || t(lang, "sttUntitled"));
+  ghost.innerHTML = `${icon}<span>${title}</span>` +
     `<span class="tag" id="tag" hidden>${escapeHtml(t(lang, "sttHiddenBadge"))}</span>`;
   tagEl = document.getElementById("tag");
 }

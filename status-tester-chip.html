@@ -24,6 +24,8 @@ html,body{
 #chip .emoji{flex:none;display:flex;align-items:center;justify-content:center;line-height:1;
   font-family:"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif}
 #chip .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-weight:700;line-height:1}
+#chip .title b{ font-weight:700; }
+#chip .title .lv{ font-style:italic; font-weight:400; }
 #chip .count{flex:none;font-size:.7em;font-weight:800;opacity:.75;margin-left:.35em}
 /* Ghost mode: the chip you SEE is the one drawn on the map; this HTML
    chip is only an invisible hit area sitting on top of it (hover/click).
@@ -55,11 +57,13 @@ html,body{
 }
 #list.visible{display:flex}
 #list .row{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:999px;
-  font-size:12px;font-weight:700;line-height:1.2;white-space:nowrap}
+  font-size:12px;line-height:1.2;white-space:nowrap}
 #list .row img{width:14px;height:14px;flex:none}
 #list .row .emoji{width:14px;text-align:center;flex:none;
   font-family:"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif}
 #list .row .t{overflow:hidden;text-overflow:ellipsis}
+#list .row .t b{ font-weight:700; }
+#list .row .t .lv{ font-style:italic; font-weight:400; }
 #list .row.cur{box-shadow:0 0 0 2px rgba(255,255,255,.7)}
 #list .row.hid{border:1px dashed rgba(255,255,255,.85);opacity:.8}
 #list .row .tag{font-size:10px;font-weight:600;opacity:.8;margin-left:auto}

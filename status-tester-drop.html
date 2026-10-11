@@ -13,8 +13,10 @@ html,body{height:100%;width:100%;overflow:hidden;background:transparent;
 .target.hot{border:3px solid var(--c,#5dade2);background:color-mix(in srgb,var(--c,#5dade2) 18%,transparent);
   box-shadow:0 0 0 2px rgba(7,12,24,0.55),0 0 18px var(--c,#5dade2)}
 .ghost{position:absolute;left:-1000px;top:-1000px;opacity:0;transition:opacity .1s;display:inline-flex;align-items:center;gap:6px;height:28px;
-  padding:0 12px 0 9px;border-radius:999px;font-weight:800;font-size:13px;white-space:nowrap;pointer-events:none;
+  padding:0 12px 0 9px;border-radius:999px;font-size:13px;white-space:nowrap;pointer-events:none;
   border:1px solid rgba(0,0,0,.35);box-shadow:0 6px 18px rgba(0,0,0,0.45);transform:translate(14px,10px)}
+.ghost b{ font-weight:800; }
+.ghost .lv{ font-style:italic; font-weight:400; }
 .ghost.on{opacity:.62}
 .ghost img{width:16px;height:16px;flex:none}
 .ghost .emoji{font-size:15px;line-height:1}
