@@ -223,11 +223,12 @@ export function displayTitle(def: StatusDef, applied?: Pick<AppliedStatus, "leve
 export function titleParts(
   def: StatusDef,
   applied?: Pick<AppliedStatus, "level"> | null,
-): { title: string; level: string } {
-  if (!def.levels) return { title: def.title, level: "" };
+): { title: string; level: string, hasUnit: boolean } {
+  if (!def.levels) return { title: def.title, level: "", hasUnit: false };
   const lv = applied?.level ?? levelStart(def);
   const level = def.levelGrid && gridScale.unit ? `${lv} ${gridScale.unit}` : String(lv);
-  return { title: def.title, level };
+  const hasUnit = def.levelGrid && gridScale.unit? true : false;
+  return { title: def.title, level, hasUnit };
 }
 
 /** displayTitle() as HTML, the level in <i>. `esc` escapes text. */
