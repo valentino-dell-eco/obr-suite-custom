@@ -1,4 +1,6 @@
 import OBR from "@owlbear-rodeo/sdk";
+import { migrateSpecialResources } from "./special-resources";
+import { hitDicePayloadFromCard, openHitDiceModal } from "./hit-dice";
 import { assetUrl } from "../../asset-base";
 import { installDebugOverlay } from "../../utils/debugOverlay";
 import { ICONS } from "../../icons";
@@ -233,6 +235,12 @@ async function runCardRecovery(pressed: RecoveryType): Promise<void> {
   // Reflect the instant part of the write in the Resources tab right
   // away rather than waiting on the scene-sync round trip.
   void rtMountHandle?.refresh();
+
+  // Short rest → offer to spend hit dice (only if the token has some).
+  if (pressed === "SR") {
+    const data = currentCardId ? cardCache.get(currentCardId)?.data : null;
+    void openHitDiceModal(hitDicePayloadFromCard(itemId, currentCardDisplayName, data));
+  }
 
   const resources = needsRollByItem.get(itemId) ?? [];
   if (resources.length > 0) {
@@ -829,6 +837,7 @@ async function showCard(
     if (cached && cacheEntryValid(cardId, cached)) {
       const live = await readLiveBubbles();
       render(cached.data, cardId, roomId, live);
+      void migrateSpecialResources(boundItemId, cached.data);
       return;
     }
   }
@@ -852,6 +861,8 @@ async function showCard(
     if (currentCardId !== cardId) return;
     cardCache.set(cardId, { data: d, source });
     render(d, cardId, roomId, live);
+    // Card spell slots / hit dice → the token's special resources.
+    void migrateSpecialResources(boundItemId, d);
   } catch (e: any) {
     if (currentCardId !== cardId) return;
     syncLoading = false;
@@ -1320,7 +1331,7 @@ async function openCastModal(
       id: CAST_MODAL_ID,
       url: `${assetUrl("spell-cast.html")}#${hash}`,
       width: 380,
-      height: feature ? 470 : 510,
+      height: feature ? 480 : 570,
       hidePaper: true,
     });
   } catch (e) {

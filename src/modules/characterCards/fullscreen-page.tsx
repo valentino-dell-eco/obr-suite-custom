@@ -29,6 +29,12 @@ import {
   type SlotMap,
 } from "./cast-core";
 import { loadSpellRefs, passesVersion } from "./spell-library";
+import {
+  FEATURE_CATEGORIES,
+  fetchFeatureDescription,
+  loadFeatureRefs,
+  type FeatureRef,
+} from "./feature-library";
 import { t } from "../../i18n";
 import {
   getLocalLang,
@@ -44,6 +50,8 @@ import {
 // ResourcesSection below) — only the presentation layer is shared here.
 import { ensureStyles } from "../resourceTracker/panel";
 import { ICON_LIBRARY } from "../resourceTracker/icons";
+import { amountFromClick, ensureSpendVisualStyles, spendVisualHtml } from "./spend-visual";
+import { bestNameMatch } from "./spend";
 import type { IconId } from "../resourceTracker/types";
 
 // [CC-FLOW] Module-evaluation marker for the fullscreen iframe document.
@@ -430,6 +438,265 @@ async function loadSpellNames(): Promise<SpellEntry[]> {
   return [...byLabel.entries()]
     .map(([label, eng]) => ({ label, en: eng }))
     .sort((a, b) => a.label.localeCompare(b.label, en ? "en" : "zh"));
+}
+
+// Feature picker (edit mode "+" on a feature list) — like the spell
+// picker: live search over the library's feats / optional features /
+// class & subclass features, plus "add as typed". Picking one copies
+// its description from the library onto the card.
+export interface PickedFeature {
+  name: string;
+  description: string;
+  level: number | null;
+}
+
+// Navigation inside the feature picker:
+//   types → Class features → class → (its features by level | a subclass → its features)
+//         → Feats → book (source) → feats
+//         → Fighting styles / Maneuvers / Metamagic / … → features
+// Typing in the search box shows matching features inside the current
+// step (or everywhere at the top).
+type PickStep =
+  | { kind: "types" }
+  | { kind: "type"; type: string }
+  | { kind: "class"; cls: string }
+  | { kind: "subclass"; cls: string; sub: string }
+  | { kind: "source"; type: string; code: string };
+
+/** "class" for class / subclass features, else "c<category>". */
+function featureType(c: number): string {
+  return c === 30 || c === 41 ? "class" : `c${c}`;
+}
+
+function FeaturePickModal({
+  title,
+  start,
+  onCancel,
+  onPick,
+}: {
+  title: string;
+  /** Where the picker opens: a type ("class", "c7", "c29") or the type list. */
+  start: string | null;
+  onCancel: () => void;
+  onPick: (f: PickedFeature) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [refs, setRefs] = useState<FeatureRef[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [path, setPath] = useState<PickStep[]>(
+    start ? [{ kind: "types" }, { kind: "type", type: start }] : [{ kind: "types" }],
+  );
+  const step = path[path.length - 1];
+  const en = _lang === "en";
+  const cmp = (a: string, b: string) => a.localeCompare(b, en ? "en" : "zh");
+
+  useEffect(() => {
+    let cancelled = false;
+    loadFeatureRefs()
+      .then((list) => { if (!cancelled) { setRefs(list); setLoading(false); } })
+      .catch(() => { if (!cancelled) { setLoadError(true); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onCancel]);
+
+  const labelOf = (r: FeatureRef) => (en ? r.engName : r.cnName || r.engName);
+
+  // Class names (from class features) and each subclass's parent class.
+  const classInfo = useMemo(() => {
+    const classes = new Set<string>();
+    for (const r of refs) if (r.c === 30 && r.className) classes.add(r.className);
+    const parentOf = (sub: string): string => {
+      const low = sub.toLowerCase();
+      let best = "";
+      for (const c of classes) {
+        const cl = c.toLowerCase();
+        if ((low === cl || low.endsWith(` ${cl}`) || low.startsWith(`${cl} `) || low.includes(cl)) && c.length > best.length) best = c;
+      }
+      return best || sub;
+    };
+    return { classes, parentOf };
+  }, [refs]);
+
+  /** The features in scope for the current step. */
+  const scope = useMemo((): FeatureRef[] => {
+    switch (step.kind) {
+      case "types": return refs;
+      case "type": return refs.filter((r) => featureType(r.c) === step.type);
+      case "class": return refs.filter((r) =>
+        (r.c === 30 && r.className === step.cls) ||
+        (r.c === 41 && classInfo.parentOf(r.className) === step.cls));
+      case "subclass": return refs.filter((r) => r.c === 41 && r.className === step.sub);
+      case "source": return refs.filter((r) => featureType(r.c) === step.type && r.code === step.code);
+    }
+  }, [step, refs, classInfo]);
+
+  const typeLabel = (type: string) =>
+    type === "class" ? T("searchCategoryClassFeature" as any)
+      : T(FEATURE_CATEGORIES[parseInt(type.slice(1), 10)]?.label as any);
+  const stepLabel = (st: PickStep): string =>
+    st.kind === "types" ? T("ccFeatAllTypes")
+      : st.kind === "type" ? typeLabel(st.type)
+      : st.kind === "class" ? st.cls
+      : st.kind === "subclass" ? st.sub
+      : st.code;
+  const go = (st: PickStep) => { setPath([...path, st]); setQuery(""); };
+
+  const pick = async (r: FeatureRef, key: string) => {
+    if (busy) return;
+    setBusy(key);
+    let description = "";
+    try { description = await fetchFeatureDescription(r); } catch {}
+    onPick({ name: labelOf(r), description, level: r.level });
+  };
+
+  const featureRow = (r: FeatureRef, i: number, showGroup: boolean) => {
+    const key = `${r.c}-${i}-${r.engName}-${r.className}-${r.level}`;
+    const sub = [
+      r.level != null ? `Lv ${r.level}` : "",
+      showGroup ? (r.className || typeLabel(featureType(r.c))) : "",
+      r.code,
+    ].filter(Boolean).join(" · ");
+    return (
+      <button class="cc-modal-row" disabled={!!busy} onClick={() => void pick(r, key)}>
+        <span>{busy === key ? "…" : labelOf(r)}</span>
+        <span class="cc-modal-row-en">{sub}</span>
+      </button>
+    );
+  };
+  const groupRow = (label: string, count: number, onClick: () => void, extra = "") => (
+    <button class="cc-modal-row cc-modal-row-group" onClick={onClick}>
+      <span>{label}</span>
+      <span class="cc-modal-row-en">{extra ? `${extra} · ` : ""}{count} ›</span>
+    </button>
+  );
+  const byLevel = (a: FeatureRef, b: FeatureRef) =>
+    (a.level ?? 99) - (b.level ?? 99) || cmp(labelOf(a), labelOf(b));
+
+  // --- What the list shows --------------------------------------------
+  let body: preact.ComponentChildren = null;
+  const q = query.trim().toLowerCase();
+  if (q) {
+    const hits = scope
+      .filter((r) =>
+        labelOf(r).toLowerCase().includes(q) ||
+        r.engName.toLowerCase().includes(q) ||
+        r.className.toLowerCase().includes(q))
+      .sort((a, b) => cmp(labelOf(a), labelOf(b)) || byLevel(a, b))
+      .slice(0, 100);
+    body = (
+      <>
+        {hits.map((r, i) => featureRow(r, i, true))}
+        {!hits.length && <div class="cc-modal-msg">{T("ccSpellNoMatch")}</div>}
+      </>
+    );
+  } else if (step.kind === "types") {
+    const counts = new Map<string, number>();
+    for (const r of refs) counts.set(featureType(r.c), (counts.get(featureType(r.c)) ?? 0) + 1);
+    const order = ["class", "c7", "c29", "c23", "c22", "c32", "c33", "c34", "c37", "c27", "c8"];
+    body = order
+      .filter((tp) => counts.get(tp))
+      .map((tp) => groupRow(typeLabel(tp), counts.get(tp)!, () => go({ kind: "type", type: tp })));
+  } else if (step.kind === "type" && step.type === "class") {
+    // Classes.
+    const list = [...classInfo.classes].sort(cmp);
+    body = list.map((cls) => {
+      const n = scope.filter((r) => r.c === 30 && r.className === cls).length;
+      return groupRow(cls, n, () => go({ kind: "class", cls }));
+    });
+  } else if (step.kind === "type" && step.type === "c7") {
+    // Feats by book.
+    const bySrc = new Map<string, number>();
+    for (const r of scope) bySrc.set(r.code, (bySrc.get(r.code) ?? 0) + 1);
+    body = [...bySrc.entries()]
+      .sort((a, b) => cmp(a[0], b[0]))
+      .map(([code, n]) => groupRow(code, n, () => go({ kind: "source", type: "c7", code })));
+  } else if (step.kind === "class") {
+    // The class's own features by level, then its subclasses.
+    const own = scope.filter((r) => r.c === 30).sort(byLevel);
+    const subs = new Map<string, number>();
+    for (const r of scope) if (r.c === 41) subs.set(r.className, (subs.get(r.className) ?? 0) + 1);
+    body = (
+      <>
+        {own.map((r, i) => featureRow(r, i, false))}
+        {subs.size > 0 && <div class="cc-modal-sub-h">{T("ccFeatSubclasses")}</div>}
+        {[...subs.entries()]
+          .sort((a, b) => cmp(a[0], b[0]))
+          .map(([sub, n]) => groupRow(sub, n, () => go({ kind: "subclass", cls: step.cls, sub })))}
+      </>
+    );
+  } else {
+    // A subclass, a feats book or an optional-feature type: the features.
+    const list = [...scope].sort(step.kind === "subclass" ? byLevel : (a, b) => cmp(labelOf(a), labelOf(b)));
+    body = list.map((r, i) => featureRow(r, i, false));
+  }
+
+  return (
+    <div class="cc-modal-backdrop" onClick={onCancel}>
+      <div class="cc-modal" onClick={(e) => e.stopPropagation()}>
+        <div class="cc-modal-h">
+          <h3>{title}</h3>
+          <span class="cc-modal-hint">{T("ccFeatModalHint")}</span>
+        </div>
+        <div class="cc-pick-crumbs">
+          {path.map((st, i) => (
+            <>
+              {i > 0 && <span class="sep">›</span>}
+              {i < path.length - 1 ? (
+                <button class="crumb" onClick={() => { setPath(path.slice(0, i + 1)); setQuery(""); }}>
+                  {stepLabel(st)}
+                </button>
+              ) : (
+                <span class="crumb cur">{stepLabel(st)}</span>
+              )}
+            </>
+          ))}
+        </div>
+        <input
+          class="cc-edit-text"
+          autofocus
+          style={{ width: "100%", marginBottom: "8px", padding: "7px 10px", fontSize: "13px" }}
+          placeholder={T("ccFeatSearchPh")}
+          value={query}
+          onInput={(e: any) => setQuery(e.target.value)}
+        />
+        <div class="cc-modal-list">
+          {query.trim() && (
+            <button
+              class="cc-modal-row cc-modal-row-free"
+              onClick={() => onPick({ name: query.trim(), description: "", level: null })}
+            >
+              {T("ccSpellAddFree").replace("{q}", query.trim())}
+            </button>
+          )}
+          {loading && <div class="cc-modal-msg">{T("ccSpellLoading")}</div>}
+          {loadError && <div class="cc-modal-msg">{T("ccSpellLoadErr")}</div>}
+          {!loading && !loadError && body}
+        </div>
+        <div class="cc-modal-foot">
+          {path.length > 1 && (
+            <button
+              class="cc-btn"
+              onClick={() => { setPath(path.slice(0, -1)); setQuery(""); }}
+            >
+              ‹ {T("ccFeatBack")}
+            </button>
+          )}
+          <button class="cc-btn" onClick={onCancel}>
+            {T("ccCancel")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function EditText({
@@ -1009,7 +1276,8 @@ function StatsBanner({
   const { editing } = useEdit();
   const cs = data.core_stats || {};
   const hp = cs.hp || {};
-  const hd = cs.hit_dice || {};
+  const { list: resList, bound: resBound } = useCardResources();
+  const hdRes = resList?.find((r) => r.type === "hitDice");
 
   const setHp = (which: "current" | "max" | "temp", val: string) => {
     const n = parseInt(val, 10);
@@ -1022,18 +1290,13 @@ function StatsBanner({
     if (!Number.isFinite(n)) return;
     onPatch({ core_stats: { ...cs, ac: n } });
   };
-  const setHdCur = (val: string) => {
-    const n = parseInt(val, 10);
-    if (!Number.isFinite(n)) return;
-    onPatch({ core_stats: { ...cs, hit_dice: { ...hd, current: n } } });
-  };
+
   // 2026-05-14 (#14) — edit-mode helpers for the remaining stat cells
   // (initiative / speed / passive perception / proficiency / hit-dice
   // max + die-size). All single-field patches on core_stats.
   const setCs = (patch: Record<string, any>) =>
     onPatch({ core_stats: { ...cs, ...patch } });
-  const setHd = (patch: Record<string, any>) =>
-    onPatch({ core_stats: { ...cs, hit_dice: { ...hd, ...patch } } });
+
 
   return (
     <div class="cc-stats">
@@ -1151,38 +1414,37 @@ function StatsBanner({
       </div>
       <div class="stat-cell">
         <div class="stat-cell-label">{T("ccHitDice")}</div>
-        <div class="stat-cell-val">
-          <input
-            class="stat-input big"
-            value={hd.current ?? 0}
-            onChange={(e: any) => setHdCur(e.target.value)}
-          />
-          <span class="slash">/</span>
-          {editing ? (
+        {/* Hit dice live in the token's "Hit dice" resource (spent on a
+            short rest, half regained on a long rest). */}
+        <div class="stat-cell-val" title={hdRes ? T("ccHdManaged") : ""}>
+          {hdRes ? (
             <>
-              <input
-                class="stat-input small"
-                type="number"
-                value={hd.max ?? 0}
-                onInput={(e: any) => {
-                  const n = parseInt(e.target.value, 10);
-                  if (Number.isFinite(n)) setHd({ max: n });
-                }}
-              />
-              <input
-                class="stat-input small"
-                type="text"
-                style={{ width: "44px" }}
-                placeholder="d8"
-                value={hd.die_size ?? ""}
-                onInput={(e: any) => setHd({ die_size: e.target.value })}
-              />
+              <span class="big">{hdRes.current}</span>
+              <span class="slash">/</span>
+              <span class="small" title={(hdRes.pools ?? []).map((p) => `${p.current}/${p.max} ${p.die}`).join(" · ")}>
+                {(hdRes.pools?.length ? hdRes.pools : [{ die: hdRes.dieInfo ?? "", current: hdRes.current, max: hdRes.max }])
+                  .map((p) => `${p.max}${p.die}`)
+                  .join("+")}
+              </span>
+              {_canUseResources && (
+                <button class="hd-edit" type="button" title={T("rpEdit")} onClick={() => openResourceEditor(hdRes.id)}>
+                  ⚙
+                </button>
+              )}
             </>
+          ) : resList === null ? (
+            <span class="small">…</span>
+          ) : !resBound ? (
+            <span class="need-token" title={T("ccSlotsNoToken")}>{T("ccNeedToken")}</span>
           ) : (
-            <span class="small">
-              {hd.max ?? "?"}
-              {hd.die_size ?? ""}
-            </span>
+            <button
+              class="cc-btn stat-create"
+              type="button"
+              title={T("ccCreateHdRes")}
+              onClick={() => requestSpecialResource(getQS("card") || "", data, "hitDice")}
+            >
+              +
+            </button>
           )}
         </div>
       </div>
@@ -2198,16 +2460,73 @@ function SpellDetailView({ spell }: { spell: any }) {
   );
 }
 
+const FS_RESTORE_KEY = "obr-suite/cc-fs-restore";
+const fsViewKey = (cardId: string) => `obr-suite/cc-fs-view/${cardId}`;
+/** Remember this card's tab + scroll (restored after a minimize). */
+function saveFsView(cardId: string, tab: string) {
+  try {
+    const body = document.querySelector<HTMLElement>(".cc-body");
+    const main = document.querySelector<HTMLElement>(".cc-main");
+    localStorage.setItem(
+      fsViewKey(cardId),
+      JSON.stringify({ tab, body: body?.scrollTop ?? 0, main: main?.scrollTop ?? 0 }),
+    );
+  } catch {}
+}
+
+/** May this viewer change the token's resources (GM or card editor)? Set by App. */
+let _canUseResources = false;
+
+/** Open the real resource editor for one of the bound token's resources. */
+function openResourceEditor(resourceId?: string) {
+  try {
+    window.parent.postMessage(
+      resourceId
+        ? { type: "cc-open-resource-edit", cardId: getQS("card") || "", resourceId }
+        : { type: "cc-open-resource-edit", cardId: getQS("card") || "" },
+      "*",
+    );
+  } catch {}
+}
+
+/** Short-rest context for the host's hit dice window (name, CON mod,
+ *  card HP fallback) — kept current by App. */
+let _hitDiceCtx: { name: string; conMod: number; hpCurrent: number | null; hpMax: number | null } | null = null;
+
+/** Ask the host to create the card's special resources (spell slots /
+ *  hit dice) on the bound token. `force` creates that one even when
+ *  the card has no values (the sheet's "Create" buttons). */
+function requestSpecialResource(cardId: string, data: any, force?: "spellSlots" | "hitDice") {
+  try {
+    window.parent.postMessage(
+      {
+        type: "cc-migrate-special",
+        cardId,
+        force: force ?? null,
+        spell_slots: data?.spellcasting?.spell_slots ?? null,
+        hit_dice: data?.core_stats?.hit_dice ?? null,
+      },
+      "*",
+    );
+  } catch {}
+}
+
 // --- Resource spent with a cast / feature use --------------------------
 // This iframe has no OBR SDK: the bound token's resources come from the
 // host (cc-panel) through the same cc-request-resources /
 // cc-resources-response pair the Resources tab uses, and the host does
 // the spending when it relays the cast to Room Chat.
 interface SpendState {
-  resourceId: string;
-  amount: string;
+  /** "" = nothing, SLOT_CHOICE = a spell slot, else a resource id. */
+  choice: string;
+  amount: number;
+  /** Spell slot level (1–9) when choice === SLOT_CHOICE. */
+  slotLevel: number;
+  /** The default (slots / first eligible resource) has been applied. */
+  init: boolean;
 }
-const NO_SPEND: SpendState = { resourceId: "", amount: "1" };
+const NO_SPEND: SpendState = { choice: "", amount: 1, slotLevel: 0, init: false };
+const SLOT_CHOICE = "__slots__";
 
 function useCardResources(): { list: RtResource[] | null; bound: boolean } {
   const cardId = getQS("card") || "";
@@ -2233,56 +2552,164 @@ function useCardResources(): { list: RtResource[] | null; bound: boolean } {
   return state;
 }
 
-function SpendField({
+/** Slot levels ≥ minLevel with a slot left, from the token's
+ *  "Spell slots" resource. */
+function availableSlots(list: RtResource[] | null, minLevel: number) {
+  const res = list?.find((r) => r.type === "spellSlots");
+  if (!res) return [];
+  return (res.slots ?? [])
+    .map((sl, i) => ({ level: i + 1, current: sl.current, max: sl.max }))
+    .filter((o) => o.level >= Math.max(1, minLevel) && o.max > 0 && o.current > 0);
+}
+
+function slotOptionLabel(o: { level: number; current: number; max: number }): string {
+  return T("ccSlotOption")
+    .replace("{n}", String(o.level))
+    .replace("{cur}", String(o.current))
+    .replace("{max}", String(o.max));
+}
+
+// "Resource spent" — first field of the cast / use windows. Spell slots
+// come first (spells: preselected when one is left), then the resources
+// flagged "Eligible for Spells / Features". The choice is drawn with the
+// resource's own icons; for slots a level select follows.
+function ResourceSpentField({
+  kind,
+  baseLevel,
   value,
   onChange,
   disabled,
+  name,
 }: {
+  kind: "spell" | "feature";
+  /** Feature name: the resource named like it is preselected. */
+  name?: string;
+  /** Spell level (0 = cantrip: no slots). */
+  baseLevel: number;
   value: SpendState;
   onChange: (v: SpendState) => void;
   disabled: boolean;
 }) {
+  useEffect(() => { ensureSpendVisualStyles(); }, []);
   const { list, bound } = useCardResources();
-  const none = !bound || (list !== null && list.length === 0);
+  const eligible = (list ?? []).filter(
+    (r) =>
+      r.type !== "spellSlots" &&
+      r.type !== "hitDice" &&
+      (kind === "spell" ? r.forSpells === true : r.forFeatures === true),
+  );
+  const slotRes = list?.find((r) => r.type === "spellSlots");
+  const slotsAllowed = !!slotRes && (kind === "feature" || baseLevel > 0);
+  const slots = slotsAllowed ? availableSlots(list, kind === "feature" ? 1 : baseLevel) : [];
+
+  // Default once the resources arrive.
+  useEffect(() => {
+    if (list === null || value.init) return;
+    if (kind === "spell" && slots.length) {
+      onChange({ choice: SLOT_CHOICE, amount: 1, slotLevel: slots[0].level, init: true });
+    } else if (kind === "feature") {
+      // Only a resource named like the feature; otherwise "None".
+      const match = name ? bestNameMatch(eligible, name) : undefined;
+      onChange({ choice: match?.id ?? "", amount: 1, slotLevel: slots[0]?.level ?? 0, init: true });
+    } else if (eligible.length) {
+      onChange({ choice: eligible[0].id, amount: 1, slotLevel: slots[0]?.level ?? 0, init: true });
+    } else {
+      onChange({ ...value, slotLevel: slots[0]?.level ?? 0, init: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list]);
+
+  const res = value.choice && value.choice !== SLOT_CHOICE
+    ? eligible.find((r) => r.id === value.choice)
+    : undefined;
+  const slot = value.choice === SLOT_CHOICE ? slots.find((o) => o.level === value.slotLevel) : undefined;
+  const nothing = !eligible.length && !slotsAllowed;
+
   return (
-    <div class="cast-field">
-      <div class="cc-modal-hint">{T("ccSpendLabel")}</div>
-      <div class="cast-resrow">
+    <>
+      <div class="cast-field">
+        <div class="cc-modal-hint">{T("ccSpendLabel")}</div>
         <select
           class="cc-edit-text"
-          value={value.resourceId}
-          disabled={disabled || none || list === null}
-          onChange={(e: any) => onChange({ ...value, resourceId: e.target.value })}
+          value={value.choice}
+          disabled={disabled || !bound || list === null}
+          onChange={(e: any) => {
+            const c = e.target.value;
+            onChange({
+              ...value,
+              choice: c,
+              amount: 1,
+              slotLevel: c === SLOT_CHOICE && !slots.some((o) => o.level === value.slotLevel)
+                ? slots[0]?.level ?? 0
+                : value.slotLevel,
+            });
+          }}
         >
           <option value="">{T("ccSpendNone")}</option>
-          {(list ?? []).map((r) => (
+          {slotsAllowed && (
+            <option value={SLOT_CHOICE} disabled={!slots.length}>
+              {T(slots.length ? "ccSlotsChoice" : "ccSlotsChoiceEmpty")}
+            </option>
+          )}
+          {eligible.map((r) => (
             <option value={r.id}>{`${r.name || "?"} (${r.current}/${r.max})`}</option>
           ))}
         </select>
-        <input
-          class="cc-edit-num"
-          type="number"
-          min="1"
-          step="1"
-          value={value.amount}
-          title={T("ccSpendAmount")}
-          disabled={disabled || !value.resourceId}
-          onInput={(e: any) => onChange({ ...value, amount: e.target.value })}
-        />
+        {res && (
+          <div
+            title={T("ccSpendClickHint")}
+            onClick={(e: any) => {
+              if (disabled) return;
+              const n = amountFromClick(e.target, res, value.amount);
+              if (n != null) onChange({ ...value, amount: n });
+            }}
+            dangerouslySetInnerHTML={{ __html: spendVisualHtml(res, Math.min(value.amount, Math.max(1, res.current))) }}
+          />
+        )}
+        {!bound && <div class="cast-dc-note">{T("ccSpendNoToken")}</div>}
+        {bound && list !== null && nothing && <div class="cast-dc-note">{T("ccSpendNoResources")}</div>}
       </div>
-      {!bound && <div class="cast-dc-note">{T("ccSpendNoToken")}</div>}
-      {bound && list !== null && list.length === 0 && (
-        <div class="cast-dc-note">{T("ccSpendNoResources")}</div>
+      {value.choice === SLOT_CHOICE && (
+        <div class="cast-field">
+          <div class="cc-modal-hint">{T("ccSlotLevelLabel")}</div>
+          <select
+            class="cc-edit-text"
+            value={String(value.slotLevel)}
+            disabled={disabled || !slots.length}
+            onChange={(e: any) => onChange({ ...value, slotLevel: parseInt(e.target.value, 10) || 0 })}
+          >
+            {slots.map((o) => <option value={String(o.level)}>{slotOptionLabel(o)}</option>)}
+          </select>
+          {slot && (
+            <div
+              dangerouslySetInnerHTML={{
+                __html: spendVisualHtml(
+                  { type: "slot", icon: slotRes?.icon, current: slot.current, max: slot.max },
+                  1,
+                  { interactive: false },
+                ),
+              }}
+            />
+          )}
+          {kind === "spell" && slot && slot.level > baseLevel && (
+            <div class="cast-dc-note">{T("ccSlotUpcast").replace("{n}", String(slot.level))}</div>
+          )}
+        </div>
       )}
-    </div>
+    </>
   );
 }
 
 /** What goes to the host with cc-cast-spell. */
 function spendPayload(v: SpendState): { resourceId: string; amount: number } | null {
+  if (!v.choice || v.choice === SLOT_CHOICE) return null;
   const n = Math.floor(Number(v.amount));
-  if (!v.resourceId || !Number.isFinite(n) || n <= 0) return null;
-  return { resourceId: v.resourceId, amount: n };
+  return Number.isFinite(n) && n > 0 ? { resourceId: v.choice, amount: n } : null;
+}
+
+/** Spell slot level to spend, or null. */
+function slotPayload(v: SpendState): number | null {
+  return v.choice === SLOT_CHOICE && v.slotLevel >= 1 && v.slotLevel <= 9 ? v.slotLevel : null;
 }
 
 // "Use" for a feature: same modal shape as the spell cast (no level,
@@ -2319,7 +2746,12 @@ function UseFeatureModal({
       description: desc,
       meta: feature?.level != null ? `Lv ${feature.level}` : undefined,
     });
-    postToHost("cc-cast-spell", { cast, cardId: getQS("card") || "", spend: spendPayload(spend) });
+    postToHost("cc-cast-spell", {
+      cast,
+      cardId: getQS("card") || "",
+      spend: spendPayload(spend),
+      slot: slotPayload(spend),
+    });
     onClose();
   };
 
@@ -2340,7 +2772,7 @@ function UseFeatureModal({
           <b>{name}</b>
           {T("ccUseIntro").split("{name}")[1] ?? ""}
         </p>
-        <SpendField value={spend} onChange={setSpend} disabled={sending} />
+        <ResourceSpentField kind="feature" name={name} baseLevel={0} value={spend} onChange={setSpend} disabled={sending} />
         <div class="cc-modal-foot">
           <button class="cc-btn" onClick={onClose} disabled={sending}>
             {T("ccCancel")}
@@ -2377,6 +2809,10 @@ function CastSpellModal({
   const [spend, setSpend] = useState<SpendState>(NO_SPEND);
   const [sending, setSending] = useState(false);
   const detail = useSpellDetail(spell, true);
+  // Spell slot row: picking a slot sets the cast level (upcast) and
+  // hides the level + resource fields.
+  const slotLv = slotPayload(spend);
+  const usingSlot = !isCantrip && slotLv != null;
   // The DC field is always shown; when the spell has no saving throw a
   // note says so and buildCast() leaves the DC out of the chat message.
   const noSave = detail !== undefined && !detail.hasSave;
@@ -2402,13 +2838,18 @@ function CastSpellModal({
     const cast = buildCast({
       spellName: String(spell?.name ?? ""),
       baseLevel,
-      castLevel,
+      castLevel: usingSlot ? slotLv! : castLevel,
       dcInput: Number.isFinite(n) ? n : null,
       cardDc,
       detail: d,
       characterLevel,
     });
-    postToHost("cc-cast-spell", { cast, cardId: getQS("card") || "", spend: spendPayload(spend) });
+    postToHost("cc-cast-spell", {
+      cast,
+      cardId: getQS("card") || "",
+      spend: usingSlot ? null : spendPayload(spend),
+      slot: usingSlot ? slotLv : null,
+    });
     onClose();
   };
 
@@ -2429,8 +2870,16 @@ function CastSpellModal({
           {T("ccCastIntro").split("{name}")[1] ?? ""}
           {!isCantrip && ` ${T("ccCastIntroLevel")}`}
         </p>
-        {!isCantrip && (
+        <ResourceSpentField
+          kind="spell"
+          baseLevel={baseLevel}
+          value={spend}
+          onChange={setSpend}
+          disabled={sending}
+        />
+        {!isCantrip && !usingSlot && (
           <div class="cast-field">
+            <div class="cc-modal-hint">{T("ccCastLevelLabel")}</div>
             <select
               class="cc-edit-text"
               value={String(castLevel)}
@@ -2462,7 +2911,7 @@ function CastSpellModal({
           />
           {noSave && <div class="cast-dc-note">{T("ccCastDcNoSave")}</div>}
         </div>
-        <SpendField value={spend} onChange={setSpend} disabled={sending} />
+
         <div class="cc-modal-foot">
           <button class="cc-btn" onClick={onClose} disabled={sending}>
             {T("ccCancel")}
@@ -2554,6 +3003,60 @@ function SpellFieldsEditor({
   );
 }
 
+function SpellSlotsBlock({ res }: { res: RtResource }) {
+  useEffect(() => { ensureStyles(); }, []);
+  const icon = ICON_LIBRARY[res.icon as IconId] ?? ICON_LIBRARY.gem;
+  const canUse = _canUseResources;
+  const levels = (res.slots ?? []).map((sl, lv) => ({ ...sl, lv })).filter((sl) => sl.max > 0);
+  const setSlot = (lv: number, value: number) => {
+    if (!canUse) return;
+    window.parent.postMessage(
+      { type: "cc-set-slot", cardId: getQS("card") || "", resourceId: res.id, level: lv, value },
+      "*",
+    );
+  };
+  return (
+    <div class="rt-row spell-slots-res">
+      <div class="rt-row-head">
+        <div class="rt-row-name">{res.name || T("ccSlotsShort")}</div>
+        <div class="rt-row-meta">{res.current} / {res.max}</div>
+        {canUse && (
+          <button class="rt-row-edit" type="button" title={T("rpEdit")} onClick={() => openResourceEditor(res.id)}>
+            ⚙
+          </button>
+        )}
+      </div>
+      <div class="rt-pills">
+        {levels.length ? (
+          levels.map((sl) => (
+            <div class="rt-slot-lv" key={sl.lv}>
+              <span class="rt-slot-lbl">{T("rpSlotLevel").replace("{n}", String(sl.lv + 1))}</span>
+              <span class="rt-slot-pips">
+                {Array.from({ length: sl.max }).map((_, idx) => {
+                  const pos = idx + 1;
+                  return (
+                    <span
+                      key={pos}
+                      class={`rt-pill rt-pill-icon ${pos <= sl.current ? "full" : "spent"}`}
+                      style={{ cursor: canUse ? "pointer" : "default" }}
+                      onClick={() => setSlot(sl.lv, pos === sl.current ? pos - 1 : pos)}
+                      onContextMenu={(e: any) => { e.preventDefault(); setSlot(sl.lv, sl.max); }}
+                      dangerouslySetInnerHTML={{ __html: icon }}
+                    />
+                  );
+                })}
+              </span>
+              <span class="rt-slot-num">{sl.current}/{sl.max}</span>
+            </div>
+          ))
+        ) : (
+          <span class="rt-pill-empty">{T("rpMaxZero")}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SpellsSection({ data }: { data: CharacterData }) {
   const { editing, onPatch } = useEdit();
   const sp = data.spellcasting || {};
@@ -2566,6 +3069,11 @@ function SpellsSection({ data }: { data: CharacterData }) {
   const prepared: any[] = Array.isArray(sp.prepared) ? sp.prepared : [];
 
   const [openSpell, setOpenSpell] = useState<string | null>(null);
+  // Like the hit dice cell: a "+" to create the token's "Spell slots"
+  // resource when it doesn't have one yet.
+  const { list: resList, bound: resBound } = useCardResources();
+  const slotRes = resList?.find((r) => r.type === "spellSlots");
+  const needSlotRes = resList !== null && resBound && !slotRes;
   // 2026-09 — spell-cast prompt (item #4 of the room-chat spec): which
   // spell the "✨" button on a row is currently confirming a cast for.
   // null = no modal open.
@@ -2631,15 +3139,6 @@ function SpellsSection({ data }: { data: CharacterData }) {
     const next = [...cur];
     next[idx] = { ...next[idx], ...patch };
     onPatch({ spellcasting: { ...sp, [slot]: next } });
-  };
-  const setSlot = (lv: number, which: "current" | "max", v: number) => {
-    const cur = (slots as any)[String(lv)] || {};
-    onPatch({
-      spellcasting: {
-        ...sp,
-        spell_slots: { ...(slots || {}), [String(lv)]: { ...cur, [which]: v } },
-      },
-    });
   };
 
   if (
@@ -2774,6 +3273,19 @@ function SpellsSection({ data }: { data: CharacterData }) {
     <div class="sec">
       <div class="sec-h">
         <span class="sec-h-title">{T("ccSecSpells")}</span>
+        {resList !== null && !resBound && (
+          <span class="need-token" title={T("ccSlotsNoToken")}>{T("ccNeedToken")}</span>
+        )}
+        {needSlotRes && (
+          <button
+            class="cc-btn stat-create"
+            type="button"
+            title={T("ccCreateSlotsRes")}
+            onClick={() => requestSpecialResource(getQS("card") || "", data, "spellSlots")}
+          >
+            + {T("ccSlotsShort")}
+          </button>
+        )}
         {(sp.spellcasting_ability || sp.save_dc) && (
           <span class="sec-h-meta">
             {sp.spellcasting_ability &&
@@ -2787,65 +3299,9 @@ function SpellsSection({ data }: { data: CharacterData }) {
         )}
       </div>
       <div class="sec-body">
-        {/* Spell slots */}
-        <div class="spell-slots">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((lv) => {
-            const s = slots[String(lv)];
-            const has = s && (s.max ?? 0) > 0;
-            if (editing) {
-              // 2026-05-14 (#14 follow-up) — slot edit. Two tiny inputs
-              // (current / max). Setting max=0 effectively retires the
-              // level so the panel hides it in view mode again.
-              return (
-                <div class={`slot ${has ? "has-slots" : ""}`}>
-                  <div class="slot-lv">
-                    {lv}
-                    {T("ccRing")}
-                  </div>
-                  <input
-                    class="cc-edit-num"
-                    type="number"
-                    style={{
-                      width: "100%",
-                      textAlign: "center",
-                      fontSize: "13px",
-                    }}
-                    value={s?.current ?? 0}
-                    onInput={(e: any) => {
-                      const n = parseInt(e.target.value, 10);
-                      if (Number.isFinite(n)) setSlot(lv, "current", n);
-                    }}
-                  />
-                  <input
-                    class="cc-edit-num"
-                    type="number"
-                    style={{
-                      width: "100%",
-                      textAlign: "center",
-                      fontSize: "11px",
-                      opacity: 0.8,
-                    }}
-                    value={s?.max ?? 0}
-                    onInput={(e: any) => {
-                      const n = parseInt(e.target.value, 10);
-                      if (Number.isFinite(n)) setSlot(lv, "max", n);
-                    }}
-                  />
-                </div>
-              );
-            }
-            return (
-              <div class={`slot ${has ? "has-slots" : ""}`}>
-                <div class="slot-lv">
-                  {lv}
-                  {T("ccRing")}
-                </div>
-                <div class="slot-cur">{has ? (s.current ?? 0) : "—"}</div>
-                <div class="slot-max">{has ? `/${s.max}` : ""}</div>
-              </div>
-            );
-          })}
-        </div>
+        {/* The token's "Spell slots" resource (special: not listed in
+            the Resources tab). Pips spend / refill a level. */}
+        {slotRes && <SpellSlotsBlock res={slotRes} />}
 
         {/* 2026-05-15 — Sorcery points block removed per user spec
             ("术法点 not used in our table"). Field stays parsed on
@@ -3161,15 +3617,35 @@ function FeaturesSection({ data }: { data: CharacterData }) {
   // 2026-05-14 (#14) — edit hooks. Each block targets a different
   // slot in data.features. We expose a single add / remove / patch
   // triad that the FeatureBlock components call with their slot key.
+  // "+" opens the feature picker (library search, like spells).
+  const [pickFor, setPickFor] = useState<{ slot: string; ev?: Event } | null>(null);
   const addItem = (slot: string, ev?: Event) => {
+    setPickFor({ slot, ev });
+  };
+  const commitFeaturePick = (picked: PickedFeature) => {
+    if (!pickFor) return;
+    const { slot, ev } = pickFor;
     const cur = Array.isArray((f as any)[slot]) ? (f as any)[slot] : [];
-    onPatch({
-      features: {
-        ...f,
-        [slot]: [...cur, { name: T("ccNewEntry"), description: "" }],
-      },
-    });
+    const entry: Record<string, any> = { name: picked.name, description: picked.description };
+    if (picked.level != null) entry.level = picked.level;
+    onPatch({ features: { ...f, [slot]: [...cur, entry] } });
+    setPickFor(null);
     smoothScrollToNewRow(ev, ".feat");
+  };
+  // Where the picker opens for each list (null = list of types).
+  const START: Record<string, string | null> = {
+    class_features: "class",
+    fighting_style_feats: "c29",
+    feats: "c7",
+    special_abilities: null,
+    race_features: null,
+  };
+  const TITLE: Record<string, Parameters<typeof T>[0]> = {
+    class_features: "ccClassFeatures",
+    race_features: "ccRaceFeatures",
+    fighting_style_feats: "ccFightingStyle",
+    special_abilities: "ccSpecialAbilities",
+    feats: "ccFeats",
   };
   const removeItem = (slot: string, idx: number) => {
     const cur = Array.isArray((f as any)[slot]) ? (f as any)[slot] : [];
@@ -3244,6 +3720,14 @@ function FeaturesSection({ data }: { data: CharacterData }) {
           onPatchItem={patchItem}
         />
       </div>
+      {pickFor && (
+        <FeaturePickModal
+          title={`${T("ccAddPrefix")}${T(TITLE[pickFor.slot] ?? "ccTabFeatures")}`}
+          start={START[pickFor.slot] ?? null}
+          onCancel={() => setPickFor(null)}
+          onPick={commitFeaturePick}
+        />
+      )}
     </div>
   );
 }
@@ -4290,10 +4774,76 @@ function App() {
   const loadGenRef = useRef(0);
   const fetchAbortRef = useRef<AbortController | null>(null);
   _lang = lang;
+  _canUseResources = isGM || canEdit;
 
   useEffect(() => onLangChange((l) => setLang((l as Language) ?? "zh")), []);
 
   const [showOwnersModal, setShowOwnersModal] = useState(false);
+
+  // Reopened after a "minimize" (cast, feature use, roll, short rest):
+  // come back on the same tab and scroll position. The view is saved
+  // continuously per card; the host sets FS_RESTORE_KEY when it
+  // minimizes.
+  const restoringRef = useRef(false);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  useEffect(() => {
+    if (!cardId) return;
+    try {
+      if (localStorage.getItem(FS_RESTORE_KEY) === cardId) {
+        restoringRef.current = true;
+        const v = JSON.parse(localStorage.getItem(fsViewKey(cardId)) || "null");
+        if (v && typeof v.tab === "string" && TABS.some((tb) => tb.key === v.tab)) setTab(v.tab as TabKey);
+      }
+    } catch {}
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onScroll = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => saveFsView(cardId, tabRef.current), 200);
+    };
+    document.addEventListener("scroll", onScroll, true);
+    return () => document.removeEventListener("scroll", onScroll, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardId]);
+  useEffect(() => { if (cardId && data) saveFsView(cardId, tab); }, [tab]);
+  useEffect(() => {
+    if (!data || !restoringRef.current) return;
+    restoringRef.current = false;
+    try { localStorage.removeItem(FS_RESTORE_KEY); } catch {}
+    setTimeout(() => {
+      try {
+        const v = JSON.parse(localStorage.getItem(fsViewKey(cardId)) || "null");
+        const body = document.querySelector<HTMLElement>(".cc-body");
+        const main = document.querySelector<HTMLElement>(".cc-main");
+        if (body && typeof v?.body === "number") body.scrollTop = v.body;
+        if (main && typeof v?.main === "number") main.scrollTop = v.main;
+      } catch {}
+    }, 80);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  // Card spell slots / hit dice → the bound token's special resources
+  // (created once, by the host, if the token doesn't have them yet).
+  const migratedRef = useRef(false);
+  useEffect(() => {
+    if (data) {
+      const hp = data.core_stats?.hp ?? {};
+      const con = (data as any).abilities?.con ?? {};
+      const score = Number(con.total ?? con.score);
+      _hitDiceCtx = {
+        name: data.identity?.display_name || data.identity?.character_name || "",
+        conMod: typeof con.modifier === "number" ? con.modifier : Number.isFinite(score) ? Math.floor((score - 10) / 2) : 0,
+        hpCurrent: typeof hp.current === "number" ? hp.current : null,
+        hpMax: typeof hp.max === "number" ? hp.max : null,
+      };
+    }
+  }, [data]);
+  useEffect(() => {
+    if (!data || migratedRef.current) return;
+    migratedRef.current = true;
+    requestSpecialResource(cardId, data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   // Optimistic-concurrency bookkeeping for saves (see checkServerConflict).
   const loadedSavedAtRef = useRef<string | null>(null);
@@ -5321,7 +5871,7 @@ function App() {
 // modal helpers built for the SDK-having pages, since this is a Preact
 // component tree, not a plain-DOM page.
 
-type RtResourceType = "count" | "bar" | "number" | "dieRoll" | "charges";
+type RtResourceType = "count" | "bar" | "number" | "dieRoll" | "charges" | "spellSlots" | "hitDice";
 
 interface RtResource {
   id: string;
@@ -5332,6 +5882,14 @@ interface RtResource {
   icon?: string;
   chargesFormula?: string | null;
   recovery?: string | null;
+  /** hitDice: die size ("d10"). */
+  dieInfo?: string | null;
+  /** spellSlots: index 0 = 1st level. */
+  slots?: Array<{ current: number; max: number }>;
+  /** hitDice: one pool per die size. */
+  pools?: Array<{ die: string; current: number; max: number }>;
+  forSpells?: boolean;
+  forFeatures?: boolean;
 }
 
 interface RtRollRow {
@@ -5427,11 +5985,21 @@ function ResourcesSection({
     );
   };
 
+  // Spell slot pip → the host writes that level.
+  const setSlot = (r: RtResource, level: number, value: number) => {
+    if (!canUse) return;
+    window.parent.postMessage(
+      { type: "cc-set-slot", cardId, resourceId: r.id, level, value },
+      "*",
+    );
+  };
+
   const runRecovery = (type: "SR" | "LR" | "DW" | "DS") => {
     if (!canUse || recoveryBusy) return;
     setRecoveryBusy(true);
     window.parent.postMessage(
-      { type: "cc-run-card-recovery", cardId, recoveryType: type },
+      // Short rest: the host opens the hit dice window with these.
+      { type: "cc-run-card-recovery", cardId, recoveryType: type, hitDice: _hitDiceCtx },
       "*",
     );
     // cc-recovery-needs-lr-confirm / cc-recovery-needs-roll / a fresh
@@ -5577,12 +6145,14 @@ function ResourcesSection({
         {resources === null && (
           <div style={{ padding: "16px", opacity: 0.6 }}>...</div>
         )}
-        {resources?.length === 0 && (
+        {resources?.filter((r) => r.type !== "spellSlots" && r.type !== "hitDice").length === 0 && (
           <div style={{ padding: "16px", opacity: 0.6 }}>
             {T("rtNoResources")}
           </div>
         )}
-        {resources?.map((r) => {
+        {/* Spell slots / hit dice are special: shown in the Spells
+            section and the Hit Dice cell instead. */}
+        {resources?.filter((r) => r.type !== "spellSlots" && r.type !== "hitDice").map((r) => {
           const max = Math.max(0, Math.floor(r.max));
           const cur = Math.max(0, Math.min(max, Math.floor(r.current)));
           const icon = ICON_LIBRARY[r.icon as IconId] ?? ICON_LIBRARY.gem;
@@ -5594,6 +6164,7 @@ function ResourcesSection({
                 </div>
                 <div class="rt-row-meta">
                   {r.current} / {r.max}
+                  {r.type === "hitDice" && r.dieInfo ? ` · ${r.dieInfo}` : ""}
                 </div>
                 {canUse && (
                   <button
@@ -5607,8 +6178,38 @@ function ResourcesSection({
                 )}
               </div>
               <div class="rt-pills">
+                {r.type === "spellSlots" &&
+                  ((r.slots ?? []).some((sl) => sl.max > 0) ? (
+                    (r.slots ?? []).map((sl, lv) =>
+                      sl.max <= 0 ? null : (
+                        <div class="rt-slot-lv" key={lv}>
+                          <span class="rt-slot-lbl">{T("rpSlotLevel").replace("{n}", String(lv + 1))}</span>
+                          <span class="rt-slot-pips">
+                            {Array.from({ length: sl.max }).map((_, idx) => {
+                              const pos = idx + 1;
+                              return (
+                                <span
+                                  key={pos}
+                                  class={`rt-pill rt-pill-icon ${pos <= sl.current ? "full" : "spent"}`}
+                                  style={{ cursor: canUse ? "pointer" : "default" }}
+                                  onClick={() =>
+                                    canUse && setSlot(r, lv, pos === sl.current ? pos - 1 : pos)
+                                  }
+                                  dangerouslySetInnerHTML={{ __html: icon }}
+                                />
+                              );
+                            })}
+                          </span>
+                          <span class="rt-slot-num">{sl.current}/{sl.max}</span>
+                        </div>
+                      ),
+                    )
+                  ) : (
+                    <span class="rt-pill-empty">{T("rpMaxZero")}</span>
+                  ))}
                 {(r.type === "count" ||
                   r.type === "dieRoll" ||
+                  r.type === "hitDice" ||
                   r.type === "charges") &&
                   (max > 0 ? (
                     Array.from({ length: max }).map((_, idx) => {

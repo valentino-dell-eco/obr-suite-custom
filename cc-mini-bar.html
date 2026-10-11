@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Character sheet</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;width:100%;overflow:hidden;background:transparent;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;color:#e6e8ee}
+.bar{height:100%;display:flex;align-items:center;gap:4px;padding:0 4px 0 6px;
+  background:rgba(15,20,36,0.96);border:1px solid rgba(245,166,35,0.55);border-radius:999px;
+  box-shadow:0 6px 18px rgba(0,0,0,0.45)}
+.open{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;border:none;border-radius:999px;
+  background:transparent;color:#ffe2b0;font:inherit;font-size:12.5px;font-weight:800;cursor:pointer;text-align:left}
+.open:hover{background:rgba(245,166,35,0.16)}
+.open svg{flex:none;width:16px;height:16px}
+.open .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.open .hint{flex:none;margin-left:auto;font-size:10.5px;font-weight:600;color:#9aa0b3}
+.x{flex:none;width:26px;height:26px;border-radius:50%;border:none;background:transparent;color:rgba(255,255,255,0.5);
+  font-size:13px;font-weight:800;cursor:pointer}
+.x:hover{background:rgba(255,255,255,0.1);color:#fff}
+</style>
+</head>
+<body>
+<div class="bar">
+  <button class="open" id="open" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+    <span class="nm" id="nm"></span>
+    <span class="hint" id="hint"></span>
+  </button>
+  <button class="x" id="x" type="button">✕</button>
+</div>
+<script type="module" src="/src/cc-mini-bar-page.ts"></script>
+</body>
+</html>

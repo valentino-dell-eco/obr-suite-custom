@@ -19,10 +19,22 @@ import {
 } from "./modules/characterCards/cast-core";
 import {
   cleanSpend,
+  eligibleResources,
+  bestNameMatch,
+  hasSpellSlots,
   resourceOptionLabel,
+  slotOptions,
   spendResource,
+  spendSpellSlot,
   tokenResources,
+  type SlotOption,
 } from "./modules/characterCards/spend";
+import {
+  amountFromClick,
+  ensureSpendVisualStyles,
+  spendVisualHtml,
+} from "./modules/characterCards/spend-visual";
+import type { Resource } from "./modules/resourceTracker/types";
 import { sendChat } from "./modules/roomChat/send";
 import { BC_CHAT_OPEN, type ChatCast } from "./modules/roomChat/types";
 
@@ -71,6 +83,7 @@ const lvlEl = $("lvl");
 const metaEl = $("meta");
 const descEl = $("desc");
 const levelField = $("levelField");
+const levelLbl = $("levelLbl");
 const levelSel = $<HTMLSelectElement>("level");
 const dcField = $("dcField");
 const dcInput = $<HTMLInputElement>("dc");
@@ -79,14 +92,31 @@ const dcNote = $("dcNote");
 const resField = $("resField");
 const resLbl = $("resLbl");
 const resSel = $<HTMLSelectElement>("res");
-const resAmt = $<HTMLInputElement>("resAmt");
+const resVisual = $("resVisual");
 const resNote = $("resNote");
+const slotField = $("slotField");
+const slotLbl = $("slotLbl");
+const slotSel = $<HTMLSelectElement>("slot");
+const slotVisual = $("slotVisual");
+const slotNote = $("slotNote");
 const introEl = $("intro");
 const castBtn = $<HTMLButtonElement>("cast");
 const cancelBtn = $<HTMLButtonElement>("cancel");
 
+/** "Resource spent" entry meaning "a spell slot". */
+const SLOTS = "__slots__";
+
 let detail: SpellDetail | null | undefined = undefined;
 let sending = false;
+
+// What will be spent: "" = nothing, SLOTS = a spell slot, else a resource id.
+let all: Resource[] = [];
+let eligible: Resource[] = [];
+let slotOpts: SlotOption[] = [];
+let slotsAllowed = false;
+let choice = "";
+let amount = 1;
+let slotLevel = 0;
 
 function refreshDcLabel(): void {
   const n = parseInt(dcInput.value, 10);
@@ -101,40 +131,106 @@ function refreshDcLabel(): void {
   }
 }
 
-function refreshAmount(): void {
-  resAmt.disabled = !resSel.value || sending;
+function option(value: string, text: string, disabled = false): HTMLOptionElement {
+  const o = document.createElement("option");
+  o.value = value;
+  o.textContent = text;
+  o.disabled = disabled;
+  return o;
 }
 
-/** Fill the resource select from the bound token. */
+function slotLabel(o: { level: number; current: number; max: number }): string {
+  return tt("ccSlotOption")
+    .replace("{n}", String(o.level))
+    .replace("{cur}", String(o.current))
+    .replace("{max}", String(o.max));
+}
+
+function chosenResource(): Resource | undefined {
+  return choice && choice !== SLOTS ? eligible.find((r) => r.id === choice) : undefined;
+}
+
+function setNote(el: HTMLElement, text: string): void {
+  el.textContent = text;
+  el.classList.toggle("hidden", !text);
+}
+
+/** Redraw the "resource spent" block, the slot block and the level row. */
+function paint(): void {
+  const usingSlots = choice === SLOTS;
+  // Resource spent
+  resSel.value = choice;
+  const r = chosenResource();
+  if (r) {
+    amount = Math.max(1, Math.min(Math.max(1, r.current), amount));
+    resVisual.innerHTML = spendVisualHtml(r, amount, { titleSpend: tt("ccSpendClickHint") });
+  } else {
+    resVisual.innerHTML = "";
+  }
+  // Spell slot level
+  slotField.classList.toggle("hidden", !usingSlots);
+  if (usingSlots) {
+    slotSel.value = String(slotLevel);
+    const o = slotOpts.find((x) => x.level === slotLevel);
+    const res = all.find((x) => x.type === "spellSlots");
+    slotVisual.innerHTML = o
+      ? spendVisualHtml({ type: "slot", icon: res?.icon, current: o.current, max: o.max }, 1, { interactive: false })
+      : "";
+    setNote(
+      slotNote,
+      !isFeature && o && o.level > baseLevel ? tt("ccSlotUpcast").replace("{n}", String(o.level)) : "",
+    );
+  }
+  // Cast level: only when no spell slot decides it.
+  levelField.classList.toggle("hidden", isFeature || baseLevel === 0 || usingSlots);
+}
+
+/** Load the bound token's resources and pick the default: spell slots
+ *  first (spells, when one is left), else the first eligible resource,
+ *  else nothing. */
 async function loadResources(): Promise<void> {
   resField.classList.remove("hidden");
   resLbl.textContent = tt("ccSpendLabel");
-  resAmt.title = tt("ccSpendAmount");
+  slotLbl.textContent = tt("ccSlotLevelLabel");
   resSel.innerHTML = "";
-  const none = document.createElement("option");
-  none.value = "";
-  none.textContent = tt("ccSpendNone");
-  resSel.appendChild(none);
+  resSel.appendChild(option("", tt("ccSpendNone")));
   if (!itemId) {
     resSel.disabled = true;
-    resNote.textContent = tt("ccSpendNoToken");
-    resNote.classList.remove("hidden");
-    refreshAmount();
+    setNote(resNote, tt("ccSpendNoToken"));
+    paint();
     return;
   }
-  const list = await tokenResources(itemId);
-  for (const r of list) {
-    const o = document.createElement("option");
-    o.value = r.id;
-    o.textContent = resourceOptionLabel(r);
-    resSel.appendChild(o);
+  all = await tokenResources(itemId);
+  eligible = eligibleResources(all, isFeature ? "feature" : "spell");
+  slotsAllowed = hasSpellSlots(all) && (isFeature || baseLevel > 0);
+  slotOpts = slotsAllowed ? slotOptions(all, isFeature ? 1 : baseLevel) : [];
+
+  if (slotsAllowed) {
+    resSel.appendChild(
+      option(SLOTS, tt(slotOpts.length ? "ccSlotsChoice" : "ccSlotsChoiceEmpty"), !slotOpts.length),
+    );
+    slotSel.innerHTML = "";
+    for (const o of slotOpts) slotSel.appendChild(option(String(o.level), slotLabel(o)));
   }
-  if (!list.length) {
-    resSel.disabled = true;
-    resNote.textContent = tt("ccSpendNoResources");
-    resNote.classList.remove("hidden");
+  for (const r of eligible) resSel.appendChild(option(r.id, resourceOptionLabel(r)));
+
+  if (!isFeature && slotOpts.length) {
+    choice = SLOTS;
+    slotLevel = slotOpts[0].level;
+  } else if (isFeature) {
+    // Features: only the resource named like the feature ("Wild Shape"
+    // → "Wild Shape") is preselected; otherwise nothing is spent.
+    choice = bestNameMatch(eligible, displayName)?.id ?? "";
+    amount = 1;
+  } else if (eligible.length) {
+    choice = eligible[0].id;
+    amount = 1;
+  } else {
+    choice = "";
   }
-  refreshAmount();
+  if (isFeature && slotOpts.length) slotLevel = slotOpts[0].level;
+  if (!eligible.length && !slotsAllowed) setNote(resNote, tt("ccSpendNoResources"));
+  paint();
 }
 
 function close(): void {
@@ -148,6 +244,7 @@ async function confirm(): Promise<void> {
   cancelBtn.disabled = true;
   castBtn.textContent = tt(isFeature ? "ccUseSending" : "ccCastSending");
 
+  const usingSlot = choice === SLOTS && slotLevel > 0;
   let c: ChatCast;
   if (isFeature) {
     c = buildFeatureUse({
@@ -165,7 +262,7 @@ async function confirm(): Promise<void> {
     c = buildCast({
       spellName: displayName,
       baseLevel,
-      castLevel: parseInt(levelSel.value, 10) || baseLevel,
+      castLevel: usingSlot ? slotLevel : parseInt(levelSel.value, 10) || baseLevel,
       dcInput: Number.isFinite(n) ? n : null,
       cardDc,
       detail: d,
@@ -173,14 +270,19 @@ async function confirm(): Promise<void> {
     });
   }
 
-  const choice = cleanSpend({ resourceId: resSel.value, amount: resAmt.value });
-  if (choice && itemId) {
-    try {
-      const spent = await spendResource(itemId, choice);
+  try {
+    if (itemId && usingSlot) {
+      const spent = await spendSpellSlot(itemId, slotLevel);
       if (spent) c.spent = spent;
-    } catch (e) {
-      console.warn("[spell-cast] spend resource failed", e);
+    } else if (itemId && chosenResource()) {
+      const pick = cleanSpend({ resourceId: choice, amount });
+      if (pick) {
+        const spent = await spendResource(itemId, pick);
+        if (spent) c.spent = spent;
+      }
     }
+  } catch (e) {
+    console.warn("[spell-cast] spend failed", e);
   }
 
   try {
@@ -216,7 +318,24 @@ OBR.onReady(() => {
   castBtn.addEventListener("click", () => void confirm());
   cancelBtn.addEventListener("click", close);
   $("close").addEventListener("click", close);
-  resSel.addEventListener("change", refreshAmount);
+  ensureSpendVisualStyles();
+  resSel.addEventListener("change", () => {
+    choice = resSel.value;
+    amount = 1;
+    if (choice === SLOTS && !slotOpts.some((o) => o.level === slotLevel)) slotLevel = slotOpts[0]?.level ?? 0;
+    paint();
+  });
+  slotSel.addEventListener("change", () => {
+    slotLevel = parseInt(slotSel.value, 10) || 0;
+    paint();
+  });
+  resVisual.addEventListener("click", (e) => {
+    const r = chosenResource();
+    if (!r || sending) return;
+    const n = amountFromClick(e.target, r, amount);
+    if (n != null) { amount = n; paint(); }
+  });
+  levelLbl.textContent = tt("ccCastLevelLabel");
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !sending) close();
     if (e.key === "Enter" && !sending && (e.target as HTMLElement)?.tagName !== "SELECT") void confirm();

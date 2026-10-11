@@ -32,7 +32,9 @@ import {
   announceRestInChat,
 } from "./recovery";
 import { readResources, updateResource } from "../resourceTracker/storage";
-import { cleanSpend, spendResource } from "./spend";
+import { cleanSpend, setSpellSlotLevel, spendResource, spendSpellSlot } from "./spend";
+import { migrateSpecialResources } from "./special-resources";
+import { openHitDiceModal } from "./hit-dice";
 import { PLUGIN_ID } from "../resourceTracker/types";
 import { BC_OPEN_EDIT, broadcastChanged } from "../resourceTracker/panel";
 import {
@@ -99,6 +101,33 @@ const PANEL_MODAL_ID = "com.obr-suite/cc-panel";
 // synchronous localStorage write is reliable on unload; the async OBR
 // broadcast this replaced was not — the "click-twice-to-reopen" bug.
 const PANEL_OPEN_KEY = "com.obr-suite/cc-panel-open";
+
+// "Minimize" the sheet after an action that produces something to look
+// at on the map / in chat (spell cast, feature use, a roll fired from
+// the sheet, short rest with hit dice): the panel modal closes and the
+// background shows a small bar with the character's name; clicking it
+// reopens the panel on the same card, tab and scroll position.
+const BC_CC_MINIMIZED = "com.obr-suite/cc-minimized";
+const FS_RESTORE_KEY = "obr-suite/cc-fs-restore";
+const BC_QUICK_ROLL_FIRED = "com.obr-suite/dice-quick-roll";
+/** A roll was started from the sheet at this time (0 = none). */
+let minimizeOnRoll = 0;
+let minimizeOnRollCard = "";
+
+async function minimizeSheet(cardId: string): Promise<void> {
+  const card = cards.find((c) => c.id === cardId);
+  try { localStorage.setItem(FS_RESTORE_KEY, cardId); } catch {}
+  saveState();
+  try {
+    await OBR.broadcast.sendMessage(
+      BC_CC_MINIMIZED,
+      { name: card?.name ?? "" },
+      { destination: "LOCAL" },
+    );
+  } catch {}
+  try { localStorage.removeItem(PANEL_OPEN_KEY); } catch {}
+  try { await OBR.modal.close(PANEL_MODAL_ID); } catch {}
+}
 // const API_BASE = "https://obr.dnd.center/api/character";
 const API_BASE = "/api-dnd-center/api/character";
 const SCENE_META_KEY = "com.character-cards/list";
@@ -1225,6 +1254,8 @@ async function sendFreshResources(cardId: string): Promise<void> {
 async function runFullscreenCardRecovery(
   cardId: string,
   pressed: RecoveryType,
+  /** From the sheet: name / CON mod / card HP for the hit dice window. */
+  hitDice?: unknown,
 ): Promise<void> {
   const card = cards.find((c) => c.id === cardId);
   const itemId = card?.boundedTokenId;
@@ -1259,6 +1290,21 @@ async function runFullscreenCardRecovery(
   const needsRollByItem = await writeRecoveryPassForTokens([itemId], types);
   await sendFreshResources(cardId);
 
+  // Short rest → offer to spend hit dice (only if the token has some).
+  let hdOpened = false;
+  if (pressed === "SR") {
+    const h = (hitDice && typeof hitDice === "object" ? hitDice : {}) as Record<string, unknown>;
+    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    const opened = await openHitDiceModal({
+      itemId,
+      name: typeof h.name === "string" && h.name ? h.name : card.name,
+      conMod: num(h.conMod) ?? 0,
+      hpCurrent: num(h.hpCurrent),
+      hpMax: num(h.hpMax),
+    });
+    hdOpened = opened;
+  }
+
   const resources = needsRollByItem.get(itemId) ?? [];
   if (resources.length > 0) {
     postToFullscreenIframe({
@@ -1285,6 +1331,11 @@ async function runFullscreenCardRecovery(
     } catch (e) {
       console.warn("[cc-panel] recovery notice broadcast failed", e);
     }
+  }
+  // Hit dice window is open on its own → minimize the sheet (unless
+  // the sheet still has a charges roll list to show).
+  if (hdOpened && (needsRollByItem.get(itemId) ?? []).length === 0) {
+    void minimizeSheet(cardId);
   }
 }
 
@@ -1382,6 +1433,37 @@ window.addEventListener("message", (event) => {
       })();
       break;
     }
+    case "cc-migrate-special": {
+      // The sheet asks for the card's spell slots / hit dice to become
+      // the bound token's special resources (once, or `force` = the
+      // sheet's "Create" button).
+      const card = cards.find((c) => c.id === msg.cardId);
+      const itemId = card?.boundedTokenId;
+      if (!itemId) break;
+      const force = msg.force === "spellSlots" || msg.force === "hitDice" ? msg.force : undefined;
+      void (async () => {
+        const added = await migrateSpecialResources(
+          itemId,
+          { spellcasting: { spell_slots: msg.spell_slots }, core_stats: { hit_dice: msg.hit_dice } },
+          force,
+        );
+        if (added || force) await sendFreshResources(msg.cardId);
+      })();
+      break;
+    }
+    case "cc-set-slot": {
+      // Spell-slot pip clicked in the sheet's Resources tab.
+      const card = cards.find((c) => c.id === msg.cardId);
+      const itemId = card?.boundedTokenId;
+      const lv = Math.floor(Number(msg.level));
+      const value = Math.floor(Number(msg.value));
+      if (!itemId || typeof msg.resourceId !== "string" || !(lv >= 0 && lv < 9) || !Number.isFinite(value)) break;
+      void (async () => {
+        await setSpellSlotLevel(itemId, msg.resourceId, lv, value);
+        await sendFreshResources(msg.cardId);
+      })();
+      break;
+    }
     case "cc-open-resource-edit": {
       const card = cards.find((c) => c.id === msg.cardId);
       const itemId = card?.boundedTokenId;
@@ -1413,7 +1495,7 @@ window.addEventListener("message", (event) => {
     case "cc-run-card-recovery": {
       const pressed = msg.recoveryType as RecoveryType | undefined;
       if (!pressed) break;
-      void runFullscreenCardRecovery(msg.cardId, pressed);
+      void runFullscreenCardRecovery(msg.cardId, pressed, msg.hitDice);
       break;
     }
     case "cc-recovery-lr-confirmed": {
@@ -1852,6 +1934,12 @@ function relaySuiteState(target?: Window | null): void {
 }
 
 OBR.onReady(async () => {
+  // A roll started from the sheet has fired → minimize the sheet.
+  OBR.broadcast.onMessage(BC_QUICK_ROLL_FIRED, () => {
+    if (!minimizeOnRoll || Date.now() - minimizeOnRoll > 120_000) return;
+    minimizeOnRoll = 0;
+    if (minimizeOnRollCard) void minimizeSheet(minimizeOnRollCard);
+  });
   startSceneSync();
   void refreshSuiteState()
     .catch(() => {})
@@ -2291,6 +2379,13 @@ OBR.onReady(async () => {
 
   // Initial load + react to scene metadata changes
   await refreshFromScene();
+  // Reopen the card that was selected when the panel last closed (e.g.
+  // the sheet was minimized after an action) instead of the empty
+  // "Select a character card" placeholder.
+  if (current.type === "card") {
+    const id = current.id;
+    if (cards.some((c) => c.id === id)) selectCard(id);
+  }
   OBR.scene.onMetadataChange((meta) => {
     if (SCENE_META_KEY in meta) refreshFromScene();
   });
@@ -2331,6 +2426,12 @@ OBR.onReady(async () => {
       return;
     }
     if (e.data?.type === "cc-roll-dice") {
+      // Minimize once the roll actually fires (BC_QUICK_ROLL below),
+      // not when the advantage / disadvantage popup opens.
+      if (current.type === "card") {
+        minimizeOnRoll = Date.now();
+        minimizeOnRollCard = current.id;
+      }
       const payload = e.data.payload as
         | { expression?: string; label?: string }
         | undefined;
@@ -2380,21 +2481,29 @@ OBR.onReady(async () => {
       const spellName = typeof cast?.spellName === "string" ? cast.spellName.trim() : "";
       if (cast && spellName) {
         const spend = cleanSpend(e.data.payload?.spend);
+        const slotRaw = Math.floor(Number(e.data.payload?.slot));
+        const slot = slotRaw >= 1 && slotRaw <= 9 ? slotRaw : null;
         const cardId = String(e.data.payload?.cardId ?? "");
         void (async () => {
           const out: ChatCast = { ...cast, spellName };
           delete out.spent; // only the host fills this in
           const itemId = cards.find((c) => c.id === cardId)?.boundedTokenId;
-          if (spend && typeof itemId === "string" && itemId) {
+          if ((spend || slot) && typeof itemId === "string" && itemId) {
             try {
-              const spent = await spendResource(itemId, spend);
+              // A spell slot (spell row / feature paid with a slot) or
+              // an eligible resource — never both.
+              const spent = slot
+                ? await spendSpellSlot(itemId, slot)
+                : await spendResource(itemId, spend!);
               if (spent) out.spent = spent;
             } catch (err) {
-              console.warn("[cc-panel] spend resource failed", err);
+              console.warn("[cc-panel] spend failed", err);
             }
             void sendFreshResources(cardId);
           }
           await sendChat({ scope: "all", text: "", cast: out });
+          // Card is in chat now — get the sheet out of the way.
+          if (cardId) void minimizeSheet(cardId);
         })();
       }
     }

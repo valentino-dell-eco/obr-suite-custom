@@ -162,6 +162,8 @@ export default defineConfig(({ command }) => ({
           "status-tester-library.html",
         ),
         "spell-cast": resolve(__dirname, "spell-cast.html"),
+        "hit-dice": resolve(__dirname, "hit-dice.html"),
+        "cc-mini-bar": resolve(__dirname, "cc-mini-bar.html"),
         "chase-tracker-pursuer": resolve(
           __dirname,
           "chase-tracker-pursuer.html",

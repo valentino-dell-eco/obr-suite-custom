@@ -241,7 +241,52 @@ function isAutoInfoEnabled(): boolean {
 // iframe matches Paper exactly and nothing scrolls.
 const PANEL_SIDE_GAP = 64;
 const MUI_DIALOG_MARGIN = 64;
+// --- Minimized sheet bar ---------------------------------------------
+// panel-page closes the sheet after an action and broadcasts
+// BC_CC_MINIMIZED; we show a small bar with the character's name until
+// the user reopens the sheet (bar click, CapsLock, Tools Suite) or ✕.
+const BC_CC_MINIMIZED = "com.obr-suite/cc-minimized";
+const BC_CC_RESTORE = "com.obr-suite/cc-restore";
+const BC_CC_MINI_CLOSE = "com.obr-suite/cc-mini-close";
+const MINI_BAR_ID = "com.obr-suite/cc-mini-bar";
+const MINI_BAR_W = 240;
+const MINI_BAR_H = 40;
+let miniBarOpen = false;
+
+async function openMiniBar(name: string): Promise<void> {
+  let vw = 1280;
+  let vh = 800;
+  try {
+    [vw, vh] = await Promise.all([OBR.viewport.getWidth(), OBR.viewport.getHeight()]);
+  } catch {}
+  try { await OBR.popover.close(MINI_BAR_ID); } catch {}
+  try {
+    await OBR.popover.open({
+      id: MINI_BAR_ID,
+      url: `${assetUrl("cc-mini-bar.html")}#${encodeURIComponent(name)}`,
+      width: MINI_BAR_W,
+      height: MINI_BAR_H,
+      anchorReference: "POSITION",
+      anchorPosition: { left: Math.round(vw / 2 - MINI_BAR_W / 2), top: Math.max(8, Math.round(vh - MINI_BAR_H - 76)) },
+      anchorOrigin: { horizontal: "LEFT", vertical: "TOP" },
+      transformOrigin: { horizontal: "LEFT", vertical: "TOP" },
+      hidePaper: true,
+      disableClickAway: true,
+    });
+    miniBarOpen = true;
+  } catch (e) {
+    console.warn("[obr-suite/character-cards] mini bar open failed", e);
+  }
+}
+
+async function closeMiniBar(): Promise<void> {
+  if (!miniBarOpen) return;
+  miniBarOpen = false;
+  try { await OBR.popover.close(MINI_BAR_ID); } catch {}
+}
+
 async function openMainPopover() {
+  void closeMiniBar();
   try {
     let vw = 1280;
     let vh = 800;
@@ -806,6 +851,23 @@ export async function setupCharacterCards(): Promise<void> {
     onPick: () => toggleMainPanel(),
   });
 
+  unsubs.push(
+    OBR.broadcast.onMessage(BC_CC_MINIMIZED, (event) => {
+      const name = String((event.data as { name?: unknown } | undefined)?.name ?? "").slice(0, 80);
+      void openMiniBar(name);
+    }),
+  );
+  unsubs.push(
+    OBR.broadcast.onMessage(BC_CC_RESTORE, () => {
+      void openMainPopover();
+    }),
+  );
+  unsubs.push(
+    OBR.broadcast.onMessage(BC_CC_MINI_CLOSE, () => {
+      void closeMiniBar();
+    }),
+  );
+
   // CapsLock from inside the panel iframe also toggles (panel listens
   // for window keydown and broadcasts).
   unsubs.push(
@@ -820,6 +882,7 @@ export async function setupCharacterCards(): Promise<void> {
       if (!ready) {
         await closeMainPopover();
         await closeInfoPopover();
+        await closeMiniBar();
       }
     }),
   );
@@ -999,6 +1062,7 @@ export async function teardownCharacterCards(): Promise<void> {
     await OBR.tool.removeAction(CC_TOOL_ID);
     unregisterSuiteItem(CC_TOOL_ID);
   } catch {}
+  await closeMiniBar();
   for (const u of unsubs.splice(0)) u();
 }
 

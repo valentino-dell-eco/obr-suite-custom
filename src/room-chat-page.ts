@@ -274,7 +274,9 @@ function renderNotice(m: ChatMessage, tool: ChatTool): HTMLElement {
   if (m.text) {
     const body = document.createElement("div");
     body.className = "body";
-    body.textContent = m.text;
+    // The tool icon is already shown — drop a leading emoji that older
+    // notices (still in the history) carried.
+    body.textContent = m.text.replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "");
     col.appendChild(body);
   }
   el.appendChild(col);

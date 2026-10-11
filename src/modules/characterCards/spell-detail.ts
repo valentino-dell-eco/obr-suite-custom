@@ -92,6 +92,11 @@ function entryToText(e: any): string {
   return "";
 }
 
+/** 5etools "entries" → plain text (shared with the feature picker). */
+export function entriesToText(entries: unknown): string {
+  return (Array.isArray(entries) ? entries : []).map(entryToText).join("\n\n");
+}
+
 function formatBody(spell: any): string {
   return (spell.entries || []).map(entryToText).join("\n\n");
 }
