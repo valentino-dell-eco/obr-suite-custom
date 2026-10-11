@@ -6,14 +6,21 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 ### Added
 
+- **Rests announced in Room Chat.** SR / LR / DW / DS from a character card (info panel, full sheet or the GM's global buttons) post to the “All” channel: “🏕️ X took a short rest”, “🛌 X took a long rest”, “🌅 X saw a new dawn”, “🌇 X saw a new dusk” (the GM's global buttons list every character in one line). A long rest that also restores Dawn / Dusk resources says so on the same line (“… took a long rest and saw a new dawn”).
 - **Player status changes announced in Room Chat.** When a player adds / removes a status or changes its level on their own token (manage window, palette click or drag-and-drop), a line is posted to the “All” channel, e.g. “🏷️ Goblin: added Charmed”, “🏷️ Goblin: Exhaustion 1 → 1.5”. The GM's own edits are not announced.
 - **Status Tracker horizontal / vertical offset** (Settings → Status Tracker, room-wide, scene px −200 … 200), like the HP bubbles' vertical offset.
 - **Status levels in steps of 0.5** (−/+ and typed values snap to the nearest half; −99 … 99).
 - **Shift+C** shows / hides the Chase Tracker panel (same as Tools Suite → Chase Tracker).
 
+### Changed
+
+- **Announcement rewritten** (`public/announcement.md`): this build is presented as Valentino dell'Eco's modified version of Full Suite, crediting FullPeople and linking the original author's support page and repository; highlights and changelog for 2.0.
+- **Support tab and supporters wall disabled** (Settings opens on Important Notes; the supporter overlay behind Settings is no longer opened).
+
 ### Fixed
 
 - **Toggling a status hidden / visible no longer resets its level.**
+- **“Hidden from players” checkbox showed for players** in the status manage window (a CSS rule overrode `hidden`); it is GM-only again.
 - **Status library empty / “Restore D&D 5e” failing** in rooms whose metadata (16 KB shared by every extension) was nearly full. The library is now stored as a diff against the built-in presets (`{ v: 2, c, d }`): an untouched room stores nothing, and the old full-list format is converted on the GM's next load. Preset titles follow each viewer's language. Save errors caused by a full room now say so and list the biggest room-metadata keys; the Metadata Inspector's Room tab shows the room's total size.
 
 

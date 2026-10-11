@@ -947,6 +947,13 @@ const TR: Dict = {
   reRecoveryDS: { zh: "黄昏", en: "Dusk" },
 
   // --- Recovery buttons (SR/LR/DW/DS) ------------------------------------
+  rcvChatSR: { zh: "🏕️ {name} 进行了短休", en: "🏕️ {name} took a short rest" },
+  rcvChatLR: { zh: "🛌 {name} 进行了长休", en: "🛌 {name} took a long rest" },
+  rcvChatDW: { zh: "🌅 {name} 迎来了新的黎明", en: "🌅 {name} saw a new dawn" },
+  rcvChatDS: { zh: "🌇 {name} 迎来了新的黄昏", en: "🌇 {name} saw a new dusk" },
+  rcvChatAndDawn: { zh: "，并迎来了新的黎明", en: " and saw a new dawn" },
+  rcvChatAndDusk: { zh: "，并迎来了新的黄昏", en: " and saw a new dusk" },
+  rcvChatAndDawnDusk: { zh: "，并迎来了新的黎明与黄昏", en: " and saw a new dawn and dusk" },
   rcvBtnSRTitle: { zh: "短休 — 恢复所有短休资源", en: "Short Rest — restore all SR resources" },
   rcvBtnLRTitle: { zh: "长休 — 恢复短休 + 长休资源", en: "Long Rest — restore SR + LR resources" },
   rcvBtnDWTitle: { zh: "黎明 — 恢复所有黎明资源", en: "Dawn — restore all Dawn resources" },

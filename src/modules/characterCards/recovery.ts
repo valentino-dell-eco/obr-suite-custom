@@ -15,6 +15,9 @@ import {
 } from "../resourceTracker/types";
 import { writeRecoveryPass, rechargeCharges, RechargeResult } from "../resourceTracker/storage";
 import { broadcastDiceRoll } from "../dice";
+import { sendChat } from "../roomChat/send";
+import { getLocalLang } from "../../state";
+import { t } from "../../i18n";
 
 export type { RecoveryType, Resource, RechargeResult };
 
@@ -125,6 +128,39 @@ export function announceRest(
   } catch (e) {
     console.warn("[obr-suite/recovery] announceRest failed", e);
   }
+}
+
+/** Post the rest to Room Chat's "All" channel, from the client that
+ *  pressed the button: SR / LR → "X took a short / long rest";
+ *  DW / DS → "X saw a new dawn / dusk". Several characters (the GM's
+ *  global buttons) share one line. */
+export function announceRestInChat(
+  characterNames: string[],
+  recoveryType: RecoveryType,
+  /** LR only: the Dawn / Dusk resources were restored too — chained
+   *  onto the same line ("… took a long rest and saw a new dawn"). */
+  extras: { dawn?: boolean; dusk?: boolean } = {},
+): void {
+  const names = characterNames.map((n) => n.trim()).filter(Boolean);
+  if (names.length === 0 || recoveryType === "none") return;
+  const lang = getLocalLang();
+  const who = names.join(", ");
+  const keyFor = (type: RecoveryType) =>
+    type === "SR" ? "rcvChatSR"
+    : type === "LR" ? "rcvChatLR"
+    : type === "DW" ? "rcvChatDW"
+    : "rcvChatDS";
+  let text = t(lang, keyFor(recoveryType)).replace("{name}", who);
+  if (recoveryType === "LR" && (extras.dawn || extras.dusk)) {
+    const key =
+      extras.dawn && extras.dusk ? "rcvChatAndDawnDusk"
+      : extras.dawn ? "rcvChatAndDawn"
+      : "rcvChatAndDusk";
+    text += t(lang, key);
+  }
+  void sendChat({ scope: "all", text }).catch((e) => {
+    console.warn("[obr-suite/recovery] chat announce failed", e);
+  });
 }
 
 /** Central place both pages call to turn "the user pressed LR, and (if

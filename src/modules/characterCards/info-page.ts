@@ -20,6 +20,7 @@ import { normalizeCombatGearFlags } from "./data-normalize";
 import {
   RecoveryType,
   BC_RECOVERY_NOTICE,
+  announceRestInChat,
   expandRecoveryTypes,
   tokensHaveRecoveryType,
   writeRecoveryPassForTokens,
@@ -226,6 +227,7 @@ async function runCardRecovery(pressed: RecoveryType): Promise<void> {
     }
   }
   const types = expandRecoveryTypes(pressed, dawn, dusk);
+  announceRestInChat([currentCardDisplayName], pressed, { dawn, dusk });
 
   const needsRollByItem = await writeRecoveryPassForTokens([itemId], types);
   // Reflect the instant part of the write in the Resources tab right

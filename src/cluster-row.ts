@@ -35,6 +35,8 @@ const SETTINGS_URL = assetUrl("settings.html");
 // underneath.
 const SUPPORTER_OVERLAY_MODAL_ID = "com.obr-suite/supporter-overlay";
 const SUPPORTER_OVERLAY_URL = assetUrl("supporter-overlay.html");
+/** Supporters wall behind Settings — off in this modified build. */
+const SUPPORTERS_WALL = false;
 
 // Broadcast IDs
 const BC_TIMESTOP_TOGGLE = "com.obr-suite/timestop-toggle";
@@ -347,18 +349,22 @@ async function onGear() {
     //    selects the "support" tab (settings.ts broadcasts).
     //    disablePointerEvents lets the canvas underneath stay
     //    interactive — the names + black backdrop are decorative.
-    try {
-      await OBR.modal.open({
-        id: SUPPORTER_OVERLAY_MODAL_ID,
-        url: SUPPORTER_OVERLAY_URL,
-        fullScreen: true,
-        hidePaper: true,
-        hideBackdrop: true,
-        disablePointerEvents: true,
-      });
-    } catch (e) {
-      // Non-fatal — settings still opens without the overlay.
-      console.warn("[obr-suite/cluster-row] supporter overlay open failed", e);
+    // Disabled in this modified build: the supporters wall belongs to
+    // the hidden "support" tab.
+    if (SUPPORTERS_WALL) {
+      try {
+        await OBR.modal.open({
+          id: SUPPORTER_OVERLAY_MODAL_ID,
+          url: SUPPORTER_OVERLAY_URL,
+          fullScreen: true,
+          hidePaper: true,
+          hideBackdrop: true,
+          disablePointerEvents: true,
+        });
+      } catch (e) {
+        // Non-fatal — settings still opens without the overlay.
+        console.warn("[obr-suite/cluster-row] supporter overlay open failed", e);
+      }
     }
     // 2) Settings popover on top.
     await OBR.popover.open({

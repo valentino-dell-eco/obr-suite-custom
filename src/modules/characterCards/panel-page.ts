@@ -29,6 +29,7 @@ import {
   writeRecoveryPassForTokens,
   rollChargeResource,
   announceRest,
+  announceRestInChat,
 } from "./recovery";
 import { readResources, updateResource } from "../resourceTracker/storage";
 import { PLUGIN_ID } from "../resourceTracker/types";
@@ -404,6 +405,7 @@ async function runGlobalRecovery(pressed: RecoveryType): Promise<void> {
   // the expanded types (an LR never also announces "made a short
   // rest" even though SR resources are restored under the hood).
   for (const c of bound) announceRest(c.name, pressed);
+  announceRestInChat(bound.map((c) => c.name), pressed, { dawn, dusk });
 
   let ownerByItem = new Map<string, string | undefined>();
   try {
@@ -1252,6 +1254,7 @@ async function runFullscreenCardRecovery(
   }
   const types = expandRecoveryTypes(pressed, dawn, dusk);
   announceRest(card.name, pressed);
+  announceRestInChat([card.name], pressed, { dawn, dusk });
   const needsRollByItem = await writeRecoveryPassForTokens([itemId], types);
   await sendFreshResources(cardId);
 

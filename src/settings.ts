@@ -92,7 +92,9 @@ interface TabDef {
   afterRender?: (root: HTMLElement, isGM: boolean) => void;
 }
 
-let activeTab = "support";
+// The "support" tab (Ko-fi / QR / supporters) is hidden in this
+// modified build — see HIDDEN_TAB_IDS. Start on the notes tab.
+let activeTab = "important";
 let isGM = false;
 // 2026-05-14 (#4) — these bubble settings all live in DM-synced scene
 // metadata now (only 气泡大小 / scale stays per-client localStorage).
@@ -3844,8 +3846,11 @@ const TABS: TabDef[] = [
 // Stable channel hides modules still in dev; dev keeps them visible.
 // 2026-05-14 — `follow` is now hidden EVERYWHERE (retired from the
 // dev build per user request); only `fullFog` remains dev-only.
+// "support" (donations / supporters wall) is the original author's and
+// is disabled in this modified build; the announcement credits and
+// links FullPeople instead.
 const HIDDEN_TAB_IDS = new Set<string>(
-  STABLE_HIDES ? ["fullFog", "follow"] : ["follow"],
+  STABLE_HIDES ? ["fullFog", "follow", "support"] : ["follow", "support"],
 );
 const VISIBLE_TABS = TABS.filter((t) => !HIDDEN_TAB_IDS.has(t.id));
 
