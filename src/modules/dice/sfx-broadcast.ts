@@ -44,6 +44,7 @@ export function sfxSame(): void { PLAYERS.same(); broadcast("same"); }
 export function sfxSyncView(): void { PLAYERS.syncView(); broadcast("syncView"); }
 export function sfxNextTurn(): void { PLAYERS.nextTurn(); broadcast("nextTurn"); }
 export function sfxResourceToast(): void { PLAYERS.resourceToast(); broadcast("resourceToast"); }
+export function sfxChatMessage(): void { PLAYERS.chatMessage(); broadcast("chatMessage"); }
 
 // Subscribe the current iframe to play sounds requested via BC_SFX.
 // Also primes the AudioContext on the first user gesture (capture-

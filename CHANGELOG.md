@@ -6,6 +6,8 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 ### Added
 
+- **Room Chat new-message sound.** A short synthesized “water-drop” pop (a new sound, no audio file) when someone else's message or a tool notice arrives. Personal on/off toggle in Settings → Room Chat (`obr-suite/sfx-chat`, default on). Only one suite window plays it, even when several have audio unlocked.
+- **Room Chat message layouts.** Typed messages are speech bubbles: your own on the left with the tail on the left, other people's on the right with the tail on the right; whispers keep a tinted bubble (purple → GM, amber → player). Tool notices (status changes, rests) have no tail and span the width, with the tool's icon and colour (Status Tracker orange, Rest green). Spell casts keep their original layout (name + time, then the spell card). Messages carry a whitelisted `tool` tag (`status` / `rest`).
 - **Rests announced in Room Chat.** SR / LR / DW / DS from a character card (info panel, full sheet or the GM's global buttons) post to the “All” channel: “🏕️ X took a short rest”, “🛌 X took a long rest”, “🌅 X saw a new dawn”, “🌇 X saw a new dusk” (the GM's global buttons list every character in one line). A long rest that also restores Dawn / Dusk resources says so on the same line (“… took a long rest and saw a new dawn”).
 - **Player status changes announced in Room Chat.** When a player adds / removes a status or changes its level on their own token (manage window, palette click or drag-and-drop), a line is posted to the “All” channel, e.g. “🏷️ Goblin: added Charmed”, “🏷️ Goblin: Exhaustion 1 → 1.5”. The GM's own edits are not announced.
 - **Status Tracker horizontal / vertical offset** (Settings → Status Tracker, room-wide, scene px −200 … 200), like the HP bubbles' vertical offset.
@@ -19,6 +21,7 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 ### Fixed
 
+- **Announcement title showed the upstream dev version** (“Full Suite v1.0.138-dev”): the window read `manifest-dev.json` first, and that file ships in every build. It now reads `manifest.json` on the stable build (the dev manifest only on `/suite-dev/`) and is titled “Full Suite - Echo Version (v2.0.0)”.
 - **Toggling a status hidden / visible no longer resets its level.**
 - **“Hidden from players” checkbox showed for players** in the status manage window (a CSS rule overrode `hidden`); it is GM-only again.
 - **Status library empty / “Restore D&D 5e” failing** in rooms whose metadata (16 KB shared by every extension) was nearly full. The library is now stored as a diff against the built-in presets (`{ v: 2, c, d }`): an untouched room stores nothing, and the old full-list format is converted on the GM's next load. Preset titles follow each viewer's language. Save errors caused by a full room now say so and list the biggest room-metadata keys; the Metadata Inspector's Room tab shows the room's total size.

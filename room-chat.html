@@ -65,16 +65,55 @@ html,body{
 .empty{margin:auto;font-size:12px;color:#7d8494;text-align:center}
 
 .msg{display:flex;flex-direction:column;gap:2px;font-size:12.5px;line-height:1.35;word-break:break-word}
-.msg .meta{display:flex;align-items:baseline;gap:6px;font-size:11px;color:#8a90a3}
+.msg .meta{display:flex;align-items:baseline;gap:6px;font-size:11px;color:#8a90a3;flex-wrap:wrap}
 .msg .from{font-weight:700}
+.msg .time{margin-left:auto;font-size:10px;color:#7d8494;font-variant-numeric:tabular-nums}
 .msg .badge{
   font-size:9.5px;font-weight:800;letter-spacing:.03em;padding:1px 6px;border-radius:999px;
 }
 .msg .badge.gm{background:rgba(156,124,255,0.22);color:#c4b0ff}
 .msg .badge.player{background:rgba(245,200,118,0.2);color:#f5c876}
 .msg .body{color:#e6e8ee;white-space:pre-wrap}
+
+/* Speech bubbles. Mine: left, tail bottom-left. Others: right, tail
+   bottom-right. Colours are opaque so the tail joins the bubble
+   without a darker seam. */
+.msg.bubble{
+  --bub:#262d40;
+  position:relative;max-width:82%;padding:6px 10px 7px;border-radius:12px;
+  background:var(--bub);margin-bottom:2px;
+}
+.msg.bubble::after{
+  content:"";position:absolute;bottom:0;width:9px;height:11px;background:var(--bub);
+}
+.msg.bubble.own{--bub:#1d3a58;align-self:flex-start;border-bottom-left-radius:3px;margin-left:8px}
+.msg.bubble.own::after{left:-8px;clip-path:polygon(100% 0,100% 100%,0 100%)}
+.msg.bubble.other{align-self:flex-end;border-bottom-right-radius:3px;margin-right:8px}
+.msg.bubble.other::after{right:-8px;clip-path:polygon(0 0,100% 100%,0 100%)}
+.msg.bubble.own .body{color:#d9ecff}
+.msg.bubble.w-gm{--bub:#2e2852}
+.msg.bubble.w-player{--bub:#3a3222}
 .msg.whisper .body{font-style:italic}
-.msg.own .body{color:#cfe6ff}
+
+/* Tool notices: no tail, full width, icon + per-tool colour (--tc). */
+.msg.notice{
+  --tc:#5dade2;
+  flex-direction:row;align-items:flex-start;gap:8px;align-self:stretch;
+  padding:6px 9px;border-radius:9px;
+  background:color-mix(in srgb,var(--tc) 13%,transparent);
+  border:1px solid color-mix(in srgb,var(--tc) 38%,transparent);
+  border-left:3px solid var(--tc);
+}
+.msg.notice .ico{
+  flex:none;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+  color:var(--tc);background:color-mix(in srgb,var(--tc) 20%,transparent);font-size:14px;margin-top:1px;
+}
+.msg.notice .ico svg{vertical-align:0 !important}
+.msg.notice .ncol{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.msg.notice .tname{font-weight:800;color:var(--tc);text-transform:uppercase;letter-spacing:.04em;font-size:9.5px}
+.msg.notice .from{font-weight:600;font-size:10.5px}
+.msg.notice .body{color:#dfe3ec}
+.msg.notice .cast{margin-top:3px}
 .cast{
   margin-top:2px;padding:7px 9px;border-radius:9px;
   background:linear-gradient(135deg,rgba(93,173,226,0.18),rgba(156,124,255,0.18));

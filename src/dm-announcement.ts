@@ -413,23 +413,37 @@ async function loadAndRender(): Promise<void> {
 // Apply i18n strings to the announcement modal UI elements
 function applyAnnouncementI18n(lang: "zh" | "en"): void {
   applyI18nDom(lang, document);
+  // applyI18nDom resets the title to its plain string — put the
+  // version back once it is known.
+  stampTitle();
 }
 
-// 2026-05-14 — stamp the running build version into the modal title.
-// The dev build serves `manifest-dev.json`, stable serves
-// `manifest.json`; we try dev first and fall back, so the same code
-// works on both channels (the 404 on the wrong-channel file just
-// falls through).
+let suiteVersion = "";
+function stampTitle(): void {
+  if (!suiteVersion) return;
+  const titleEl = document.querySelector<HTMLElement>(".head .title");
+  if (titleEl) titleEl.textContent = `${SUITE_TITLE} (v${suiteVersion})`;
+}
+
+// Stamp the running build version into the modal title:
+// "Full Suite - Echo Version (v2.0.0)".
+// Both manifests are copied into every build (public/), so the file is
+// picked from the build's base path — the dev manifest only for the
+// /suite-dev/ build. (Trying manifest-dev.json first used to show the
+// upstream dev version, e.g. "v1.0.138-dev", on the stable build.)
+const IS_DEV_BUILD = (import.meta.env.BASE_URL || "").includes("suite-dev");
+export const SUITE_TITLE = "Full Suite - Echo Version";
 async function loadVersionIntoTitle(): Promise<void> {
   const titleEl = document.querySelector<HTMLElement>(".head .title");
   if (!titleEl) return;
-  for (const name of ["manifest-dev.json", "manifest.json"]) {
+  for (const name of [IS_DEV_BUILD ? "manifest-dev.json" : "manifest.json"]) {
     try {
       const res = await fetch(assetUrl(name), { cache: "no-cache" });
       if (!res.ok) continue;
       const m = await res.json();
       if (m && typeof m.version === "string" && m.version) {
-        titleEl.textContent = `Full Suite v${m.version}`;
+        suiteVersion = m.version;
+        stampTitle();
         return;
       }
     } catch {

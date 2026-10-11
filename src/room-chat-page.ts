@@ -11,8 +11,12 @@ import {
   ChatMessage,
   ChatRole,
   ChatScope,
+  ChatTool,
   isChatMessage,
+  toolOf,
 } from "./modules/roomChat/types";
+import { playChatMessage, primeAudio } from "./modules/dice/sfx";
+import { ICONS } from "./icons";
 import { loadHistory, clearHistory } from "./modules/roomChat/history";
 import { sendChat } from "./modules/roomChat/send";
 import { bindRollableClickPopup } from "./modules/dice/context-menu";
@@ -180,10 +184,115 @@ function renderCast(cast: ChatCast, msgId?: string): HTMLElement {
   return c;
 }
 
-function renderMessage(m: ChatMessage): HTMLElement {
+// Tool notices: colour + icon per tool. Icons are the suite's inline
+// SVGs (currentColor), tinted with the tool colour.
+const CAMPFIRE_ICON =
+  `<svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ` +
+  `stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.18em">` +
+  `<path d="M12 3c2.5 3 4 4.8 4 7.2a4 4 0 0 1-8 0c0-1.6.8-2.8 1.8-3.8.2 1.4.9 2.3 2 2.6C11.5 7.5 11.4 5.4 12 3z" fill="currentColor"/>` +
+  `<path d="M4 20l16-4M4 16l16 4"/></svg>`;
+const TOOL_STYLE: Record<ChatTool, { color: string; icon: string; en: string; zh: string }> = {
+  status: { color: "#f39c4a", icon: ICONS.statusChip, en: "Status Tracker", zh: "状态追踪" },
+  rest: { color: "#4cc38a", icon: CAMPFIRE_ICON, en: "Rest", zh: "休息" },
+  cast: { color: "#a98bff", icon: ICONS.sparkles, en: "Spell", zh: "施法" },
+};
+
+function scopeBadge(m: ChatMessage): HTMLElement | null {
+  if (m.scope === "all") return null;
+  const b = document.createElement("span");
+  if (m.scope === "gm") {
+    b.className = "badge gm";
+    b.textContent = "→ GM";
+  } else {
+    b.className = "badge player";
+    b.textContent = `→ ${m.toId === meId ? (en ? "you" : "你") : m.toName || "?"}`;
+  }
+  return b;
+}
+
+/** A tool announcement: no tail, full width, tool icon + colour. */
+function renderNotice(m: ChatMessage, tool: ChatTool): HTMLElement {
+  const st = TOOL_STYLE[tool];
+  const el = document.createElement("div");
+  el.className = `msg notice tool-${tool}`;
+  el.style.setProperty("--tc", st.color);
+
+  const ico = document.createElement("span");
+  ico.className = "ico";
+  ico.innerHTML = st.icon; // static, trusted markup
+  el.appendChild(ico);
+
+  const col = document.createElement("div");
+  col.className = "ncol";
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  const tname = document.createElement("span");
+  tname.className = "tname";
+  tname.textContent = en ? st.en : st.zh;
+  meta.appendChild(tname);
+  const from = document.createElement("span");
+  from.className = "from";
+  from.textContent = m.fromId === meId ? (en ? "You" : "你") : m.fromName;
+  from.style.color = m.fromColor;
+  meta.appendChild(from);
+  const badge = scopeBadge(m);
+  if (badge) meta.appendChild(badge);
+  const time = document.createElement("span");
+  time.className = "time";
+  time.textContent = fmtTime(m.ts);
+  meta.appendChild(time);
+  col.appendChild(meta);
+
+  if (m.cast) col.appendChild(renderCast(m.cast, m.id));
+  if (m.text) {
+    const body = document.createElement("div");
+    body.className = "body";
+    body.textContent = m.text;
+    col.appendChild(body);
+  }
+  el.appendChild(col);
+  return el;
+}
+
+/** A spell cast: the original layout (name + time, then the spell
+ *  card) — no bubble, no notice frame. */
+function renderCastMessage(m: ChatMessage): HTMLElement {
   const own = m.fromId === meId;
   const el = document.createElement("div");
-  el.className = "msg" + (own ? " own" : "") + (m.scope !== "all" ? " whisper" : "");
+  el.className = "msg cast-msg" + (own ? " own" : "");
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  const from = document.createElement("span");
+  from.className = "from";
+  from.textContent = own ? (en ? "You" : "你") : m.fromName;
+  from.style.color = m.fromColor;
+  meta.appendChild(from);
+  const badge = scopeBadge(m);
+  if (badge) meta.appendChild(badge);
+  const time = document.createElement("span");
+  time.textContent = fmtTime(m.ts);
+  meta.appendChild(time);
+  el.appendChild(meta);
+  if (m.cast) el.appendChild(renderCast(m.cast, m.id));
+  if (m.text) {
+    const body = document.createElement("div");
+    body.className = "body";
+    body.textContent = m.text;
+    el.appendChild(body);
+  }
+  return el;
+}
+
+/** A typed message: speech bubble. Mine: tail on the LEFT; someone
+ *  else's: tail on the RIGHT. */
+function renderMessage(m: ChatMessage): HTMLElement {
+  if (m.cast) return renderCastMessage(m);
+  const tool = toolOf(m);
+  if (tool) return renderNotice(m, tool);
+  const own = m.fromId === meId;
+  const el = document.createElement("div");
+  el.className = "msg bubble " + (own ? "own" : "other") +
+    (m.scope === "gm" ? " whisper w-gm" : m.scope === "player" ? " whisper w-player" : "");
 
   const meta = document.createElement("div");
   meta.className = "meta";
@@ -192,23 +301,14 @@ function renderMessage(m: ChatMessage): HTMLElement {
   from.textContent = own ? (en ? "You" : "你") : m.fromName;
   from.style.color = m.fromColor;
   meta.appendChild(from);
-  if (m.scope === "gm") {
-    const b = document.createElement("span");
-    b.className = "badge gm";
-    b.textContent = "→ GM";
-    meta.appendChild(b);
-  } else if (m.scope === "player") {
-    const b = document.createElement("span");
-    b.className = "badge player";
-    b.textContent = `→ ${m.toId === meId ? (en ? "you" : "你") : m.toName || "?"}`;
-    meta.appendChild(b);
-  }
+  const badge = scopeBadge(m);
+  if (badge) meta.appendChild(badge);
   const time = document.createElement("span");
+  time.className = "time";
   time.textContent = fmtTime(m.ts);
   meta.appendChild(time);
   el.appendChild(meta);
 
-  if (m.cast) el.appendChild(renderCast(m.cast, m.id));
   if (m.text) {
     const body = document.createElement("div");
     body.className = "body";
@@ -379,7 +479,13 @@ OBR.onReady(async () => {
   // already stamped the real sender identity onto the message).
   OBR.broadcast.onMessage(BC_CHAT_UPDATED, (ev) => {
     if (!isFromSelf(ev)) return;
-    if (isChatMessage(ev.data)) appendOne(ev.data);
+    const m = ev.data;
+    if (!isChatMessage(m)) return;
+    const fresh = !messages.some((x) => x.id === m.id);
+    appendOne(m);
+    // This window usually has had a click / keypress, so its audio is
+    // unlocked; the cluster plays it otherwise (one plays, not both).
+    if (fresh && m.fromId !== meId) playChatMessage();
   });
   OBR.broadcast.onMessage(BC_CHAT_CLEARED, (ev) => {
     if (!isFromSelf(ev)) return;
@@ -387,6 +493,7 @@ OBR.onReady(async () => {
     renderAll();
   });
   bindPanelDrag(dragEl, PANEL_IDS.roomChat);
+  for (const t of ["pointerdown", "keydown"]) document.addEventListener(t, primeAudio, { capture: true });
   // Clicks on dice in spell descriptions → dice roll modal, rolled for
   // the clicker's selected token (same default as everywhere else).
   bindRollableClickPopup(msgsEl);

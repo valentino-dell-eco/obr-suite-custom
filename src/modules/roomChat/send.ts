@@ -6,6 +6,7 @@ import {
   ChatMessage,
   ChatRole,
   ChatScope,
+  ChatTool,
 } from "./types";
 
 export interface SendChatInput {
@@ -14,6 +15,7 @@ export interface SendChatInput {
   toName?: string;
   text: string;
   cast?: ChatCast;
+  tool?: ChatTool;
 }
 
 export async function sendChat(input: SendChatInput): Promise<boolean> {
@@ -38,6 +40,7 @@ export async function sendChat(input: SendChatInput): Promise<boolean> {
     ...(input.scope === "player" ? { toId: input.toId, toName: input.toName } : {}),
     text,
     ...(input.cast ? { cast: input.cast } : {}),
+    ...(input.tool ? { tool: input.tool } : {}),
   };
   await OBR.broadcast.sendMessage(BC_CHAT_MESSAGE, msg, { destination: "ALL" });
   return true;

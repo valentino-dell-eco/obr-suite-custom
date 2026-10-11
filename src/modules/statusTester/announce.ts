@@ -32,7 +32,7 @@ export async function announceStatusChange(
       .replace("{to}", String(change.to));
   }
   try {
-    await sendChat({ scope: "all", text });
+    await sendChat({ scope: "all", text, tool: "status" });
   } catch (e) {
     console.warn("[status-tester] chat announce failed", e);
   }

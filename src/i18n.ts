@@ -1753,7 +1753,7 @@ const TR: Dict = {
   },
 
   // DM Announcement panel
-  announcementTitle: { zh: "Full Suite", en: "Full Suite" },
+  announcementTitle: { zh: "Full Suite - Echo Version", en: "Full Suite - Echo Version" },
   announcementSubtitle: { zh: "公告 / Announcement", en: "Announcement" },
   announcementLoadingPlaceholder: {
     zh: "加载公告中…",

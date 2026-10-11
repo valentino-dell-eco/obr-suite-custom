@@ -26,6 +26,7 @@ import {
   type ChaseLocalSettings,
   type ChaseRoomSettings,
 } from "./modules/chaseTracker/settings";
+import { LS_KEY_CHAT } from "./modules/dice/sfx";
 
 type L = Language;
 const tr = (lang: L, zh: string, en: string) => (lang === "zh" ? zh : en);
@@ -186,6 +187,23 @@ export function chaseOptionsHtml(lang: L, isGM: boolean): string {
 const CHASE_LOCAL_KEYS = new Set<keyof ChaseLocalSettings>(["autoSelect", "autoOpen"]);
 const CHASE_ROOM_KEYS = new Set<keyof ChaseRoomSettings>(["step", "unit", "playerView", "playerMove"]);
 
+// --- Room Chat -------------------------------------------------------------
+
+function chatSoundOn(): boolean {
+  try { return localStorage.getItem(LS_KEY_CHAT) !== "0"; } catch { return true; }
+}
+
+export function chatOptionsHtml(lang: L): string {
+  return `
+    <h3 style="margin-top:14px">${esc(tr(lang, "选项", "Options"))}</h3>
+    ${row(
+      tr(lang, "新消息提示音", "New-message sound"),
+      `${personal(lang)}${tr(lang, "收到其他人的消息（包括工具通知）时播放一声短促的提示音。", "A short pop when someone else's message (or a tool notice) arrives.")}`,
+      tog("chat.sound", chatSoundOn()),
+    )}
+  `;
+}
+
 // --- Wiring ----------------------------------------------------------------
 
 type Writer = (field: string, value: unknown) => Promise<void> | void;
@@ -195,6 +213,12 @@ function writerFor(ns: string, isGM: boolean): Writer | null {
     return async (field, value) => {
       if (STT_LOCAL_KEYS.has(field as keyof SttLocalSettings)) setSttLocal({ [field]: value });
       else if (STT_ROOM_KEYS.has(field as keyof SttRoomSettings) && isGM) await setSttRoom({ [field]: value });
+    };
+  }
+  if (ns === "chat") {
+    return (field, value) => {
+      if (field !== "sound") return;
+      try { localStorage.setItem(LS_KEY_CHAT, value ? "1" : "0"); } catch {}
     };
   }
   if (ns === "chase") {

@@ -28,6 +28,10 @@ export const MAX_TEXT = 500;
 export const MAX_HISTORY = 300;
 
 export type ChatScope = "all" | "gm" | "player";
+/** Messages posted automatically by a tool (rendered as a notice, not a
+ *  speech bubble). Spell casts are always "cast" via `msg.cast`. */
+export type ChatTool = "status" | "rest" | "cast";
+export const CHAT_TOOLS: readonly ChatTool[] = ["status", "rest", "cast"];
 export type ChatRole = "GM" | "PLAYER";
 
 export interface ChatCast {
@@ -65,6 +69,8 @@ export interface ChatMessage {
   toName?: string;
   text: string;
   cast?: ChatCast;
+  /** Set by tool announcements (status changes, rests…). */
+  tool?: ChatTool;
 }
 
 export function isChatMessage(v: unknown): v is ChatMessage {
@@ -78,6 +84,13 @@ export function isChatMessage(v: unknown): v is ChatMessage {
     typeof m.text === "string" &&
     (m.scope === "all" || m.scope === "gm" || m.scope === "player")
   );
+}
+
+/** The tool that posted `msg`, or null for a message a person typed.
+ *  Whitelisted — the field comes from the network / local history. */
+export function toolOf(msg: ChatMessage): ChatTool | null {
+  if (msg.cast) return "cast";
+  return CHAT_TOOLS.includes(msg.tool as ChatTool) ? (msg.tool as ChatTool) : null;
 }
 
 export function isVisibleTo(msg: ChatMessage, meId: string, meRole: ChatRole): boolean {

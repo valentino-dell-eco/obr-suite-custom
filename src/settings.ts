@@ -40,6 +40,7 @@ import {
 import { repairLegacyHiddenBubbles } from "./modules/bubbles";
 import {
   chaseOptionsHtml,
+  chatOptionsHtml,
   initModuleOptionSettings,
   sttOptionsHtml,
   wireModuleOptions,
@@ -3347,7 +3348,7 @@ const TABS: TabDef[] = [
     zh: `${ICONS.chatBubbles} 房间聊天`,
     en: `${ICONS.chatBubbles} Room Chat`,
     moduleId: "roomChat",
-    body: {
+    dynamicBody: (lang) => chatOptionsHtml(lang) + ({
       zh: `<p><b>房间聊天</b>：在房间里发文字消息，支持悄悄话。</p>
 <ul>
   <li><b>打开</b>：点击右侧工具栏的「工具套件」→「房间聊天」</li>
@@ -3357,6 +3358,8 @@ const TABS: TabDef[] = [
   <li>GM 可以看到所有悄悄话</li>
   <li>面板可拖动（左上角的抓手），位置可在「编辑面板布局」里调整</li>
   <li>聊天记录按房间保存在本机浏览器中（最多 300 条）</li>
+  <li><b>气泡</b>：自己的消息尾巴在左边，其他人的消息尾巴在右边；工具通知（状态变化、休息）没有尾巴，带有该工具的图标和颜色；施法保持原来的法术卡片样式</li>
+  <li><b>提示音</b>：收到其他人的消息时播放提示音（可在上面的选项里关闭）</li>
   <li>⚠️ 悄悄话只是在界面上对其他人隐藏，并非加密：消息实际会发送到房间里所有客户端</li>
 </ul>`,
       en: `<p><b>Room Chat</b> — text chat for the room, with whispers.</p>
@@ -3368,9 +3371,12 @@ const TABS: TabDef[] = [
   <li>The GM can read every whisper</li>
   <li>The panel is draggable (grip at the top-left) and can be repositioned from "Edit panel layout"</li>
   <li>History is stored per room in this browser (last 300 messages)</li>
+  <li><b>Bubbles</b>: your messages have the tail on the left, other people's on the right; tool notices (status changes, rests) have no tail and carry that tool's icon and colour; spell casts keep their usual spell card</li>
+  <li><b>Sound</b>: a short pop when someone else's message arrives (switch it off in the options above)</li>
   <li>⚠️ Whispers are only hidden in other people's UI, not encrypted: the message is still delivered to every client in the room</li>
 </ul>`,
-    },
+    } as Record<string, string>)[lang],
+    afterRender: (root, gm) => wireModuleOptions(root, gm, () => { if (activeTab === "roomChat") renderContent(); }),
   },
   {
     id: "statusTester",

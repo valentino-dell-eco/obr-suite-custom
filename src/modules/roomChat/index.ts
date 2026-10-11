@@ -23,7 +23,9 @@ import {
   ChatRole,
   isChatMessage,
   isVisibleTo,
+  toolOf,
 } from "./types";
+import { sfxChatMessage } from "../dice/sfx-broadcast";
 import { appendHistory, clearHistory } from "./history";
 import { initBroadcastAuth, isFromSelf, isFromGM, senderOf } from "../../utils/broadcastAuth";
 
@@ -110,11 +112,18 @@ async function onMessage(ev: { data: unknown; connectionId?: string }): Promise<
     fromColor: sender.color || "#9aa0b3",
     fromRole: sender.role,
   };
+  // Keep only a known tool tag (it is shown as a coloured notice).
+  const tool = toolOf(raw);
+  if (raw.cast || !tool) delete raw.tool;
   if (!meId) return;
   if (!isVisibleTo(raw, meId, meRole)) return;
   if (!roomId) roomId = OBR.room.id || "room";
   const fresh = appendHistory(roomId, raw);
   if (!fresh) return;
+  // New message from someone else → "bubble" sound. The background has
+  // no user gesture (suspended AudioContext), so this goes out as a
+  // LOCAL broadcast that the toolbar cluster plays.
+  if (raw.fromId !== meId) sfxChatMessage();
   try {
     await OBR.broadcast.sendMessage(BC_CHAT_UPDATED, raw, { destination: "LOCAL" });
   } catch {}

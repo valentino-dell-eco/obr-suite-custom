@@ -18,14 +18,18 @@
 const LS_KEY_DICE = "obr-suite/sfx-dice";          // dice rolling pipeline
 const LS_KEY_INITIATIVE = "obr-suite/sfx-initiative"; // turn chime, etc.
 const LS_KEY_LEGACY = "obr-suite/sfx-on";
+/** Room Chat "new message" pop. Own key, default ON — independent of
+ *  the legacy master so muting dice doesn't silence the chat. */
+export const LS_KEY_CHAT = "obr-suite/sfx-chat";
 
 // Default the per-module gates to whatever the legacy master is set
 // to (default ON if neither is set). The "channel" arg lets call
 // sites tag their playback so each module's toggle controls its own
 // sounds without leaking into the other.
-type Channel = "dice" | "initiative";
+type Channel = "dice" | "initiative" | "chat";
 function isOnFor(channel: Channel): boolean {
   try {
+    if (channel === "chat") return localStorage.getItem(LS_KEY_CHAT) !== "0";
     const moduleKey = channel === "dice" ? LS_KEY_DICE : LS_KEY_INITIATIVE;
     const v = localStorage.getItem(moduleKey);
     if (v === "0") return false;
@@ -335,12 +339,34 @@ export function playResourceToast(): void {
   tone({ freq: 1318.5, type: "sine", duration: 0.14, gain: 0.05, attack: 0.005, release: 0.10, delay: 0.04 });
 }
 
+// Room Chat — someone else's message arrived. A "water-drop" bubble:
+// a quick upward sine glide followed by a brighter little blip a
+// fifth above. Pitched glides make it distinct from every other cue
+// (the resource toast / "same" chimes are steady 880 + 1318 Hz).
+const CHAT_CLAIM_KEY = "obr-suite/sfx-chat-last";
+export function playChatMessage(): void {
+  if (!isOnFor("chat")) return; resume();
+  // Several suite iframes subscribe to BC_SFX; only ONE of those whose
+  // audio is unlocked should play it. They share localStorage (same
+  // origin), so the first one to claim the slot wins.
+  const c = getCtx();
+  if (!c || c.state !== "running") return;
+  try {
+    const now = Date.now();
+    if (now - Number(localStorage.getItem(CHAT_CLAIM_KEY) || 0) < 400) return;
+    localStorage.setItem(CHAT_CLAIM_KEY, String(now));
+  } catch {}
+  tone({ freq: 520, endFreq: 1040, type: "sine", duration: 0.09, gain: 0.13, attack: 0.004, release: 0.06 });
+  tone({ freq: 1170, endFreq: 1560, type: "sine", duration: 0.12, gain: 0.09, attack: 0.004, release: 0.09, delay: 0.085 });
+  tone({ freq: 2340, type: "triangle", duration: 0.08, gain: 0.025, attack: 0.004, release: 0.06, delay: 0.09 });
+}
+
 // Public sfx names — also the broadcast payload `name` field used by
 // sfx-broadcast.ts.
 export type SfxName =
   | "parabola" | "scalePunch" | "numFly" | "numLand"
   | "flashCrit" | "flashFail" | "spin" | "burst" | "same"
-  | "syncView" | "nextTurn" | "resourceToast";
+  | "syncView" | "nextTurn" | "resourceToast" | "chatMessage";
 
 export const PLAYERS: Record<SfxName, () => void> = {
   parabola: playParabola,
@@ -355,6 +381,7 @@ export const PLAYERS: Record<SfxName, () => void> = {
   syncView: playSyncView,
   nextTurn: playNextTurn,
   resourceToast: playResourceToast,
+  chatMessage: playChatMessage,
 };
 
 // Resume the AudioContext — call from sfx-broadcast.ts on first user

@@ -158,7 +158,7 @@ export function announceRestInChat(
       : "rcvChatAndDusk";
     text += t(lang, key);
   }
-  void sendChat({ scope: "all", text }).catch((e) => {
+  void sendChat({ scope: "all", text, tool: "rest" }).catch((e) => {
     console.warn("[obr-suite/recovery] chat announce failed", e);
   });
 }
