@@ -201,19 +201,26 @@ export function setStatusGridScale(step: number, unit: string): void {
 }
 
 /** − / + step for this status: the grid scale for distance levels. */
-export function levelStep(def: Pick<StatusDef, "levelGrid"> | null | undefined): number {
+export function levelStep(
+  def: Pick<StatusDef, "levelGrid"> | null | undefined,
+): number {
   return def?.levelGrid ? gridScale.step : LEVEL_STEP;
 }
 
 /** Level a status starts at when added: one grid square for distance
  *  levels, else 1. */
-export function levelStart(def: Pick<StatusDef, "levelGrid"> | null | undefined): number {
+export function levelStart(
+  def: Pick<StatusDef, "levelGrid"> | null | undefined,
+): number {
   return def?.levelGrid ? gridScale.step : 1;
 }
 
 /** Title as shown on a chip: "Exhaustion 3", or "Flying 30 ft" for
  *  grid-distance levels. */
-export function displayTitle(def: StatusDef, applied?: Pick<AppliedStatus, "level"> | null): string {
+export function displayTitle(
+  def: StatusDef,
+  applied?: Pick<AppliedStatus, "level"> | null,
+): string {
   const p = titleParts(def, applied);
   return p.title && p.level ? `${p.title} ${p.level}` : p.title || p.level;
 }
@@ -223,24 +230,35 @@ export function displayTitle(def: StatusDef, applied?: Pick<AppliedStatus, "leve
 export function titleParts(
   def: StatusDef,
   applied?: Pick<AppliedStatus, "level"> | null,
-): { title: string; level: string, hasUnit: boolean } {
+): { title: string; level: string; hasUnit: boolean } {
   if (!def.levels) return { title: def.title, level: "", hasUnit: false };
   const lv = applied?.level ?? levelStart(def);
-  const level = def.levelGrid && gridScale.unit ? `(${lv} ${gridScale.unit})` : String(lv);
-  const hasUnit = def.levelGrid && gridScale.unit? true : false;
+  const level =
+    def.levelGrid && gridScale.unit ? `(${lv} ${gridScale.unit})` : String(lv);
+  const hasUnit = def.levelGrid && gridScale.unit ? true : false;
   return { title: def.title, level, hasUnit };
 }
 
-/** displayTitle() as HTML, the level in <i>. `esc` escapes text. */
+/** displayTitleHtml — stesse run di chipRichText (chip sulla mappa):
+ *  titolo → bold, livello numerico → bold, "(unità)" → corsivo non-bold. */
 export function displayTitleHtml(
   def: StatusDef,
   applied: Pick<AppliedStatus, "level"> | null | undefined,
   esc: (s: string) => string,
 ): string {
   const p = titleParts(def, applied);
-  if (!p.level) return esc(p.title);
-  const lv = `<i class="lv">${esc(p.level)}</i>`;
-  return p.title ? `${esc(p.title)} ${lv}` : lv;
+  if (!p.level) return p.title ? `<b>${esc(p.title)}</b>` : "";
+  if (p.hasUnit) {
+    const m = p.level.match(/^(.*?)(\s*\([^)]*\))\s*$/);
+    const num = m?.[1] ?? "";
+    const unit = m?.[2] ?? p.level;
+    const head = p.title ? `<b>${esc(p.title)}</b>` : "";
+    const numHtml = num ? `<b>${esc(num)}</b>` : "";
+    const unitHtml = `<i class="lv">${esc(unit)}</i>`;
+    return [head, numHtml + unitHtml].filter(Boolean).join(" ");
+  }
+  const lv = `<b>${esc(p.level)}</b>`;
+  return p.title ? `<b>${esc(p.title)}</b> ${lv}` : lv;
 }
 
 /** On-disk shape — short keys to save room-metadata bytes. */
@@ -285,7 +303,9 @@ export function isHttpUrl(v: unknown): v is string {
 }
 
 function posNum(v: unknown, max: number): number | undefined {
-  return typeof v === "number" && Number.isFinite(v) && v > 0 && v <= max ? v : undefined;
+  return typeof v === "number" && Number.isFinite(v) && v > 0 && v <= max
+    ? v
+    : undefined;
 }
 
 export function sanitizeAttachment(raw: unknown): StatusAttachment | undefined {
@@ -294,8 +314,16 @@ export function sanitizeAttachment(raw: unknown): StatusAttachment | undefined {
   if (!isHttpUrl(r.url)) return undefined;
   const width = posNum(r.width, 16384) ?? 512;
   const height = posNum(r.height, 16384) ?? 512;
-  const mime = typeof r.mime === "string" && MIME_RE.test(r.mime) ? r.mime : guessMime(r.url);
-  const out: StatusAttachment = { url: r.url, width: Math.round(width), height: Math.round(height), mime };
+  const mime =
+    typeof r.mime === "string" && MIME_RE.test(r.mime)
+      ? r.mime
+      : guessMime(r.url);
+  const out: StatusAttachment = {
+    url: r.url,
+    width: Math.round(width),
+    height: Math.round(height),
+    mime,
+  };
   const dpi = posNum(r.dpi, 10000);
   if (dpi) out.dpi = dpi;
   return out;
@@ -331,7 +359,10 @@ export function sanitizeDef(raw: unknown): StatusDef | null {
   };
   const emoji = clampStr(r.emoji, MAX_EMOJI);
   if (emoji) def.emoji = emoji;
-  if (typeof r.icon === "string" && (ICON_IDS as readonly string[]).includes(r.icon)) {
+  if (
+    typeof r.icon === "string" &&
+    (ICON_IDS as readonly string[]).includes(r.icon)
+  ) {
     def.icon = r.icon;
   }
   const att = sanitizeAttachment(r.attachment);
@@ -358,14 +389,17 @@ function toCompact(d: StatusDef): CompactDef {
 function fromCompact(raw: unknown): StatusDef | null {
   if (!raw || typeof raw !== "object") return null;
   const c = raw as Record<string, unknown>;
-  const a = c.a && typeof c.a === "object" ? (c.a as Record<string, unknown>) : null;
+  const a =
+    c.a && typeof c.a === "object" ? (c.a as Record<string, unknown>) : null;
   return sanitizeDef({
     id: c.id,
     title: c.t,
     color: c.c,
     icon: c.i,
     emoji: c.e,
-    attachment: a ? { url: a.u, width: a.w, height: a.h, mime: a.m, dpi: a.d } : undefined,
+    attachment: a
+      ? { url: a.u, width: a.w, height: a.h, mime: a.m, dpi: a.d }
+      : undefined,
     levels: c.l === 1 ? true : c.l === 0 ? false : undefined,
     levelGrid: c.g === 1,
   });
@@ -392,7 +426,8 @@ export function serializeLibrary(defs: StatusDef[]): unknown[] {
 
 export function librarySizeBytes(defs: StatusDef[]): number {
   try {
-    return new TextEncoder().encode(JSON.stringify(serializeLibrary(defs))).length;
+    return new TextEncoder().encode(JSON.stringify(serializeLibrary(defs)))
+      .length;
   } catch {
     return 0;
   }
@@ -406,7 +441,8 @@ export function parseApplied(raw: unknown): AppliedStatus[] {
   for (const e of raw) {
     if (!e || typeof e !== "object") continue;
     const r = e as Record<string, unknown>;
-    if (typeof r.uid !== "string" || !ID_RE.test(r.uid) || seen.has(r.uid)) continue;
+    if (typeof r.uid !== "string" || !ID_RE.test(r.uid) || seen.has(r.uid))
+      continue;
     if (typeof r.defId !== "string" || !ID_RE.test(r.defId)) continue;
     seen.add(r.uid);
     const a: AppliedStatus = { uid: r.uid, defId: r.defId };
@@ -419,12 +455,17 @@ export function parseApplied(raw: unknown): AppliedStatus[] {
   return out;
 }
 
-export function readApplied(item: Pick<Item, "metadata"> | null | undefined): AppliedStatus[] {
+export function readApplied(
+  item: Pick<Item, "metadata"> | null | undefined,
+): AppliedStatus[] {
   return parseApplied(item?.metadata?.[APPLIED_KEY]);
 }
 
 /** Applied entries this viewer may see (players never see hidden ones). */
-export function visibleApplied(applied: AppliedStatus[], isGM: boolean): AppliedStatus[] {
+export function visibleApplied(
+  applied: AppliedStatus[],
+  isGM: boolean,
+): AppliedStatus[] {
   return isGM ? applied : applied.filter((a) => !a.hidden);
 }
 
@@ -446,7 +487,10 @@ export function resolveVisible(
 
 /** Status tokens: CHARACTER / MOUNT layer images. */
 export function isStatusToken(item: Item): boolean {
-  return item.type === "IMAGE" && (item.layer === "CHARACTER" || item.layer === "MOUNT");
+  return (
+    item.type === "IMAGE" &&
+    (item.layer === "CHARACTER" || item.layer === "MOUNT")
+  );
 }
 
 // Room setting "players may only view" — mirrored here by settings.ts
@@ -458,8 +502,15 @@ export function setPlayersMayApplyFlag(v: boolean): void {
 
 /** GM: every token. Player: only tokens they created (own), unless the
  *  GM restricted players to viewing. */
-export function canManage(item: Pick<Item, "createdUserId">, isGM: boolean, playerId: string): boolean {
-  return isGM || (playersMayApplyFlag && !!playerId && item.createdUserId === playerId);
+export function canManage(
+  item: Pick<Item, "createdUserId">,
+  isGM: boolean,
+  playerId: string,
+): boolean {
+  return (
+    isGM ||
+    (playersMayApplyFlag && !!playerId && item.createdUserId === playerId)
+  );
 }
 
 export function newId(prefix = ""): string {
@@ -468,7 +519,11 @@ export function newId(prefix = ""): string {
 }
 
 /** Current rotation index for a token with `n` visible statuses. */
-export function rotationIndex(n: number, now = Date.now(), ms = ROTATE_MS): number {
+export function rotationIndex(
+  n: number,
+  now = Date.now(),
+  ms = ROTATE_MS,
+): number {
   if (n <= 1 || ms <= 0) return 0;
   return Math.floor(now / ms) % n;
 }
@@ -481,9 +536,12 @@ export function textColorFor(bg: string): string {
     const s = c / 255;
     return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
   };
-  const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  const L =
+    0.2126 * lin((n >> 16) & 255) +
+    0.7152 * lin((n >> 8) & 255) +
+    0.0722 * lin(n & 255);
   // Contrast against white vs black — pick the larger.
-  return (1.05 / (L + 0.05)) >= ((L + 0.05) / 0.05) ? "#ffffff" : "#111111";
+  return 1.05 / (L + 0.05) >= (L + 0.05) / 0.05 ? "#ffffff" : "#111111";
 }
 
 /** Icon tint for HTML pages: the SVGs are white; on light chips we
