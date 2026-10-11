@@ -35,7 +35,7 @@
 //               Click icon at current=0 resets to max.
 
 import OBR, { Item } from "@owlbear-rodeo/sdk";
-import { Resource, IconId, PLUGIN_ID } from "./types";
+import { Resource, IconId, PLUGIN_ID, cleanSlots, isSpecialResource, slotTotals } from "./types";
 import { ICON_LIBRARY } from "./icons";
 import { readResources, updateResource, writeResources } from "./storage";
 import { broadcastDiceRoll } from "../dice";
@@ -197,6 +197,8 @@ export function mountResourcePanel(opts: MountOptions): {
 } {
   const { container, getItemId, onChange } = opts;
   let currentRender: Resource[] = [];
+  // Special resources on the token (not listed; preserved on reorder).
+  let hiddenRender: Resource[] = [];
   let lastSnapshotJson = "";
   // 2026-05-12 — "we just touched it" window. Earlier round relied
   // solely on JSON.stringify equality between optimistic snapshot and
@@ -248,7 +250,12 @@ export function mountResourcePanel(opts: MountOptions): {
     let items: Item[] = [];
     try { items = await OBR.scene.items.getItems([id]); } catch {}
     const item = items[0] ?? null;
-    const next = readResources(item);
+    // Spell slots / hit dice are special: shown in the character sheet
+    // (Spells section / Hit Dice cell), not in this list. Kept aside so
+    // a reorder writes them back untouched.
+    const all = readResources(item);
+    hiddenRender = all.filter((r) => isSpecialResource(r));
+    const next = all.filter((r) => !isSpecialResource(r));
     const nextJson = JSON.stringify(next);
     if (nextJson === lastSnapshotJson) {
       currentRender = next;
@@ -327,7 +334,11 @@ export function mountResourcePanel(opts: MountOptions): {
       // Detect type change vs the row's CURRENT DOM (which still
       // reflects the previous render).
       const prev = prevById.get(r.id);
-      if (prev && prev.type !== r.type) {
+      // Also re-render when the pip LAYOUT changed (max / icon / the
+      // spell-slot levels), which patchRow can't express.
+      const shape = (x: Resource) =>
+        `${x.type}|${x.max}|${x.icon}|${x.dieInfo ?? ""}|${(x.slots ?? []).map((sl) => sl.max).join(",")}`;
+      if (prev && shape(prev) !== shape(r)) {
         const tmp = document.createElement("div");
         tmp.innerHTML = renderResourceRow(r);
         const fresh = tmp.firstElementChild as HTMLElement;
@@ -378,7 +389,9 @@ export function mountResourcePanel(opts: MountOptions): {
     switch (r.type) {
       case "count":
       case "dieRoll":
+      case "hitDice":
       case "charges": pillsHtml = renderCountPills(r); break;
+      case "spellSlots": pillsHtml = renderSlotLevels(r); break;
       case "bar":    pillsHtml = renderBarPill(r); break;
       case "number": pillsHtml = renderNumberPill(r); break;
     }
@@ -404,12 +417,43 @@ export function mountResourcePanel(opts: MountOptions): {
                 draggable="true"
                 title="${escapeAttr(T("rpReorder"))}">≡</span>
           <div class="rt-row-name" title="${escapeAttr(r.name)}">${escapeHtml(r.name || T("rtUnnamed"))}</div>
-          <div class="rt-row-meta" data-meta>${r.current} / ${r.max}</div>
+          <div class="rt-row-meta" data-meta>${escapeHtml(metaText(r))}</div>
           <button class="rt-row-edit" type="button" data-edit-id="${escapeAttr(r.id)}" title="${escapeAttr(T("rpEdit"))}">⚙</button>
         </div>
         <div class="rt-pills">${pillsHtml}</div>
       </div>
     `;
+  }
+
+  function metaText(r: Resource): string {
+    return r.type === "hitDice" && r.dieInfo
+      ? `${r.current} / ${r.max} · ${r.dieInfo}`
+      : `${r.current} / ${r.max}`;
+  }
+
+  // Spell slots — one line of pips per level that has slots.
+  function renderSlotLevels(r: Resource): string {
+    const slots = cleanSlots(r.slots);
+    const icon = ICON_LIBRARY[r.icon as IconId] ?? ICON_LIBRARY.gem;
+    const lines: string[] = [];
+    slots.forEach((s, lv) => {
+      if (s.max <= 0) return;
+      const pips: string[] = [];
+      for (let i = 1; i <= s.max; i++) {
+        pips.push(`<span class="rt-pill rt-pill-icon ${i <= s.current ? "full" : "spent"}"
+              data-action="slot-toggle"
+              data-rid="${escapeAttr(r.id)}"
+              data-lv="${lv}"
+              data-pos="${i}">${icon}</span>`);
+      }
+      lines.push(`<div class="rt-slot-lv">
+        <span class="rt-slot-lbl">${escapeHtml(T("rpSlotLevel").replace("{n}", String(lv + 1)))}</span>
+        <span class="rt-slot-pips">${pips.join("")}</span>
+        <span class="rt-slot-num" data-slot-num="${lv}">${s.current}/${s.max}</span>
+      </div>`);
+    });
+    if (!lines.length) return `<span class="rt-pill-empty">${T("rpMaxZero")}</span>`;
+    return lines.join("");
   }
 
   function renderCountPills(r: Resource): string {
@@ -519,8 +563,21 @@ export function mountResourcePanel(opts: MountOptions): {
     const row = container.querySelector<HTMLElement>(`.rt-row[data-id="${cssEscape(r.id)}"]`);
     if (!row) return;
     const meta = row.querySelector<HTMLElement>("[data-meta]");
-    if (meta) meta.textContent = `${r.current} / ${r.max}`;
-    if (r.type === "count" || r.type === "dieRoll" || r.type === "charges") {
+    if (meta) meta.textContent = metaText(r);
+    if (r.type === "spellSlots") {
+      const slots = cleanSlots(r.slots);
+      row.querySelectorAll<HTMLElement>('[data-action="slot-toggle"]').forEach((p) => {
+        const lv = parseInt(p.dataset.lv ?? "0", 10);
+        const pos = parseInt(p.dataset.pos ?? "0", 10);
+        const filled = pos <= (slots[lv]?.current ?? 0);
+        p.classList.toggle("full", filled);
+        p.classList.toggle("spent", !filled);
+      });
+      row.querySelectorAll<HTMLElement>("[data-slot-num]").forEach((n) => {
+        const s = slots[parseInt(n.dataset.slotNum ?? "0", 10)];
+        if (s) n.textContent = `${s.current}/${s.max}`;
+      });
+    } else if (r.type === "count" || r.type === "dieRoll" || r.type === "charges" || r.type === "hitDice") {
       const max = Math.max(0, Math.floor(r.max));
       const cur = Math.max(0, Math.min(max, Math.floor(r.current)));
       row.querySelectorAll<HTMLElement>('[data-action="count-toggle"]').forEach((p) => {
@@ -570,6 +627,10 @@ export function mountResourcePanel(opts: MountOptions): {
     root.querySelectorAll<HTMLElement>('[data-action="count-toggle"]').forEach((el) => {
       el.addEventListener("click", () => void onCountClick(id, el));
       el.addEventListener("contextmenu", (e) => { e.preventDefault(); void onCountReset(id, el); });
+    });
+    root.querySelectorAll<HTMLElement>('[data-action="slot-toggle"]').forEach((el) => {
+      el.addEventListener("click", () => void onSlotClick(id, el, false));
+      el.addEventListener("contextmenu", (e) => { e.preventDefault(); void onSlotClick(id, el, true); });
     });
     root.querySelectorAll<HTMLElement>('[data-action="bar-drag"]').forEach((el) => {
       el.addEventListener("pointerdown", (e) => onBarPointerDown(id, el, e as PointerEvent));
@@ -717,6 +778,33 @@ export function mountResourcePanel(opts: MountOptions): {
     if (next === r.current) return;
     await applyChange(itemId, r, next, next - r.current, el);
   }
+  /** Spell slot pip: same position rule as count pips, per level.
+   *  Right-click (`reset`) refills that level. */
+  async function onSlotClick(itemId: string, el: HTMLElement, reset: boolean): Promise<void> {
+    const r = currentRender.find((x) => x.id === el.dataset.rid);
+    if (!r || r.type !== "spellSlots") return;
+    const lv = parseInt(el.dataset.lv ?? "-1", 10);
+    const pos = parseInt(el.dataset.pos ?? "0", 10);
+    const slots = cleanSlots(r.slots);
+    const s = slots[lv];
+    if (!s) return;
+    const next = reset ? s.max : pos === s.current ? pos - 1 : pos;
+    if (next === s.current) return;
+    slots[lv] = { ...s, current: next };
+    const tot = slotTotals(slots);
+    const nextRow: Resource = { ...r, slots, current: tot.current, max: tot.max };
+    const idx = currentRender.findIndex((x) => x.id === r.id);
+    if (idx < 0) return;
+    currentRender = currentRender.map((x, i) => (i === idx ? nextRow : x));
+    lastSnapshotJson = JSON.stringify(currentRender);
+    suppressRenderUntil = Date.now() + SUPPRESS_RENDER_MS;
+    patchRow(nextRow, el);
+    const delta = tot.current - r.current;
+    onChange?.({ resourceName: r.name || T("rtUnnamed"), delta, current: tot.current, max: tot.max });
+    void broadcastChanged(itemId, nextRow, delta, r.current);
+    await updateResource(itemId, r.id, () => nextRow);
+  }
+
   async function onCountReset(itemId: string, el: HTMLElement): Promise<void> {
     const rid = el.dataset.rid!;
     const r = currentRender.find((x) => x.id === rid);
@@ -946,7 +1034,7 @@ export function mountResourcePanel(opts: MountOptions): {
     }
     // Persist.
     try {
-      await writeResources(itemId, next);
+      await writeResources(itemId, [...hiddenRender, ...next]);
     } catch (e) {
       console.error("[obr-suite/resources] commitReorder failed", e);
     }
@@ -1136,6 +1224,10 @@ export function ensureStyles(): void {
       100% { transform:scale(1); }
     }
     .rt-pill-empty { font-size:11px; color:#9aa0b3; font-style:italic }
+    .rt-slot-lv { flex-basis:100%; display:flex; align-items:center; gap:6px }
+    .rt-slot-lbl { flex:0 0 38px; font-size:10.5px; font-weight:700; color:#ffd27a; white-space:nowrap }
+    .rt-slot-pips { flex:1; display:flex; flex-wrap:wrap; gap:5px; align-items:center; min-width:0 }
+    .rt-slot-num { flex:none; font-size:10.5px; color:#9aa0b3; font-variant-numeric:tabular-nums }
 
     /* ===== 进度 (bar) — number-prefix label + draggable thumb ====== */
     .rt-bar-num {

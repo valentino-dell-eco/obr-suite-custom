@@ -113,7 +113,7 @@ function renderNumberWidget(r: Resource): string {
 }
 
 function renderWidget(r: Resource): string {
-  if (r.type === "count")  return renderCountWidget(r);
+  if (r.type === "count" || r.type === "hitDice") return renderCountWidget(r);
   if (r.type === "bar")    return renderBarWidget(r);
   if (r.type === "number") return renderNumberWidget(r);
   return "";

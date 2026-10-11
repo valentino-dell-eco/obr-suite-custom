@@ -16,7 +16,11 @@ export type ResourceType =
   | "bar"       // single icon + horizontal progress bar
   | "number"    // single icon + readable "current / max" text
   | "dieRoll"   // discrete uses that trigger a die roll on consumption
-  | "charges";  // discrete uses that trigger a die-roll FORMULA on RECOVERY (see chargesFormula below)
+  | "charges"   // discrete uses that trigger a die-roll FORMULA on RECOVERY (see chargesFormula below)
+  // 2026-10 — special resources that replace the character card's own
+  // fields (one of each per token):
+  | "spellSlots" // spell slots, levels 1–9, each with its own current / max (`slots`)
+  | "hitDice";   // hit dice: current / max + die size (`dieInfo`, e.g. "d10")
 
 export type IconId =
   | "gem"        // 紫水晶棱形
@@ -100,6 +104,90 @@ export interface Resource {
   /** Optional sort hint — lower values render first. Defaults to
    *  insertion order via the array index when undefined. */
   order?: number;
+  /** Offered in the spell-cast window's "resource spent" select. */
+  forSpells?: boolean;
+  /** Offered in the feature-use window's "resource spent" select. */
+  forFeatures?: boolean;
+  /** spellSlots only: index 0 = 1st level … index 8 = 9th level.
+   *  `current` / `max` above are kept as the totals. */
+  slots?: SlotLevel[];
+  /** hitDice only: one pool per die size (multiclassing, e.g. 3 d8 +
+   *  1 d10). `current` / `max` above are kept as the totals. */
+  pools?: HitDiePool[];
+}
+
+export type HitDieSize = (typeof HIT_DIE_SIZES)[number];
+
+export interface HitDiePool {
+  die: HitDieSize;
+  current: number;
+  max: number;
+}
+
+/** Clean hit-die pools: known sizes only, one pool per size (merged),
+ *  largest die first. */
+export function cleanPools(raw: unknown): HitDiePool[] {
+  const arr = Array.isArray(raw) ? raw : [];
+  const bySize = new Map<HitDieSize, HitDiePool>();
+  for (const x of arr) {
+    const die = hitDieSize((x as { die?: unknown })?.die);
+    if (!die) continue;
+    const max = Math.max(0, Math.min(99, Math.floor(Number((x as { max?: unknown }).max) || 0)));
+    const cur = Math.max(0, Math.min(max, Math.floor(Number((x as { current?: unknown }).current) || 0)));
+    const prev = bySize.get(die);
+    bySize.set(die, prev ? { die, current: prev.current + cur, max: prev.max + max } : { die, current: cur, max });
+  }
+  return [...bySize.values()].sort((a, b) => dieSides(b.die) - dieSides(a.die));
+}
+
+export function dieSides(die: string): number {
+  return parseInt(String(die).replace(/^\D+/, ""), 10) || 0;
+}
+
+/** "2/3 d8 · 1/1 d10" */
+export function poolsLabel(pools: HitDiePool[]): string {
+  return pools.map((p) => `${p.current}/${p.max} ${p.die}`).join(" · ");
+}
+
+export interface SlotLevel {
+  current: number;
+  max: number;
+}
+
+export const SLOT_LEVELS = 9;
+export const HIT_DIE_SIZES = ["d6", "d8", "d10", "d12"] as const;
+
+/** Special resources (spell slots / hit dice) have their own UI and
+ *  are never offered as a generic "resource spent". */
+export function isSpecialResource(r: Pick<Resource, "type">): boolean {
+  return r.type === "spellSlots" || r.type === "hitDice";
+}
+
+/** Nine clean slot levels from anything. */
+export function cleanSlots(raw: unknown): SlotLevel[] {
+  const arr = Array.isArray(raw) ? raw : [];
+  const out: SlotLevel[] = [];
+  for (let i = 0; i < SLOT_LEVELS; i++) {
+    const x = arr[i] as { current?: unknown; max?: unknown } | undefined;
+    const max = Math.max(0, Math.min(99, Math.floor(Number(x?.max) || 0)));
+    const cur = Math.max(0, Math.min(max, Math.floor(Number(x?.current) || 0)));
+    out.push({ current: cur, max });
+  }
+  return out;
+}
+
+export function slotTotals(slots: SlotLevel[]): { current: number; max: number } {
+  let current = 0;
+  let max = 0;
+  for (const s of slots) { current += s.current; max += s.max; }
+  return { current, max };
+}
+
+/** "d10" from "d10" / "1d10" / "D10"; null when not a hit die size. */
+export function hitDieSize(raw: unknown): (typeof HIT_DIE_SIZES)[number] | null {
+  const m = /^\s*(?:1)?d(\d+)\s*$/i.exec(String(raw ?? ""));
+  const d = m ? `d${m[1]}` : "";
+  return (HIT_DIE_SIZES as readonly string[]).includes(d) ? (d as (typeof HIT_DIE_SIZES)[number]) : null;
 }
 
 /** Default resources seeded for a token that has none yet. Empty

@@ -104,6 +104,34 @@ label.field, .field{
   box-shadow:inset 0 -2px 0 0 var(--accent);
 }
 .type-toggle button + button{border-left:1px solid var(--border)}
+.type-toggle.special{grid-template-columns:repeat(2, 1fr);margin-top:6px}
+.type-toggle.special button.on{background:rgba(245,166,35,0.22);color:#ffd27a;box-shadow:inset 0 -2px 0 0 var(--accent-warm)}
+.sublbl{font-size:10px;color:var(--text-mute);margin-top:6px;letter-spacing:.4px;text-transform:uppercase;font-weight:700}
+/* spell slot grid: 9 levels, current / max each */
+.slots-grid{display:grid;grid-template-columns:repeat(3, 1fr);gap:6px}
+.slot-cell{display:flex;align-items:center;gap:4px;padding:5px 6px;background:var(--bg-strong);border:1px solid var(--border)}
+.slot-cell .lv{flex:0 0 30px;font-size:11px;font-weight:700;color:#ffd27a}
+.slot-cell input{width:100%;min-width:0;height:26px;padding:0 4px;text-align:center;background:#171a26;border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:12px;outline:none}
+.slot-cell input:focus{border-color:var(--accent)}
+/* No spinner buttons (they covered the number); ↑ / ↓ keys still step, min 0. */
+.slot-cell input{-moz-appearance:textfield;appearance:textfield}
+.slot-cell input::-webkit-outer-spin-button,
+.slot-cell input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.slot-cell .sep{color:var(--text-mute);font-size:11px}
+.pools{display:flex;flex-direction:column;gap:6px}
+.pool-row{display:flex;align-items:center;gap:6px;padding:5px 6px;background:var(--bg-strong);border:1px solid var(--border)}
+.pool-row select{height:26px;padding:0 6px;background:#171a26;border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:12px;outline:none}
+.pool-row input{width:54px;height:26px;padding:0 4px;text-align:center;background:#171a26;border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:12px;outline:none;-moz-appearance:textfield;appearance:textfield}
+.pool-row input::-webkit-outer-spin-button,.pool-row input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.pool-row .sep{color:var(--text-mute);font-size:11px}
+.pool-row .lbl2{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;font-weight:700;letter-spacing:.4px}
+.pool-row .del{margin-left:auto;background:transparent;border:1px solid transparent;color:var(--text-mute);cursor:pointer;font-size:13px;padding:1px 6px;font-family:inherit}
+.pool-row .del:hover{color:#fff;background:var(--accent-red)}
+.add-pool{align-self:flex-start;font-size:11px;color:var(--accent);background:transparent;border:1px solid rgba(93,173,226,0.45);padding:4px 10px;cursor:pointer;font-family:inherit;font-weight:700}
+.add-pool:hover{background:rgba(93,173,226,0.15)}
+.checks{display:flex;gap:16px;flex-wrap:wrap}
+.checks label{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text);cursor:pointer;text-transform:none;letter-spacing:0;font-weight:600}
+.checks input{width:15px;height:15px;accent-color:var(--accent)}
 
 /* ===== icon grid — seamless square highlights, no gap, no per-cell radius =====
    gap:0 + the host-grid border + each cell's right/bottom border draws a
@@ -252,6 +280,30 @@ label.field, .field{
         <button type="button" data-type="dieRoll" data-i18n="reTypeDieRoll">骰子</button>
         <button type="button" data-type="charges" data-i18n="reTypeCharges">充能</button>
       </div>
+      <div class="sublbl" data-i18n="reLblSpecial">特殊资源</div>
+      <div class="type-toggle special" id="typeToggleSpecial">
+        <button type="button" data-type="spellSlots" data-i18n="reTypeSpellSlots">法术位</button>
+        <button type="button" data-type="hitDice" data-i18n="reTypeHitDice">生命骰</button>
+      </div>
+    </div>
+
+    <div class="field" id="slotsField" style="display:none">
+      <span data-i18n="reLblSlots">法术位</span>
+      <div class="slots-grid" id="slotsGrid"></div>
+    </div>
+
+    <div class="field" id="hitDieField" style="display:none">
+      <span data-i18n="reLblHitDie">生命骰</span>
+      <div class="pools" id="pools"></div>
+      <button class="add-pool" id="btnAddPool" type="button" data-i18n="reAddPool">+ 添加骰子类型</button>
+    </div>
+
+    <div class="field" id="eligField">
+      <span data-i18n="reLblEligible">可在激活时消耗</span>
+      <div class="checks">
+        <label><input type="checkbox" id="eligSpells"><span data-i18n="reEligSpells">施放法术</span></label>
+        <label><input type="checkbox" id="eligFeatures"><span data-i18n="reEligFeatures">使用特性</span></label>
+      </div>
     </div>
 
     <label class="field" id="dieInfoField" style="display:none">
@@ -275,7 +327,7 @@ label.field, .field{
       </select>
     </label>
 
-    <div class="row-2">
+    <div class="row-2" id="curMaxRow">
       <label class="field">
         <span data-i18n="reLblCurrent">当前</span>
         <input type="number" id="current" step="1" />

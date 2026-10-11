@@ -31,6 +31,16 @@ import {
   DieInfo,
   RecoveryType,
   PLUGIN_ID,
+  SLOT_LEVELS,
+  SlotLevel,
+  HIT_DIE_SIZES,
+  HitDiePool,
+  HitDieSize,
+  cleanSlots,
+  cleanPools,
+  hitDieSize,
+  isSpecialResource,
+  slotTotals,
 } from "./types";
 import { ICON_LIBRARY, ICON_LABELS, ICON_IDS } from "./icons";
 import { applyI18nDom, t } from "../../i18n";
@@ -76,6 +86,16 @@ const dieInfoInput = $i("dieInfo");
 const chargesFormulaField = $("chargesFormulaField");
 const chargesFormulaInput = $i("chargesFormula");
 const recoverySelect = $i("recovery") as unknown as HTMLSelectElement;
+const typeToggleSpecial = $("typeToggleSpecial");
+const slotsField = $("slotsField");
+const slotsGrid = $("slotsGrid");
+const hitDieField = $("hitDieField");
+const poolsEl = $("pools");
+const btnAddPool = $("btnAddPool");
+const eligField = $("eligField");
+const eligSpells = $i("eligSpells");
+const eligFeatures = $i("eligFeatures");
+const curMaxRow = $("curMaxRow");
 const btnX = $("btnX");
 const btnCancel = $("btnCancel");
 const btnSave = $("btnSave");
@@ -93,6 +113,100 @@ let itemId = "";
 // Type toggle state. Lives outside the DOM so payload (re-)apply
 // doesn't fight with the .on class.
 let selectedType: ResourceType = "count";
+// Spell slots being edited (spellSlots type only).
+let slotValues: SlotLevel[] = cleanSlots([]);
+// Hit die pools being edited (hitDice type only) — one row per size.
+let poolValues: HitDiePool[] = [{ die: "d8", current: 1, max: 1 }];
+
+function syncPoolTotals(): void {
+  const tot = slotTotals(poolValues);
+  inpCurrent.value = String(tot.current);
+  inpMax.value = String(tot.max);
+}
+
+function renderPools(): void {
+  const used = new Set(poolValues.map((p) => p.die));
+  poolsEl.innerHTML = poolValues
+    .map((p, i) => `<div class="pool-row">
+      <select data-pool="${i}" data-k="die">${HIT_DIE_SIZES.map((d) =>
+        `<option value="${d}" ${d === p.die ? "selected" : ""} ${d !== p.die && used.has(d) ? "disabled" : ""}>${d}</option>`).join("")}</select>
+      <input type="number" min="0" max="99" step="1" data-pool="${i}" data-k="current" value="${p.current}">
+      <span class="sep">/</span>
+      <input type="number" min="0" max="99" step="1" data-pool="${i}" data-k="max" value="${p.max}">
+      <span class="lbl2">${escHtml(T("rePoolCurMax"))}</span>
+      ${poolValues.length > 1 ? `<button class="del" type="button" data-del-pool="${i}">×</button>` : ""}
+    </div>`)
+    .join("");
+  btnAddPool.style.display = poolValues.length >= HIT_DIE_SIZES.length ? "none" : "";
+  syncPoolTotals();
+}
+poolsEl.addEventListener("input", (e) => {
+  const el = e.target as HTMLInputElement;
+  const i = Number(el.dataset.pool);
+  const p = poolValues[i];
+  if (!p || el.tagName !== "INPUT") return;
+  const n = Math.max(0, Math.floor(Number(el.value) || 0));
+  const next = { ...p, [el.dataset.k === "max" ? "max" : "current"]: n };
+  if (el.dataset.k === "current" && next.current > next.max) next.max = next.current;
+  if (el.dataset.k === "max" && next.current > next.max) next.current = next.max;
+  poolValues[i] = next;
+  syncPoolTotals();
+  updatePreview();
+});
+poolsEl.addEventListener("change", (e) => {
+  const el = e.target as HTMLElement;
+  if (el.tagName === "SELECT") {
+    const i = Number(el.dataset.pool);
+    const die = hitDieSize((el as HTMLSelectElement).value);
+    if (poolValues[i] && die) poolValues[i] = { ...poolValues[i], die };
+  }
+  renderPools();
+  updatePreview();
+});
+poolsEl.addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>("[data-del-pool]");
+  if (!b) return;
+  poolValues.splice(Number(b.dataset.delPool), 1);
+  renderPools();
+  updatePreview();
+});
+btnAddPool.addEventListener("click", () => {
+  const used = new Set(poolValues.map((p) => p.die));
+  const die = HIT_DIE_SIZES.find((d) => !used.has(d)) as HitDieSize | undefined;
+  if (!die) return;
+  poolValues.push({ die, current: 1, max: 1 });
+  renderPools();
+  updatePreview();
+});
+
+const ALL_TYPES: ResourceType[] = ["count", "bar", "number", "dieRoll", "charges", "spellSlots", "hitDice"];
+
+function renderSlotsGrid(): void {
+  slotsGrid.innerHTML = slotValues
+    .map((s, i) => `<div class="slot-cell">
+      <span class="lv">${escHtml(T("rpSlotLevel").replace("{n}", String(i + 1)))}</span>
+      <input type="number" min="0" max="99" step="1" data-slot="${i}" data-k="current" value="${s.current}">
+      <span class="sep">/</span>
+      <input type="number" min="0" max="99" step="1" data-slot="${i}" data-k="max" value="${s.max}">
+    </div>`)
+    .join("");
+}
+slotsGrid.addEventListener("input", (e) => {
+  const el = e.target as HTMLInputElement;
+  const i = Number(el.dataset.slot);
+  if (!(i >= 0 && i < SLOT_LEVELS)) return;
+  const n = Math.max(0, Math.floor(Number(el.value) || 0));
+  const next = { ...slotValues[i], [el.dataset.k === "max" ? "max" : "current"]: n };
+  // Raising "current" past max raises max with it; lowering max pulls current down.
+  if (el.dataset.k === "current" && next.current > next.max) next.max = next.current;
+  if (el.dataset.k === "max" && next.current > next.max) next.current = next.max;
+  slotValues[i] = next;
+  const tot = slotTotals(slotValues);
+  inpCurrent.value = String(tot.current);
+  inpMax.value = String(tot.max);
+  updatePreview();
+});
+slotsGrid.addEventListener("change", () => renderSlotsGrid());
 
 // ---------- presets ---------------------------------------------------------
 function readPresets(): ResourcePreset[] {
@@ -220,7 +334,45 @@ function applyTypeToggleClasses(): void {
   if (chargesFormulaField) {
     chargesFormulaField.style.display = selectedType === "charges" ? "block" : "none";
   }
+  for (const b of typeToggleSpecial.querySelectorAll<HTMLButtonElement>("button[data-type]")) {
+    b.classList.toggle("on", b.dataset.type === selectedType);
+  }
+  const special = isSpecialResource({ type: selectedType });
+  slotsField.style.display = selectedType === "spellSlots" ? "flex" : "none";
+  hitDieField.style.display = selectedType === "hitDice" ? "flex" : "none";
+  // Spell slots / hit dice: their own grids replace current / max.
+  curMaxRow.style.display = isSpecialResource({ type: selectedType }) ? "none" : "";
+  if (selectedType === "hitDice") renderPools();
+  // Special resources have their own activation UI.
+  eligField.style.display = special ? "none" : "";
+  if (selectedType === "spellSlots") renderSlotsGrid();
 }
+
+/** Switch type; a fresh special resource gets its own default name. */
+function setType(v: ResourceType): void {
+  const prev = selectedType;
+  selectedType = v;
+  if (!editingResourceId && prev !== v) {
+    const defaults = [T("reDefaultName"), T("reDefaultSlotsName"), T("reDefaultHitDiceName")];
+    const name = inpName.value.trim();
+    if (!name || defaults.includes(name)) {
+      inpName.value = v === "spellSlots" ? T("reDefaultSlotsName")
+        : v === "hitDice" ? T("reDefaultHitDiceName")
+        : T("reDefaultName");
+    }
+    if (isSpecialResource({ type: v }) && recoverySelect && selectedRecovery === "none") {
+      selectedRecovery = "LR";
+      recoverySelect.value = "LR";
+    }
+  }
+  applyTypeToggleClasses();
+  updatePreview();
+}
+typeToggleSpecial.addEventListener("click", (e) => {
+  const b = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-type]");
+  const v = b?.dataset.type as ResourceType | undefined;
+  if (v === "spellSlots" || v === "hitDice") setType(v);
+});
 typeToggle?.addEventListener("click", (e) => {
   const t = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-type]");
   if (!t) return;
@@ -230,9 +382,7 @@ typeToggle?.addEventListener("click", (e) => {
     (v !== "count" && v !== "bar" && v !== "number" && v !== "dieRoll" && v !== "charges")
   )
     return;
-  selectedType = v;
-  applyTypeToggleClasses();
-  updatePreview();
+  setType(v);
 });
 
 function broadcast(channel: string, data: unknown): void {
@@ -279,6 +429,8 @@ function updatePreview(): void {
   } else if (selectedType === "charges") {
     const formula = chargesFormulaInput?.value.trim();
     extra = formula ? ` · ${formula}` : ` · ${T("reChargesFormulaEmpty")}`;
+  } else if (selectedType === "hitDice") {
+    extra = ` · ${poolValues.map((p) => `${p.max}${p.die}`).join(" + ")}`;
   }
   if (selectedRecovery !== "none") extra += ` · ${T(`reRecovery${selectedRecovery}` as Parameters<typeof T>[0])}`;
   previewLabelEl.textContent = `${name} · ${cur} / ${max}${extra}`;
@@ -301,6 +453,13 @@ function applyPayload(p: HashPayload): void {
     selectedRecovery = (p.resource.recovery as RecoveryType) || "none";
     if (recoverySelect) recoverySelect.value = selectedRecovery;
     if (chargesFormulaInput) chargesFormulaInput.value = p.resource.chargesFormula || "";
+    slotValues = cleanSlots(p.resource.slots);
+    poolValues = cleanPools(p.resource.pools);
+    if (!poolValues.length) {
+      poolValues = [{ die: hitDieSize(p.resource.dieInfo) ?? "d8", current: p.resource.current, max: p.resource.max }];
+    }
+    eligSpells.checked = p.resource.forSpells === true;
+    eligFeatures.checked = p.resource.forFeatures === true;
   } else {
     editingResourceId = null;
     titleEl.textContent = T("reNewTitle");
@@ -317,7 +476,12 @@ function applyPayload(p: HashPayload): void {
     selectedRecovery = "none";
     if (recoverySelect) recoverySelect.value = "none";
     if (chargesFormulaInput) chargesFormulaInput.value = "";
+    slotValues = cleanSlots([]);
+    poolValues = [{ die: "d8", current: 1, max: 1 }];
+    eligSpells.checked = false;
+    eligFeatures.checked = false;
   }
+  if (!ALL_TYPES.includes(selectedType)) selectedType = "count";
   applyTypeToggleClasses();
   renderIconGrid();
   renderPresets();
@@ -346,6 +510,7 @@ if (recoverySelect) {
 if (chargesFormulaInput) {
   chargesFormulaInput.addEventListener("input", updatePreview);
 }
+
 
 // Click-to-replace: focus on any of the three text/number inputs selects
 // the whole value so a single keystroke replaces it. Mirrors OBR's HP-bar
@@ -388,8 +553,11 @@ btnSave.addEventListener("click", () => {
     return;
   }
   const type = selectedType;
-  const current = Number(inpCurrent.value);
-  const max = Number(inpMax.value);
+  const slots = type === "spellSlots" ? cleanSlots(slotValues) : null;
+  const pools = type === "hitDice" ? cleanPools(poolValues) : null;
+  const totals = slots ? slotTotals(slots) : pools ? slotTotals(pools) : null;
+  const current = totals ? totals.current : Number(inpCurrent.value);
+  const max = totals ? totals.max : Number(inpMax.value);
   if (!Number.isFinite(current) || !Number.isFinite(max)) {
     alert(T("reErrNumbers"));
     return;
@@ -402,9 +570,13 @@ btnSave.addEventListener("click", () => {
     max,
     icon: selectedIcon,
     ...(type === "dieRoll" ? { dieInfo: selectedDieInfo } : {}),
+    ...(pools ? { pools, dieInfo: pools[0]?.die ?? "d8" } : {}),
+    ...(slots ? { slots } : {}),
     ...(type === "charges"
       ? { chargesFormula: chargesFormulaInput?.value.trim() || null }
       : {}),
+    ...(!isSpecialResource({ type }) && eligSpells.checked ? { forSpells: true } : {}),
+    ...(!isSpecialResource({ type }) && eligFeatures.checked ? { forFeatures: true } : {}),
     recovery: selectedRecovery,
   };
   broadcast(BC_RESOURCE_SAVE, { itemId, resource });

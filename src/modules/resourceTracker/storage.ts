@@ -6,7 +6,16 @@
 // limit issues even with dozens of resources.
 
 import OBR, { Item } from "@owlbear-rodeo/sdk";
-import { Resource, RESOURCES_KEY, RecoveryType } from "./types";
+import {
+  Resource,
+  RESOURCES_KEY,
+  RecoveryType,
+  cleanSlots,
+  cleanPools,
+  dieSides,
+  hitDieSize,
+  slotTotals,
+} from "./types";
 import { evaluateFormula, RolledDie } from "../../utils/diceFormula";
 
 /** Read the resources array from a token's metadata. Returns [] if
@@ -30,7 +39,9 @@ function normaliseResource(raw: unknown): Resource | null {
     r.type !== "bar" &&
     r.type !== "number" &&
     r.type !== "dieRoll" &&
-    r.type !== "charges"
+    r.type !== "charges" &&
+    r.type !== "spellSlots" &&
+    r.type !== "hitDice"
   )
     return null;
   const cur = Number(r.current);
@@ -56,7 +67,7 @@ function normaliseResource(raw: unknown): Resource | null {
     typeof r.chargesFormula === "string" && r.chargesFormula.trim().length > 0
       ? r.chargesFormula
       : null;
-  return {
+  const base: Resource = {
     id: r.id,
     name: r.name,
     type: r.type,
@@ -68,6 +79,58 @@ function normaliseResource(raw: unknown): Resource | null {
     chargesFormula: r.type === "charges" ? chargesFormula : undefined,
     order: typeof r.order === "number" ? r.order : undefined,
   };
+  if (r.type === "spellSlots") {
+    // Totals always follow the per-level values.
+    const slots = cleanSlots(r.slots);
+    const tot = slotTotals(slots);
+    return { ...base, slots, current: tot.current, max: tot.max, recovery: recovery ?? "LR", dieInfo: undefined };
+  }
+  if (r.type === "hitDice") {
+    // Pools per die size (multiclassing); older resources had a single
+    // die size + current / max.
+    let pools = cleanPools(r.pools);
+    if (!pools.length) {
+      const m = Math.max(0, Math.floor(max));
+      pools = [{ die: hitDieSize(r.dieInfo) ?? "d8", current: Math.max(0, Math.min(m, Math.floor(cur))), max: m }];
+    }
+    const tot = slotTotals(pools);
+    return {
+      ...base,
+      pools,
+      current: tot.current,
+      max: tot.max,
+      dieInfo: pools[0].die,
+      recovery: recovery ?? "LR",
+    };
+  }
+  if (r.forSpells === true) base.forSpells = true;
+  if (r.forFeatures === true) base.forFeatures = true;
+  return base;
+}
+
+/** A resource fully / partly restored by a recovery pass:
+ *  spell slots → every level back to its max; hit dice → half the
+ *  maximum (at least one, 5e long-rest rule); anything else → max. */
+export function restoredResource(r: Resource): Resource {
+  if (r.type === "spellSlots") {
+    const slots = cleanSlots(r.slots).map((s) => ({ current: s.max, max: s.max }));
+    const tot = slotTotals(slots);
+    return { ...r, slots, current: tot.current, max: tot.max };
+  }
+  if (r.type === "hitDice") {
+    // Regain half the total (at least 1), biggest dice first.
+    let gain = Math.max(1, Math.floor(r.max / 2));
+    const pools = cleanPools(r.pools)
+      .sort((a, b) => dieSides(b.die) - dieSides(a.die))
+      .map((p) => {
+        const add = Math.min(gain, p.max - p.current);
+        gain -= add;
+        return { ...p, current: p.current + add };
+      });
+    const tot = slotTotals(pools);
+    return { ...r, pools, current: tot.current, max: tot.max };
+  }
+  return { ...r, current: r.max };
 }
 
 /** Replace the entire resources array for one token. */
@@ -196,7 +259,7 @@ export function applyInstantRecovery(
   const needsRoll: Resource[] = [];
   const next = resources.map((r) => {
     const outcome = recoveryOutcomeFor(r, types);
-    if (outcome === "instant") return { ...r, current: r.max };
+    if (outcome === "instant") return restoredResource(r);
     if (outcome === "needsRoll") needsRoll.push(r);
     return r;
   });
