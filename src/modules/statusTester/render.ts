@@ -59,7 +59,8 @@ import {
 type Role = "bg" | "icon" | "emoji" | "title" | "att";
 
 const FONT = '-apple-system,"Segoe UI","Microsoft YaHei",sans-serif';
-const EMOJI_FONT = '"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji","Twemoji Mozilla",sans-serif';
+const EMOJI_FONT =
+  '"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji","Twemoji Mozilla",sans-serif';
 const BG_ALPHA = 0.95;
 const STROKE_ALPHA = 0.45;
 const MIN_SCALE = 0.0001;
@@ -98,7 +99,11 @@ const MEASURE_PX = 100;
 const widthCache = new Map<string, number>();
 function measuredWidth100(text: string): number | null {
   if (measureCtx === undefined) {
-    try { measureCtx = document.createElement("canvas").getContext("2d"); } catch { measureCtx = null; }
+    try {
+      measureCtx = document.createElement("canvas").getContext("2d");
+    } catch {
+      measureCtx = null;
+    }
     if (measureCtx) measureCtx.font = `700 ${MEASURE_PX}px ${FONT}`;
   }
   if (!measureCtx) return null;
@@ -130,7 +135,9 @@ export function chipMetrics(
 ): ChipMetrics {
   const fontSize = h * 0.52 * (scales.textScale ?? 1);
   const pad = h * 0.32;
-  const iconSize = hasIcon ? Math.min(h * 0.7 * (scales.iconScale ?? 1), h * 1.3) : 0;
+  const iconSize = hasIcon
+    ? Math.min(h * 0.7 * (scales.iconScale ?? 1), h * 1.3)
+    : 0;
   const gap = hasIcon && title ? h * 0.18 : 0;
   const textW = textWidth(title, fontSize);
   const w = Math.max(h, pad + iconSize + gap + textW + pad);
@@ -138,7 +145,11 @@ export function chipMetrics(
 }
 
 /** Chip height in world units for a token of the given bounds. */
-export function chipHeight(bounds: BoundingBox, sceneDpi: number, chipScale = 1): number {
+export function chipHeight(
+  bounds: BoundingBox,
+  sceneDpi: number,
+  chipScale = 1,
+): number {
   const h = bounds.width * 0.2;
   return Math.min(Math.max(h, sceneDpi * 0.16), sceneDpi * 0.6) * chipScale;
 }
@@ -160,36 +171,89 @@ export function chipAnchor(
   const { offsetX: dx, offsetY: dy } = getRoomSettings();
   switch (position) {
     case "bottom":
-      return { x: bounds.center.x + dx, y: bounds.max.y + gap + h / 2 + dy, h, align: "center" };
+      return {
+        x: bounds.center.x + dx,
+        y: bounds.max.y + gap + h / 2 + dy,
+        h,
+        align: "center",
+      };
     case "right":
-      return { x: bounds.max.x + gap + dx, y: bounds.center.y + dy, h, align: "start" };
+      return {
+        x: bounds.max.x + gap + dx,
+        y: bounds.center.y + dy,
+        h,
+        align: "start",
+      };
     case "left":
-      return { x: bounds.min.x - gap + dx, y: bounds.center.y + dy, h, align: "end" };
+      return {
+        x: bounds.min.x - gap + dx,
+        y: bounds.center.y + dy,
+        h,
+        align: "end",
+      };
     default:
-      return { x: bounds.center.x + dx, y: bounds.min.y - gap - h / 2 + dy, h, align: "center" };
+      return {
+        x: bounds.center.x + dx,
+        y: bounds.min.y - gap - h / 2 + dy,
+        h,
+        align: "center",
+      };
   }
 }
 
 /** Centre x of a chip of width `w` placed at `anchor`. */
-export function chipCenterX(anchor: { x: number; align: ChipAlign }, w: number): number {
+export function chipCenterX(
+  anchor: { x: number; align: ChipAlign },
+  w: number,
+): number {
   if (anchor.align === "start") return anchor.x + w / 2;
   if (anchor.align === "end") return anchor.x - w / 2;
   return anchor.x;
 }
 
 /** Chip text: title (+ level) (+ "+N" when rotation is off). */
-export function chipText(def: StatusDef, applied: AppliedStatus, extra = 0): string {
+export function chipText(
+  def: StatusDef,
+  applied: AppliedStatus,
+  extra = 0,
+): string {
   const base = displayTitle(def, applied);
   return extra > 0 ? `${base} +${extra}` : base;
 }
 
 /** chipText() as OBR rich text: the level (+ unit) in italics. */
-export function chipRichText(def: StatusDef, applied: AppliedStatus, extra = 0): RichText {
+export function chipRichText(
+  def: StatusDef,
+  applied: AppliedStatus,
+  extra = 0,
+): RichText {
   const p = titleParts(def, applied);
   const tail = extra > 0 ? ` +${extra}` : "";
   const children: FormattedText[] = [];
-  if (p.title) children.push({ text: p.level ? `${p.title} ` : p.title + tail, bold: true });
-  if (p.level) children.push({ text: p.level, bold: !p.hasUnit, italic: p.hasUnit });
+
+  // Title — always bold.
+  if (p.title)
+    children.push({
+      text: p.level ? `${p.title} ` : p.title + tail,
+      bold: true,
+    });
+
+  if (p.level) {
+    if (p.hasUnit) {
+      // Split "3 (rounds)" → "3" bold, " (rounds)" italic non-bold.
+      const m = p.level.match(/^(.*?)(\s*\([^)]*\))\s*$/);
+      if (m) {
+        if (m[1]) children.push({ text: m[1], bold: true });
+        children.push({ text: m[2], italic: true, bold: false });
+      } else {
+        // Nessuna parentesi trovata: fallback al comportamento precedente.
+        children.push({ text: p.level, italic: true, bold: false });
+      }
+    } else {
+      children.push({ text: p.level, bold: true });
+    }
+  }
+
   if (p.level && tail) children.push({ text: tail, bold: true });
   if (!children.length) children.push({ text: tail.trim(), bold: true });
   return [{ type: "paragraph", children }];
@@ -197,22 +261,34 @@ export function chipRichText(def: StatusDef, applied: AppliedStatus, extra = 0):
 
 /** The statuses actually drawn: all of them while rotating, only the
  *  first (with a "+N" count) when rotation is off. */
-export function drawnStatuses<T>(list: T[], s: SttLocalSettings = getLocalSettings()): { list: T[]; extra: number } {
+export function drawnStatuses<T>(
+  list: T[],
+  s: SttLocalSettings = getLocalSettings(),
+): { list: T[]; extra: number } {
   if (s.rotateSec > 0 || list.length <= 1) return { list, extra: 0 };
   return { list: list.slice(0, 1), extra: list.length - 1 };
 }
 
 const KAPPA = 0.5522847498;
-function arc(cx: number, cy: number, r: number, a0: number, a1: number): PathCommand {
+function arc(
+  cx: number,
+  cy: number,
+  r: number,
+  a0: number,
+  a1: number,
+): PathCommand {
   const dir = a1 > a0 ? 1 : -1;
   const p0 = { x: cx + r * Math.cos(a0), y: cy + r * Math.sin(a0) };
   const p3 = { x: cx + r * Math.cos(a1), y: cy + r * Math.sin(a1) };
   const k = KAPPA * r * dir;
   return [
     Command.CUBIC,
-    p0.x - k * Math.sin(a0), p0.y + k * Math.cos(a0),
-    p3.x + k * Math.sin(a1), p3.y - k * Math.cos(a1),
-    p3.x, p3.y,
+    p0.x - k * Math.sin(a0),
+    p0.y + k * Math.cos(a0),
+    p3.x + k * Math.sin(a1),
+    p3.y - k * Math.cos(a1),
+    p3.x,
+    p3.y,
   ];
 }
 
@@ -294,14 +370,26 @@ function allIds(st: TokenState): string[] {
   return [...st.byId.keys()];
 }
 
-function tokenSig(token: Image, statuses: Array<{ applied: AppliedStatus; def: StatusDef }>): string {
+function tokenSig(
+  token: Image,
+  statuses: Array<{ applied: AppliedStatus; def: StatusDef }>,
+): string {
   const ls = getLocalSettings();
   return JSON.stringify([
-    statuses.map((s) => [s.applied.uid, !!s.applied.hidden, s.applied.level ?? null, s.def]),
+    statuses.map((s) => [
+      s.applied.uid,
+      !!s.applied.hidden,
+      s.applied.level ?? null,
+      s.def,
+    ]),
     getRoomSettings().position,
     getRoomSettings().offsetX,
     getRoomSettings().offsetY,
-    ls.chipScale, ls.iconScale, ls.textScale, ls.showAttachments, ls.rotateSec > 0,
+    ls.chipScale,
+    ls.iconScale,
+    ls.textScale,
+    ls.showAttachments,
+    ls.rotateSec > 0,
     token.scale,
     token.rotation,
     token.image.width,
@@ -325,15 +413,26 @@ function buildToken(
   statuses = drawn.list;
   const n = statuses.length;
   const index = rotationIndex(n, Date.now(), rotateMs(ls));
-  const anchor = chipAnchor(bounds, sceneDpi, getRoomSettings().position, ls.chipScale);
+  const anchor = chipAnchor(
+    bounds,
+    sceneDpi,
+    getRoomSettings().position,
+    ls.chipScale,
+  );
   const h = anchor.h;
   const items: Item[] = [];
   const entries: EntryState[] = [];
   const byId = new Map<string, { entry: EntryState; role: Role }>();
 
   // Token size in world units (unrotated) for the attachment overlay.
-  const tw = (token.image.width / (token.grid.dpi || 150)) * sceneDpi * Math.abs(token.scale.x || 1);
-  const th = (token.image.height / (token.grid.dpi || 150)) * sceneDpi * Math.abs(token.scale.y || 1);
+  const tw =
+    (token.image.width / (token.grid.dpi || 150)) *
+    sceneDpi *
+    Math.abs(token.scale.x || 1);
+  const th =
+    (token.image.height / (token.grid.dpi || 150)) *
+    sceneDpi *
+    Math.abs(token.scale.y || 1);
 
   statuses.forEach(({ applied, def }, k) => {
     const shown = k === index ? 1 : 0;
@@ -410,7 +509,12 @@ function buildToken(
     } else if (def.icon) {
       const s = shown ? entry.iconScale : MIN_SCALE;
       const icon = buildImage(
-        { width: ICON_PX, height: ICON_PX, mime: "image/svg+xml", url: iconUrl(def.icon, fg !== "#ffffff") },
+        {
+          width: ICON_PX,
+          height: ICON_PX,
+          mime: "image/svg+xml",
+          url: iconUrl(def.icon, fg !== "#ffffff"),
+        },
         { dpi: sceneDpi, offset: { x: ICON_PX / 2, y: ICON_PX / 2 } },
       )
         .id(itemId(token.id, applied.uid, "icon"))
@@ -494,7 +598,12 @@ function buildToken(
 }
 
 /** Apply a visibility alpha (0..1) to a draft of one of our items. */
-function applyAlpha(draft: any, role: Role, entry: EntryState, alpha: number): void {
+function applyAlpha(
+  draft: any,
+  role: Role,
+  entry: EntryState,
+  alpha: number,
+): void {
   switch (role) {
     case "bg":
       draft.style.fillOpacity = alpha * BG_ALPHA * entry.dim;
@@ -521,9 +630,15 @@ function applyAlpha(draft: any, role: Role, entry: EntryState, alpha: number): v
 
 async function runSync(): Promise<void> {
   if (!active) return;
-  try { sceneDpi = await OBR.scene.grid.getDpi(); } catch {}
+  try {
+    sceneDpi = await OBR.scene.grid.getDpi();
+  } catch {}
   const seen = new Set<string>();
-  const changed: Array<{ token: Image; statuses: Array<{ applied: AppliedStatus; def: StatusDef }>; sig: string }> = [];
+  const changed: Array<{
+    token: Image;
+    statuses: Array<{ applied: AppliedStatus; def: StatusDef }>;
+    sig: string;
+  }> = [];
   for (const it of lastItems) {
     if (!isImage(it) || !isStatusToken(it)) continue;
     const statuses = resolveVisible(it, library, isGM);
@@ -557,7 +672,9 @@ async function runSync(): Promise<void> {
     toAdd.push(...built.items);
   }
   if (toDelete.length) {
-    try { await OBR.scene.local.deleteItems(toDelete); } catch {}
+    try {
+      await OBR.scene.local.deleteItems(toDelete);
+    } catch {}
   }
   if (toAdd.length && active) {
     try {
@@ -613,10 +730,16 @@ export async function fullResync(): Promise<void> {
   tokens.clear();
   if (!active) return;
   let ready = false;
-  try { ready = await OBR.scene.isReady(); } catch {}
+  try {
+    ready = await OBR.scene.isReady();
+  } catch {}
   if (!ready) return;
   await sweepAll();
-  try { lastItems = await OBR.scene.items.getItems(); } catch { lastItems = []; }
+  try {
+    lastItems = await OBR.scene.items.getItems();
+  } catch {
+    lastItems = [];
+  }
   await syncLoop();
 }
 
@@ -630,7 +753,11 @@ export function resetState(): void {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function crossfade(tokenId: string, st: TokenState, to: number): Promise<void> {
+async function crossfade(
+  tokenId: string,
+  st: TokenState,
+  to: number,
+): Promise<void> {
   const from = st.index;
   const outE = st.entries[from];
   const inE = st.entries[to];
@@ -639,7 +766,10 @@ async function crossfade(tokenId: string, st: TokenState, to: number): Promise<v
     return;
   }
   st.animating = true;
-  const ids = [...Object.values(outE.ids), ...Object.values(inE.ids)] as string[];
+  const ids = [
+    ...Object.values(outE.ids),
+    ...Object.values(inE.ids),
+  ] as string[];
   try {
     for (let i = 1; i <= FADE_STEPS; i++) {
       if (!active || tokens.get(tokenId) !== st) return;
@@ -651,7 +781,12 @@ async function crossfade(tokenId: string, st: TokenState, to: number): Promise<v
           for (const d of drafts) {
             const ref = st.byId.get(d.id);
             if (!ref) continue;
-            applyAlpha(d, ref.role, ref.entry, ref.entry === outE ? 1 - eased : eased);
+            applyAlpha(
+              d,
+              ref.role,
+              ref.entry,
+              ref.entry === outE ? 1 - eased : eased,
+            );
           }
         },
         i < FADE_STEPS,
