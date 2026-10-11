@@ -97,7 +97,10 @@ function renderCast(cast: ChatCast, msgId?: string): HTMLElement {
   head.className = "cast-head";
   const s = document.createElement("div");
   s.className = "spell";
-  s.textContent = `✨ ${cast.spellName}${dcSuffix(cast)}`;
+  const isFeature = cast.kind === "feature";
+  s.textContent = isFeature
+    ? `⚡ ${cast.spellName}`
+    : `✨ ${cast.spellName}${dcSuffix(cast)}`;
   head.appendChild(s);
 
   const hasDetails = !!(cast.meta || cast.description);
@@ -113,8 +116,8 @@ function renderCast(cast: ChatCast, msgId?: string): HTMLElement {
       body.style.display = open ? "" : "none";
       tog.classList.toggle("open", open);
       tog.title = open
-        ? en ? "Hide spell details" : "隐藏法术详情"
-        : en ? "Show spell details" : "显示法术详情";
+        ? en ? "Hide details" : "隐藏详情"
+        : en ? "Show details" : "显示详情";
     };
     setOpen(key ? openCasts.has(key) : false);
     tog.addEventListener("click", () => {
@@ -144,12 +147,36 @@ function renderCast(cast: ChatCast, msgId?: string): HTMLElement {
   const base = cast.baseLevel;
   const cl = cast.castLevel;
   const baseTxt = base === 0 ? (en ? "Cantrip" : "戏法") : en ? `Level ${base}` : `${base} 环`;
-  l.textContent =
-    cl > base
-      ? en ? `${baseTxt} — cast at level ${cl}` : `${baseTxt} — 以 ${cl} 环施放`
-      : en ? `${baseTxt} — cast` : `${baseTxt} — 施放`;
+  if (isFeature) {
+    const what = cast.featureLabel || (en ? "Feature" : "特性");
+    l.textContent = en ? `${what} — used` : `${what} — 使用`;
+  } else {
+    l.textContent =
+      cl > base
+        ? en ? `${baseTxt} — cast at level ${cl}` : `${baseTxt} — 以 ${cl} 环施放`
+        : en ? `${baseTxt} — cast` : `${baseTxt} — 施放`;
+  }
   if (cast.source) l.textContent += ` · ${cast.source}`;
+  if (cast.edited) {
+    const ed = document.createElement("span");
+    ed.className = "cast-edited";
+    ed.textContent = ` · ${en ? "Edited" : "已修改"}`;
+    l.appendChild(ed);
+  }
   c.appendChild(l);
+
+  if (cast.spent && cast.spent.name && Number.isFinite(cast.spent.amount)) {
+    const sp = document.createElement("div");
+    sp.className = "cast-spent";
+    const { name, amount, left, max } = cast.spent;
+    const rest = Number.isFinite(left) && Number.isFinite(max)
+      ? en ? ` (${left}/${max} left)` : `（剩余 ${left}/${max}）`
+      : "";
+    sp.textContent = en
+      ? `Spent: ${amount} × ${name}${rest}`
+      : `消耗：${amount} × ${name}${rest}`;
+    c.appendChild(sp);
+  }
 
   if (cast.scaled?.length) {
     const sc = document.createElement("div");

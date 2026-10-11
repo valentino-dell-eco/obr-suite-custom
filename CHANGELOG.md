@@ -6,6 +6,8 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 ### Added
 
+- **Spend a resource when casting a spell.** The cast window (mini panel and full sheet) has a “Resource spent” select listing the bound token's Resource Tracker resources (“Ki Points (3/5)”) plus an amount. On confirm the amount is taken off that resource (never below 0, with the usual resource toast) and the chat card says “Spent: 2 × Ki Points (1/5 left)”. Without a bound token / resources the field says why and the cast works as before.
+- **Features are used like spells.** Every feature (class, race, fighting style, special abilities, feats — and wondrous items in the equipment tab) has 🔍 (search bar) and ⚡ “Use” buttons in the full sheet; in the mini panel feature chips open the same window. “Use” shows the feature's description, lets you spend a resource and posts a ⚡ card to Room Chat (feature name, list, description with clickable dice, resource spent).
 - **Room Chat new-message sound.** A short synthesized “water-drop” pop (a new sound, no audio file) when someone else's message or a tool notice arrives. Personal on/off toggle in Settings → Room Chat (`obr-suite/sfx-chat`, default on). Only one suite window plays it, even when several have audio unlocked.
 - **Room Chat message layouts.** Typed messages are speech bubbles: your own on the left with the tail on the left, other people's on the right with the tail on the right; whispers keep a tinted bubble (purple → GM, amber → player). Tool notices (status changes, rests) have no tail and span the width, with the tool's icon and colour (Status Tracker orange, Rest green). Spell casts keep their original layout (name + time, then the spell card). Messages carry a whitelisted `tool` tag (`status` / `rest`).
 - **Rests announced in Room Chat.** SR / LR / DW / DS from a character card (info panel, full sheet or the GM's global buttons) post to the “All” channel: “🏕️ X took a short rest”, “🛌 X took a long rest”, “🌅 X saw a new dawn”, “🌇 X saw a new dusk” (the GM's global buttons list every character in one line). A long rest that also restores Dawn / Dusk resources says so on the same line (“… took a long rest and saw a new dawn”).
@@ -16,6 +18,7 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 ### Changed
 
+- **Edited spells show “Edited” instead of “Homebrew”.** A library spell changed on the card shows its library source + an “Edited” chip (sheet details, edit fields, chat card); “Homebrew” is kept for spells the library doesn't have. Stored data is unchanged.
 - **Announcement rewritten** (`public/announcement.md`): this build is presented as Valentino dell'Eco's modified version of Full Suite, crediting FullPeople and linking the original author's support page and repository; highlights and changelog for 2.0.
 - **Support tab and supporters wall disabled** (Settings opens on Important Notes; the supporter overlay behind Settings is no longer opened).
 

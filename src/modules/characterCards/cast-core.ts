@@ -5,7 +5,7 @@
 // apart between the two.
 
 import type { ChatCast } from "../roomChat/types";
-import type { SpellDetail } from "./spell-detail";
+import { HOMEBREW_SOURCE, type SpellDetail } from "./spell-detail";
 
 export type SlotMap = Record<string, { current?: number; max?: number } | undefined>;
 
@@ -113,6 +113,42 @@ export function scaleSpellText(
   return { body, scaled };
 }
 
+/** How a spell's source is shown. A library spell the user edited on
+ *  the card is stored with source "Homebrew"; it's shown as its library
+ *  source + "Edited" instead, so it isn't mistaken for a homebrew
+ *  spell. A spell the library doesn't have stays "Homebrew". */
+export function spellSourceDisplay(detail: Pick<SpellDetail, "source" | "libSource" | "fromLibrary">): {
+  source: string;
+  edited: boolean;
+} {
+  if (detail.source === HOMEBREW_SOURCE && detail.fromLibrary) {
+    return { source: detail.libSource, edited: true };
+  }
+  return { source: detail.source, edited: false };
+}
+
+/** Room Chat payload for a character feature used from the card. */
+export function buildFeatureUse(opts: {
+  name: string;
+  /** Which list it's from ("Class Features", "Feats", …). */
+  label?: string;
+  description?: string;
+  /** Extra short line (e.g. "Lv 3"). */
+  meta?: string;
+}): ChatCast {
+  const cast: ChatCast = {
+    kind: "feature",
+    spellName: opts.name.trim(),
+    baseLevel: 0,
+    castLevel: 0,
+  };
+  if (opts.label) cast.featureLabel = opts.label;
+  const desc = (opts.description ?? "").trim();
+  if (desc) cast.description = desc;
+  if (opts.meta) cast.meta = opts.meta;
+  return cast;
+}
+
 /** Builds the Room Chat cast payload. The DC is attached only when the
  *  spell forces a saving throw; `dcEdited` flags a value that differs
  *  from the card's own DC. */
@@ -145,7 +181,9 @@ export function buildCast(opts: {
     if (description) cast.description = description;
     if (scaled.length) cast.scaled = scaled;
     if (detail.meta) cast.meta = detail.meta;
-    if (detail.source) cast.source = detail.source;
+    const src = spellSourceDisplay(detail);
+    if (src.source) cast.source = src.source;
+    if (src.edited) cast.edited = true;
   }
   const hasSave = detail ? detail.hasSave : false;
   if (hasSave && dcInput != null && Number.isFinite(dcInput)) {

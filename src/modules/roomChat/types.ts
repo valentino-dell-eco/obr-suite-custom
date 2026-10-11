@@ -34,7 +34,26 @@ export type ChatTool = "status" | "rest" | "cast";
 export const CHAT_TOOLS: readonly ChatTool[] = ["status", "rest", "cast"];
 export type ChatRole = "GM" | "PLAYER";
 
+/** A token resource spent with a cast / feature use. */
+export interface ChatSpent {
+  name: string;
+  amount: number;
+  /** What's left afterwards (shown as "left/max"). */
+  left?: number;
+  max?: number;
+}
+
 export interface ChatCast {
+  /** "feature" = a character feature used from the card (no levels,
+   *  no DC); absent = a spell cast. `spellName` holds the name. */
+  kind?: "feature";
+  /** Feature only: which list it comes from ("Class feature", …). */
+  featureLabel?: string;
+  /** Resource spent with this cast / use, if any. */
+  spent?: ChatSpent;
+  /** The spell was edited on the card (its fields differ from the
+   *  library); `source` is then the library source it was based on. */
+  edited?: boolean;
   spellName: string;
   baseLevel: number;
   castLevel: number;

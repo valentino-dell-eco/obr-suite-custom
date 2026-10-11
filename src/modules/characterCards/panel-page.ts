@@ -32,6 +32,7 @@ import {
   announceRestInChat,
 } from "./recovery";
 import { readResources, updateResource } from "../resourceTracker/storage";
+import { cleanSpend, spendResource } from "./spend";
 import { PLUGIN_ID } from "../resourceTracker/types";
 import { BC_OPEN_EDIT, broadcastChanged } from "../resourceTracker/panel";
 import {
@@ -2372,10 +2373,29 @@ OBR.onReady(async () => {
       // (same reason cc-roll-dice relays through here — see comment
       // above). The sheet sends a ChatCast already built by
       // cast-core.ts#buildCast (description, meta, DC rule applied).
+      // Also used for feature uses (cast.kind === "feature"). An
+      // optional `spend` takes a resource off the card's bound token
+      // first; the chat card then says what was spent.
       const cast = e.data.payload?.cast as ChatCast | undefined;
       const spellName = typeof cast?.spellName === "string" ? cast.spellName.trim() : "";
       if (cast && spellName) {
-        void sendChat({ scope: "all", text: "", cast: { ...cast, spellName } });
+        const spend = cleanSpend(e.data.payload?.spend);
+        const cardId = String(e.data.payload?.cardId ?? "");
+        void (async () => {
+          const out: ChatCast = { ...cast, spellName };
+          delete out.spent; // only the host fills this in
+          const itemId = cards.find((c) => c.id === cardId)?.boundedTokenId;
+          if (spend && typeof itemId === "string" && itemId) {
+            try {
+              const spent = await spendResource(itemId, spend);
+              if (spent) out.spent = spent;
+            } catch (err) {
+              console.warn("[cc-panel] spend resource failed", err);
+            }
+            void sendFreshResources(cardId);
+          }
+          await sendChat({ scope: "all", text: "", cast: out });
+        })();
       }
     }
     if (e.data?.type === "cc-search-spell") {

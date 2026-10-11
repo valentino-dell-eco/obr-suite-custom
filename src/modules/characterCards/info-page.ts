@@ -1279,13 +1279,40 @@ function renderCastChips(spells: any[]): string {
     .join("");
 }
 
-async function openCastModal(spell: any): Promise<void> {
-  const payload = {
-    spell,
-    slots: castCtx.slots,
-    saveDc: castCtx.saveDc,
-    characterLevel: castCtx.characterLevel,
-  };
+// Features (class / race / fighting style / special abilities / feats)
+// work like spells: a chip opens the same modal in "use" mode — pick a
+// resource to spend, then a card goes to Room Chat.
+let usableFeatures: Array<{ name: string; description?: string; label: string; level?: number | null }> = [];
+
+function renderUseChips(items: any[], label: string): string {
+  return items
+    .filter((x) => x && x.name)
+    .map((x) => {
+      const i = usableFeatures.length;
+      usableFeatures.push({
+        name: String(x.name),
+        description: typeof x.description === "string" ? x.description : "",
+        label,
+        level: typeof x.level === "number" ? x.level : null,
+      });
+      return `<span class="srch-chip use-chip" data-use-idx="${i}" title="${escapeHtml(tt("ccUseFeature"))}">⚡ ${escapeHtml(String(x.name))}</span>`;
+    })
+    .join("");
+}
+
+async function openCastModal(
+  spell: any,
+  feature?: { name: string; description?: string; label: string; level?: number | null },
+): Promise<void> {
+  const payload = feature
+    ? { feature, itemId: boundItemId }
+    : {
+        spell,
+        slots: castCtx.slots,
+        saveDc: castCtx.saveDc,
+        characterLevel: castCtx.characterLevel,
+        itemId: boundItemId,
+      };
   const hash = encodeURIComponent(JSON.stringify(payload));
   try { await OBR.modal.close(CAST_MODAL_ID); } catch {}
   try {
@@ -1293,7 +1320,7 @@ async function openCastModal(spell: any): Promise<void> {
       id: CAST_MODAL_ID,
       url: `${assetUrl("spell-cast.html")}#${hash}`,
       width: 380,
-      height: 430,
+      height: feature ? 470 : 510,
       hidePaper: true,
     });
   } catch (e) {
@@ -1304,26 +1331,24 @@ async function openCastModal(spell: any): Promise<void> {
 function renderSearchChips(d: any): string {
   const sections: string[] = [];
   const features = d.features ?? {};
+  usableFeatures = [];
 
-  const renderChips = (items: any[]) =>
-    items
-      .filter((x) => x && x.name)
-      .map((x) => {
-        const nm = String(x.name);
-        return `<span class="srch-chip" data-q="${escapeHtml(nm)}">${escapeHtml(nm)}</span>`;
-      })
-      .join("");
-
-  // 特性 = race_features + class_features (merged into one tight grid).
-  const featList: any[] = [];
-  if (Array.isArray(features.race_features))
-    featList.push(...features.race_features);
-  if (Array.isArray(features.class_features))
-    featList.push(...features.class_features);
-  if (featList.length) {
+  // 特性 = race / class / fighting style / special abilities, merged
+  // into one tight grid. Each chip opens the "use" modal.
+  const featChips: string[] = [];
+  const featGroups: Array<[string, Parameters<typeof tt>[0]]> = [
+    ["race_features", "ccRaceFeatures"],
+    ["class_features", "ccClassFeatures"],
+    ["fighting_style_feats", "ccFightingStyle"],
+    ["special_abilities", "ccSpecialAbilities"],
+  ];
+  for (const [key, labelKey] of featGroups) {
+    if (Array.isArray(features[key])) featChips.push(renderUseChips(features[key], tt(labelKey)));
+  }
+  if (featChips.join("")) {
     sections.push(`<div class="srch-sect">
       <div class="srch-sect-h">${tt("ccTabFeatures")}</div>
-      <div class="srch-grid">${renderChips(featList)}</div>
+      <div class="srch-grid">${featChips.join("")}</div>
     </div>`);
   }
 
@@ -1331,7 +1356,7 @@ function renderSearchChips(d: any): string {
   if (Array.isArray(features.feats) && features.feats.length) {
     sections.push(`<div class="srch-sect">
       <div class="srch-sect-h">${tt("ccFeats")}</div>
-      <div class="srch-grid">${renderChips(features.feats)}</div>
+      <div class="srch-grid">${renderUseChips(features.feats, tt("ccFeats"))}</div>
     </div>`);
   }
 
@@ -1384,6 +1409,15 @@ root.addEventListener("click", async (e) => {
     e.stopPropagation();
     const sp = castableSpells[Number(castChip.dataset.castIdx)];
     if (sp) void openCastModal(sp);
+    return;
+  }
+  // Feature chip → use flow.
+  const useChip = (e.target as HTMLElement | null)?.closest<HTMLElement>(".use-chip");
+  if (useChip) {
+    e.preventDefault();
+    e.stopPropagation();
+    const f = usableFeatures[Number(useChip.dataset.useIdx)];
+    if (f) void openCastModal(null, f);
     return;
   }
 

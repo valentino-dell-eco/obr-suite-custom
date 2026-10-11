@@ -20,7 +20,14 @@ import {
   HOMEBREW_SOURCE,
   type SpellDetail,
 } from "./spell-detail";
-import { buildCast, castLevelOptions, cardSaveDc, type SlotMap } from "./cast-core";
+import {
+  buildCast,
+  buildFeatureUse,
+  castLevelOptions,
+  cardSaveDc,
+  spellSourceDisplay,
+  type SlotMap,
+} from "./cast-core";
 import { loadSpellRefs, passesVersion } from "./spell-library";
 import { t } from "../../i18n";
 import {
@@ -2172,13 +2179,177 @@ function SpellDetailView({ spell }: { spell: any }) {
             {f.range && <span>{T("ccRange")} {f.range}</span>}
             {f.components && <span>{f.components}</span>}
             {f.duration && <span>{T("ccDuration")} {f.duration}</span>}
-            {d.source && <span class="spell-src">{d.source}</span>}
+            {(() => {
+              const src = spellSourceDisplay(d);
+              return (
+                <>
+                  {src.source && <span class="spell-src">{src.source}</span>}
+                  {src.edited && <span class="spell-src-hb">{T("ccSpellEdited")}</span>}
+                </>
+              );
+            })()}
           </div>
           {d.description && <div class="spell-desc">{d.description}</div>}
         </>
       ) : (
         <div class="spell-detail-empty">{T("ccSpellDetailNone")}</div>
       )}
+    </div>
+  );
+}
+
+// --- Resource spent with a cast / feature use --------------------------
+// This iframe has no OBR SDK: the bound token's resources come from the
+// host (cc-panel) through the same cc-request-resources /
+// cc-resources-response pair the Resources tab uses, and the host does
+// the spending when it relays the cast to Room Chat.
+interface SpendState {
+  resourceId: string;
+  amount: string;
+}
+const NO_SPEND: SpendState = { resourceId: "", amount: "1" };
+
+function useCardResources(): { list: RtResource[] | null; bound: boolean } {
+  const cardId = getQS("card") || "";
+  const [state, setState] = useState<{ list: RtResource[] | null; bound: boolean }>({
+    list: null,
+    bound: true,
+  });
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const msg = event.data;
+      if (!msg || msg.type !== "cc-resources-response" || msg.cardId !== cardId) return;
+      setState({
+        list: Array.isArray(msg.resources) ? msg.resources : [],
+        bound: typeof msg.boundItemId === "string" && !!msg.boundItemId,
+      });
+    };
+    window.addEventListener("message", handler);
+    try {
+      window.parent.postMessage({ type: "cc-request-resources", cardId }, "*");
+    } catch {}
+    return () => window.removeEventListener("message", handler);
+  }, [cardId]);
+  return state;
+}
+
+function SpendField({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: SpendState;
+  onChange: (v: SpendState) => void;
+  disabled: boolean;
+}) {
+  const { list, bound } = useCardResources();
+  const none = !bound || (list !== null && list.length === 0);
+  return (
+    <div class="cast-field">
+      <div class="cc-modal-hint">{T("ccSpendLabel")}</div>
+      <div class="cast-resrow">
+        <select
+          class="cc-edit-text"
+          value={value.resourceId}
+          disabled={disabled || none || list === null}
+          onChange={(e: any) => onChange({ ...value, resourceId: e.target.value })}
+        >
+          <option value="">{T("ccSpendNone")}</option>
+          {(list ?? []).map((r) => (
+            <option value={r.id}>{`${r.name || "?"} (${r.current}/${r.max})`}</option>
+          ))}
+        </select>
+        <input
+          class="cc-edit-num"
+          type="number"
+          min="1"
+          step="1"
+          value={value.amount}
+          title={T("ccSpendAmount")}
+          disabled={disabled || !value.resourceId}
+          onInput={(e: any) => onChange({ ...value, amount: e.target.value })}
+        />
+      </div>
+      {!bound && <div class="cast-dc-note">{T("ccSpendNoToken")}</div>}
+      {bound && list !== null && list.length === 0 && (
+        <div class="cast-dc-note">{T("ccSpendNoResources")}</div>
+      )}
+    </div>
+  );
+}
+
+/** What goes to the host with cc-cast-spell. */
+function spendPayload(v: SpendState): { resourceId: string; amount: number } | null {
+  const n = Math.floor(Number(v.amount));
+  if (!v.resourceId || !Number.isFinite(n) || n <= 0) return null;
+  return { resourceId: v.resourceId, amount: n };
+}
+
+// "Use" for a feature: same modal shape as the spell cast (no level,
+// no DC). Posts a ⚡ card to Room Chat, optionally spending a resource.
+function UseFeatureModal({
+  feature,
+  label,
+  onClose,
+}: {
+  feature: any;
+  /** The list it belongs to ("Class Features", …). */
+  label: string;
+  onClose: () => void;
+}) {
+  const [spend, setSpend] = useState<SpendState>(NO_SPEND);
+  const [sending, setSending] = useState(false);
+  const name = String(feature?.name ?? "");
+  const desc = typeof feature?.description === "string" ? feature.description.trim() : "";
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !sending) { e.preventDefault(); onClose(); }
+    };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose, sending]);
+
+  const confirm = () => {
+    if (sending || !name) return;
+    setSending(true);
+    const cast = buildFeatureUse({
+      name,
+      label,
+      description: desc,
+      meta: feature?.level != null ? `Lv ${feature.level}` : undefined,
+    });
+    postToHost("cc-cast-spell", { cast, cardId: getQS("card") || "", spend: spendPayload(spend) });
+    onClose();
+  };
+
+  return (
+    <div class="cc-modal-backdrop" onClick={() => !sending && onClose()}>
+      <div class="cc-modal" onClick={(e) => e.stopPropagation()}>
+        <div class="cc-modal-h">
+          <h3 class="cast-title">{T("ccUseTitle")}</h3>
+        </div>
+        <div class="cast-spellbox cast-featbox">
+          <span class="cast-spellname">⚡ {name}</span>
+          <span class="cast-spelllvl">{feature?.level != null ? `Lv ${feature.level}` : ""}</span>
+          <div class="cast-spellmeta">{label}</div>
+          {desc && <div class="cast-featdesc">{desc}</div>}
+        </div>
+        <p class="cast-intro">
+          {T("ccUseIntro").split("{name}")[0]}
+          <b>{name}</b>
+          {T("ccUseIntro").split("{name}")[1] ?? ""}
+        </p>
+        <SpendField value={spend} onChange={setSpend} disabled={sending} />
+        <div class="cc-modal-foot">
+          <button class="cc-btn" onClick={onClose} disabled={sending}>
+            {T("ccCancel")}
+          </button>
+          <button class="cc-btn primary" onClick={confirm} disabled={sending}>
+            {sending ? T("ccUseSending") : T("ccUseConfirm")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2203,6 +2374,7 @@ function CastSpellModal({
   const cardDc = cardSaveDc(saveDc);
   const [castLevel, setCastLevel] = useState(baseLevel);
   const [dcText, setDcText] = useState(cardDc != null ? String(cardDc) : "");
+  const [spend, setSpend] = useState<SpendState>(NO_SPEND);
   const [sending, setSending] = useState(false);
   const detail = useSpellDetail(spell, true);
   // The DC field is always shown; when the spell has no saving throw a
@@ -2236,7 +2408,7 @@ function CastSpellModal({
       detail: d,
       characterLevel,
     });
-    postToHost("cc-cast-spell", { cast });
+    postToHost("cc-cast-spell", { cast, cardId: getQS("card") || "", spend: spendPayload(spend) });
     onClose();
   };
 
@@ -2290,6 +2462,7 @@ function CastSpellModal({
           />
           {noSave && <div class="cast-dc-note">{T("ccCastDcNoSave")}</div>}
         </div>
+        <SpendField value={spend} onChange={setSpend} disabled={sending} />
         <div class="cc-modal-foot">
           <button class="cc-btn" onClick={onClose} disabled={sending}>
             {T("ccCancel")}
@@ -2369,7 +2542,11 @@ function SpellFieldsEditor({
             <span class="spell-src-fixed">{d ? d.libSource || "—" : "…"}</span>
           )}
           {st.source === HOMEBREW_SOURCE && (
-            <span class="spell-src-hb">{HOMEBREW_SOURCE}</span>
+            // A library spell changed on the card is "Edited"; only a
+            // spell the library doesn't have is "Homebrew".
+            <span class="spell-src-hb">
+              {d && !d.fromLibrary ? HOMEBREW_SOURCE : T("ccSpellEdited")}
+            </span>
           )}
         </span>
       </label>
@@ -2814,6 +2991,8 @@ function FeatureBlock({
   // the previous "openIdx" semantic: items are open by default, click
   // the row to collapse a specific one.
   const [closedIdx, setClosedIdx] = useState<Set<number>>(new Set());
+  // Feature whose "Use" modal is open (like the spells' ✨ cast).
+  const [useFor, setUseFor] = useState<any | null>(null);
   if (!editing && !items?.length) return null;
   return (
     <div style={{ marginBottom: "10px" }}>
@@ -2928,7 +3107,29 @@ function FeatureBlock({
                   </span>
                 )}
               </span>
-              <span class="feat-toggle">▼</span>
+              <span class="feat-actions">
+                <button
+                  class="spell-icon-btn"
+                  onClick={(e: any) => {
+                    e.stopPropagation();
+                    postToHost("cc-search-spell", { q: f.name });
+                  }}
+                  title={T("ccFeatureSearch")}
+                >
+                  🔍
+                </button>
+                <button
+                  class="spell-icon-btn feat-use-btn"
+                  onClick={(e: any) => {
+                    e.stopPropagation();
+                    setUseFor(f);
+                  }}
+                  title={T("ccUseFeature")}
+                >
+                  ⚡
+                </button>
+                <span class="feat-toggle">▼</span>
+              </span>
             </div>
             {isOpen && f.description && (
               <div class="feat-body">{f.description}</div>
@@ -2936,6 +3137,9 @@ function FeatureBlock({
           </div>
         );
       })}
+      {useFor && (
+        <UseFeatureModal feature={useFor} label={title} onClose={() => setUseFor(null)} />
+      )}
     </div>
   );
 }

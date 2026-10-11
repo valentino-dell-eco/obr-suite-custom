@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Cast spell</title>
+<title>Cast spell / use feature</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{
@@ -43,6 +43,14 @@ button.btn{font-size:12px;font-weight:700;border:none;border-radius:8px;padding:
 .cast{background:#7c5cff;color:#fff}
 .cast:hover{background:#8f74ff}
 button:disabled{opacity:.5;cursor:default}
+.resrow{display:flex;gap:6px}
+.resrow select{flex:1;min-width:0}
+.resrow input{flex:0 0 72px;text-align:center}
+.featbox{background:rgba(245,166,35,0.10);border-color:rgba(245,166,35,0.38)}
+.featbox .spellname{color:#ffe2b0}
+.desc{margin-top:6px;font-size:11.5px;line-height:1.4;color:#c9cedb;white-space:pre-wrap;max-height:96px;overflow-y:auto}
+.cast.use{background:#d98a1f}
+.cast.use:hover{background:#e89a2f}
 .hidden{display:none !important}
 </style>
 </head>
@@ -53,9 +61,10 @@ button:disabled{opacity:.5;cursor:default}
     <div class="close" id="close">✕</div>
   </div>
   <div class="body">
-    <div class="spellbox">
+    <div class="spellbox" id="box">
       <div class="spellname"><span id="name"></span><span class="lvl" id="lvl"></span></div>
       <div class="meta" id="meta"></div>
+      <div class="desc hidden" id="desc"></div>
     </div>
     <p class="intro" id="intro"></p>
     <div class="field" id="levelField">
@@ -65,6 +74,14 @@ button:disabled{opacity:.5;cursor:default}
       <div class="lbl" id="dcLbl"></div>
       <input id="dc" type="number">
       <div class="note hidden" id="dcNote"></div>
+    </div>
+    <div class="field hidden" id="resField">
+      <div class="lbl" id="resLbl"></div>
+      <div class="resrow">
+        <select id="res"></select>
+        <input id="resAmt" type="number" min="1" step="1" value="1">
+      </div>
+      <div class="note hidden" id="resNote"></div>
     </div>
   </div>
   <div class="foot">

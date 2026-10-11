@@ -93,7 +93,9 @@ async function reanchor(): Promise<void> {
 
 function preview(msg: ChatMessage): string {
   const body = msg.cast
-    ? `✨ ${msg.cast.spellName} (${msg.cast.castLevel})`
+    ? msg.cast.kind === "feature"
+      ? `⚡ ${msg.cast.spellName}`
+      : `✨ ${msg.cast.spellName} (${msg.cast.castLevel})`
     : msg.text;
   return body.length > 80 ? body.slice(0, 77) + "…" : body;
 }
