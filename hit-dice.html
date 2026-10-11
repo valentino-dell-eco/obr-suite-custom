@@ -42,6 +42,8 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .result{font-size:12.5px;color:#7fd8b0;font-weight:600;line-height:1.4}
 .note{font-size:11px;color:#9aa0b3;font-style:italic}
 .foot{flex:none;display:flex;justify-content:flex-end;gap:8px;padding:10px 14px 12px;border-top:1px solid rgba(255,255,255,0.08)}
+.secret{flex:1;display:flex;align-items:center;gap:6px;font-size:11px;color:#c9b6ff;cursor:pointer;user-select:none;margin-right:auto}
+.secret input{accent-color:#9b6bff;width:14px;height:14px;margin:0;cursor:pointer}
 button.btn{font-size:12px;font-weight:700;border:none;border-radius:8px;padding:8px 14px;cursor:pointer}
 .done{background:rgba(255,255,255,0.08);color:#c5cad8}
 .done:hover{background:rgba(255,255,255,0.16)}
@@ -71,6 +73,7 @@ button:disabled{opacity:.5;cursor:default}
     <div class="note hidden" id="note"></div>
   </div>
   <div class="foot">
+    <label class="secret" id="secretWrap"><input type="checkbox" id="secret"><span id="secretLbl"></span></label>
     <button class="btn done" id="done"></button>
     <button class="btn roll" id="roll"></button>
   </div>

@@ -27,6 +27,8 @@ import {
   spendResource,
   spendSpellSlot,
   tokenResources,
+  getSecretPref,
+  setSecretPref,
   type SlotOption,
 } from "./modules/characterCards/spend";
 import {
@@ -103,6 +105,7 @@ const slotNote = $("slotNote");
 const introEl = $("intro");
 const castBtn = $<HTMLButtonElement>("cast");
 const cancelBtn = $<HTMLButtonElement>("cancel");
+const secretBox = $<HTMLInputElement>("secret");
 
 /** "Resource spent" entry meaning "a spell slot". */
 const SLOTS = "__slots__";
@@ -246,6 +249,8 @@ async function confirm(): Promise<void> {
   castBtn.textContent = tt(isFeature ? "ccUseSending" : "ccCastSending");
 
   const usingSlot = choice === SLOTS && slotLevel > 0;
+  // Secret: whisper to the GM, local-only toast, hidden dice roll.
+  const secret = secretBox.checked;
   let c: ChatCast;
   if (isFeature) {
     c = buildFeatureUse({
@@ -275,12 +280,12 @@ async function confirm(): Promise<void> {
   let roll: { expression: string; label: string } | null = null;
   try {
     if (itemId && usingSlot) {
-      const spent = await spendSpellSlot(itemId, slotLevel);
+      const spent = await spendSpellSlot(itemId, slotLevel, { secret });
       if (spent) c.spent = spent;
     } else if (itemId && chosenResource()) {
       const pick = cleanSpend({ resourceId: choice, amount });
       if (pick) {
-        const res = await spendResource(itemId, pick);
+        const res = await spendResource(itemId, pick, { secret });
         if (res) {
           const { roll: expr, ...spent } = res;
           c.spent = spent;
@@ -293,7 +298,7 @@ async function confirm(): Promise<void> {
   }
 
   try {
-    await sendChat({ scope: "all", text: "", cast: c });
+    await sendChat({ scope: secret ? "gm" : "all", text: "", cast: c });
     // Show the chat on top once this modal is gone (it may have been
     // auto-opened underneath it).
     await OBR.broadcast
@@ -304,7 +309,7 @@ async function confirm(): Promise<void> {
   }
   if (roll && itemId) {
     try {
-      await openQuickPopupAt({ expression: roll.expression, label: roll.label, itemId }, { x: 0, y: 0 });
+      await openQuickPopupAt({ expression: roll.expression, label: roll.label, itemId, secret }, { x: 0, y: 0 });
     } catch (e) {
       console.warn("[spell-cast] resource roll popup failed", e);
     }
@@ -329,6 +334,10 @@ OBR.onReady(() => {
   startSceneSync();
   gateStateOn(refreshFromScene());
   cancelBtn.textContent = tt("ccCancel");
+  $("secretLbl").textContent = tt("ccSecretLabel");
+  $("secretWrap").title = tt("ccSecretHint");
+  secretBox.checked = getSecretPref();
+  secretBox.addEventListener("change", () => setSecretPref(secretBox.checked));
   castBtn.addEventListener("click", () => void confirm());
   cancelBtn.addEventListener("click", close);
   $("close").addEventListener("click", close);

@@ -108,11 +108,17 @@ export function hasSpellSlots(list: Array<Pick<Resource, "type">>): boolean {
 }
 
 /** Set one spell-slot level (0-based index) to `value` (clamped). */
+/** Secret activation: the resource toast stays on this client. */
+export interface SpendOpts {
+  secret?: boolean;
+}
+
 export async function setSpellSlotLevel(
   itemId: string,
   resourceId: string,
   levelIndex: number,
   value: number,
+  opts: SpendOpts = {},
 ): Promise<Resource | null> {
   let prev = 0;
   const updated = await updateResource(itemId, resourceId, (r) => {
@@ -125,21 +131,25 @@ export async function setSpellSlotLevel(
     return { ...r, slots, current: tot.current, max: tot.max };
   });
   if (updated && updated.current !== prev) {
-    void broadcastChanged(itemId, updated, updated.current - prev, prev);
+    void broadcastChanged(itemId, updated, updated.current - prev, prev, !!opts.secret);
   }
   return updated;
 }
 
 /** Spend one slot of `level` (1–9) from the token's "Spell slots"
  *  resource. Returns the chat line, or null if none was left. */
-export async function spendSpellSlot(itemId: string, level: number): Promise<ChatSpent | null> {
+export async function spendSpellSlot(
+  itemId: string,
+  level: number,
+  opts: SpendOpts = {},
+): Promise<ChatSpent | null> {
   const list = await tokenResources(itemId);
   const res = list.find((r) => r.type === "spellSlots");
   const i = Math.floor(level) - 1;
   if (!res || !(i >= 0 && i < 9)) return null;
   const s = cleanSlots(res.slots)[i];
   if (!s || s.current <= 0) return null;
-  const updated = await setSpellSlotLevel(itemId, res.id, i, s.current - 1);
+  const updated = await setSpellSlotLevel(itemId, res.id, i, s.current - 1, opts);
   if (!updated) return null;
   const after = cleanSlots(updated.slots)[i];
   return {
@@ -181,6 +191,7 @@ export async function tokenResources(itemId: string | null | undefined): Promise
 export async function spendResource(
   itemId: string,
   choice: SpendChoice,
+  opts: SpendOpts = {},
 ): Promise<(ChatSpent & { roll?: string }) | null> {
   let prev = 0;
   let special = false;
@@ -192,7 +203,7 @@ export async function spendResource(
   });
   if (!updated || special) return null;
   const delta = updated.current - prev;
-  if (delta !== 0) void broadcastChanged(itemId, updated, delta, prev);
+  if (delta !== 0) void broadcastChanged(itemId, updated, delta, prev, !!opts.secret);
   // A "Die Roll" resource rolls its dice when used (like spending it
   // from the Resource Tracker); the caller opens the quick-roll popup.
   const roll = dieRollFormula(updated, choice.amount);
@@ -203,4 +214,19 @@ export async function spendResource(
     max: updated.max,
     ...(roll ? { roll } : {}),
   };
+}
+
+// --- Secret activations ----------------------------------------------------
+// "Secret" on a cast / use / hit dice window: the chat card is a whisper
+// to the GM (only the sender and the GM see it), dice rolls are secret
+// rolls (roller + GM) and the resource toast stays on this client. The
+// checkbox remembers its last state per browser.
+const SECRET_KEY = "obr-suite/activation-secret";
+
+export function getSecretPref(): boolean {
+  try { return localStorage.getItem(SECRET_KEY) === "1"; } catch { return false; }
+}
+
+export function setSecretPref(on: boolean): void {
+  try { localStorage.setItem(SECRET_KEY, on ? "1" : "0"); } catch {}
 }

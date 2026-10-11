@@ -112,10 +112,14 @@ export async function openQuickPopupAt(
     // dice/index.ts for the full rationale. Passed through as a URL
     // param since the popup is a genuinely separate document/modal.
     resourceConsume?: { itemId: string; resourceId: string; delta: number };
+    /** Every button rolls hidden (secret / dark): only the roller and
+     *  the GM see the result. */
+    secret?: boolean;
   },
   _viewportPos: { x: number; y: number },
 ): Promise<void> {
   const params = new URLSearchParams();
+  if (args.secret) params.set("secret", "1");
   params.set("expr", args.expression);
   params.set("label", args.label);
   if (args.itemId) params.set("itemId", args.itemId);

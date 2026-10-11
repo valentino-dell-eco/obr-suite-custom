@@ -6,6 +6,11 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 ### Added
 
+- **Secret activations.** The spell cast, feature use and short-rest hit
+  dice windows have a "Secret" checkbox (remembered per browser): the chat
+  card becomes a whisper only the caster and the GM see (marked "Secret"),
+  any dice it rolls are secret rolls (caster + GM in the dice history) and
+  the resource toast stays on the caster's screen.
 - **Status levels as grid distances.** New “Level is a grid distance” option (Status library, under “Has levels”): the level starts at one grid square, − / + step by the scene's grid scale (5 ft, 1.5 m, …) and the chip shows the unit — “Flying 30 ft”. Follows the scene grid when it changes. Level limits widened to ±9999 for distances.
 
 ### Fixed

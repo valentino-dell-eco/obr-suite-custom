@@ -1516,6 +1516,11 @@ const TR: Dict = {
   ccCastBaseLevel: { zh: "本体环阶", en: "base level" },
   ccCastConfirm: { zh: "施放", en: "Cast" },
   ccCastSending: { zh: "施放中…", en: "Casting…" },
+  ccSecretLabel: { zh: "秘密", en: "Secret" },
+  ccSecretHint: {
+    zh: "仅你和 GM 能在聊天与骰子记录中看到此次使用",
+    en: "Only you and the GM see this in the chat and the dice history",
+  },
   ccCastDcLabel: { zh: "豁免 DC", en: "Save DC" },
   ccCastDcEdited: { zh: "已修改", en: "Edited" },
   ccCastTitle: { zh: "激活：施放法术", en: "Activation: Casting Spell" },

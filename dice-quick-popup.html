@@ -712,6 +712,9 @@
       const initialExpr = params.get("expr") ?? "";
       const initialLabel = params.get("label") ?? "";
       const itemId = params.get("itemId") || null;
+      // Secret activation (spell / feature cast as "Secret"): every roll
+      // fired from this popup is a hidden roll (roller + GM only).
+      const forceSecret = params.get("secret") === "1";
       // 2026-07 — dieRoll resource consumption marker, JSON-encoded by
       // openQuickPopupAt. Relayed verbatim in the BC_QUICK_ROLL payload
       // below; the actual resource decrement happens in dice/index.ts
@@ -871,7 +874,7 @@
               label,
               itemId,
               focus: !!itemId,
-              hidden: !!opts.hidden,
+              hidden: !!opts.hidden || forceSecret,
               ...(opts.advMode ? { advMode: opts.advMode } : {}),
               ...(opts.critMode ? { critMode: true } : {}),
               ...(resourceConsume ? { resourceConsume } : {}),

@@ -227,7 +227,12 @@ const TOOL_STYLE: Record<ChatTool, { color: string; icon: string; en: string; zh
 function scopeBadge(m: ChatMessage): HTMLElement | null {
   if (m.scope === "all") return null;
   const b = document.createElement("span");
-  if (m.scope === "gm") {
+  if (m.scope === "gm" && (m.cast || toolOf(m))) {
+    // Secret activation (cast / feature / hit dice): sender + GM only.
+    b.className = "badge gm secret";
+    b.textContent = en ? "Secret" : "密";
+    b.title = en ? "Secret — only the sender and the GM see this" : "秘密 — 仅发送者与 GM 可见";
+  } else if (m.scope === "gm") {
     b.className = "badge gm";
     b.textContent = "→ GM";
   } else {
@@ -241,7 +246,7 @@ function scopeBadge(m: ChatMessage): HTMLElement | null {
 function renderNotice(m: ChatMessage, tool: ChatTool): HTMLElement {
   const st = TOOL_STYLE[tool];
   const el = document.createElement("div");
-  el.className = `msg notice tool-${tool}`;
+  el.className = `msg notice tool-${tool}` + (m.scope === "gm" ? " secret" : "");
   el.style.setProperty("--tc", st.color);
 
   const ico = document.createElement("span");
@@ -288,7 +293,7 @@ function renderNotice(m: ChatMessage, tool: ChatTool): HTMLElement {
 function renderCastMessage(m: ChatMessage): HTMLElement {
   const own = m.fromId === meId;
   const el = document.createElement("div");
-  el.className = "msg cast-msg" + (own ? " own" : "");
+  el.className = "msg cast-msg" + (own ? " own" : "") + (m.scope === "gm" ? " secret" : "");
   const meta = document.createElement("div");
   meta.className = "meta";
   const from = document.createElement("span");

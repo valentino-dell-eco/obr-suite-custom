@@ -52,7 +52,7 @@ import {
 import { ensureStyles } from "../resourceTracker/panel";
 import { ICON_LIBRARY } from "../resourceTracker/icons";
 import { amountFromClick, ensureSpendVisualStyles, spendVisualHtml } from "./spend-visual";
-import { bestNameMatch } from "./spend";
+import { bestNameMatch, getSecretPref, setSecretPref } from "./spend";
 import type { IconId } from "../resourceTracker/types";
 
 // [CC-FLOW] Module-evaluation marker for the fullscreen iframe document.
@@ -2762,6 +2762,22 @@ function slotPayload(v: SpendState): number | null {
 
 // "Use" for a feature: same modal shape as the spell cast (no level,
 // no DC). Posts a ⚡ card to Room Chat, optionally spending a resource.
+/** "Secret" activation checkbox (whisper to the GM, hidden roll);
+ *  remembers its last state in this browser. */
+function SecretToggle({ value, onChange, disabled }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <label class="cast-secret" title={T("ccSecretHint")}>
+      <input
+        type="checkbox"
+        checked={value}
+        disabled={disabled}
+        onChange={(e: any) => { const v = !!e.target.checked; setSecretPref(v); onChange(v); }}
+      />
+      <span>{T("ccSecretLabel")}</span>
+    </label>
+  );
+}
+
 function UseFeatureModal({
   feature,
   label,
@@ -2774,6 +2790,7 @@ function UseFeatureModal({
 }) {
   const [spend, setSpend] = useState<SpendState>(NO_SPEND);
   const [sending, setSending] = useState(false);
+  const [secret, setSecret] = useState(getSecretPref);
   const name = String(feature?.name ?? "");
   const desc = typeof feature?.description === "string" ? feature.description.trim() : "";
 
@@ -2799,6 +2816,7 @@ function UseFeatureModal({
       cardId: getQS("card") || "",
       spend: spendPayload(spend),
       slot: slotPayload(spend),
+      secret,
     });
     onClose();
   };
@@ -2822,6 +2840,7 @@ function UseFeatureModal({
         </p>
         <ResourceSpentField kind="feature" name={name} baseLevel={0} value={spend} onChange={setSpend} disabled={sending} />
         <div class="cc-modal-foot">
+          <SecretToggle value={secret} onChange={setSecret} disabled={sending} />
           <button class="cc-btn" onClick={onClose} disabled={sending}>
             {T("ccCancel")}
           </button>
@@ -2856,6 +2875,7 @@ function CastSpellModal({
   const [dcText, setDcText] = useState(cardDc != null ? String(cardDc) : "");
   const [spend, setSpend] = useState<SpendState>(NO_SPEND);
   const [sending, setSending] = useState(false);
+  const [secret, setSecret] = useState(getSecretPref);
   const detail = useSpellDetail(spell, true);
   // Spell slot row: picking a slot sets the cast level (upcast) and
   // hides the level + resource fields.
@@ -2897,6 +2917,7 @@ function CastSpellModal({
       cardId: getQS("card") || "",
       spend: usingSlot ? null : spendPayload(spend),
       slot: usingSlot ? slotLv : null,
+      secret,
     });
     onClose();
   };
@@ -2961,6 +2982,7 @@ function CastSpellModal({
         </div>
 
         <div class="cc-modal-foot">
+          <SecretToggle value={secret} onChange={setSecret} disabled={sending} />
           <button class="cc-btn" onClick={onClose} disabled={sending}>
             {T("ccCancel")}
           </button>

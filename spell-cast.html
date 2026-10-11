@@ -37,6 +37,8 @@ select,input{
 select:focus,input:focus{border-color:#5dade2}
 input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .foot{flex:none;display:flex;justify-content:flex-end;gap:8px;padding:10px 14px 12px;border-top:1px solid rgba(255,255,255,0.08)}
+.secret{flex:1;display:flex;align-items:center;gap:6px;font-size:11px;color:#c9b6ff;cursor:pointer;user-select:none;margin-right:auto}
+.secret input{accent-color:#9b6bff;width:14px;height:14px;margin:0;cursor:pointer}
 button.btn{font-size:12px;font-weight:700;border:none;border-radius:8px;padding:8px 14px;cursor:pointer}
 .cancel{background:rgba(255,255,255,0.08);color:#c5cad8}
 .cancel:hover{background:rgba(255,255,255,0.16)}
@@ -90,6 +92,7 @@ button:disabled{opacity:.5;cursor:default}
     </div>
   </div>
   <div class="foot">
+    <label class="secret" id="secretWrap"><input type="checkbox" id="secret"><span id="secretLbl"></span></label>
     <button class="btn cancel" id="cancel"></button>
     <button class="btn cast" id="cast"></button>
   </div>

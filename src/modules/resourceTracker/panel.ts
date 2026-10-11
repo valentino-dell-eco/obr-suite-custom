@@ -166,6 +166,8 @@ export async function broadcastChanged(
   resource: Resource,
   delta: number,
   prevValue: number,
+  /** Secret activation: show the toast on this client only. */
+  localOnly = false,
 ): Promise<void> {
   if (delta === 0) return;
   const tokenName = await resolveTokenDisplayName(itemId);
@@ -173,7 +175,9 @@ export async function broadcastChanged(
     const payload = { tokenId: itemId, tokenName, resource, delta, prevValue };
     await Promise.all([
       OBR.broadcast.sendMessage(BC_RESOURCE_CHANGED, payload, { destination: "LOCAL" }),
-      OBR.broadcast.sendMessage(BC_RESOURCE_CHANGED, payload, { destination: "REMOTE" }),
+      ...(localOnly
+        ? []
+        : [OBR.broadcast.sendMessage(BC_RESOURCE_CHANGED, payload, { destination: "REMOTE" })]),
     ]);
   } catch {}
 }

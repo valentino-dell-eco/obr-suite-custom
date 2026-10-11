@@ -2484,6 +2484,8 @@ OBR.onReady(async () => {
         const slotRaw = Math.floor(Number(e.data.payload?.slot));
         const slot = slotRaw >= 1 && slotRaw <= 9 ? slotRaw : null;
         const cardId = String(e.data.payload?.cardId ?? "");
+        // Secret: whisper to the GM, local-only toast, hidden dice roll.
+        const secret = e.data.payload?.secret === true;
         void (async () => {
           const out: ChatCast = { ...cast, spellName };
           delete out.spent; // only the host fills this in
@@ -2495,10 +2497,10 @@ OBR.onReady(async () => {
               // A spell slot (spell row / feature paid with a slot) or
               // an eligible resource — never both.
               if (slot) {
-                const spent = await spendSpellSlot(itemId, slot);
+                const spent = await spendSpellSlot(itemId, slot, { secret });
                 if (spent) out.spent = spent;
               } else {
-                const res = await spendResource(itemId, spend!);
+                const res = await spendResource(itemId, spend!, { secret });
                 if (res) {
                   const { roll: expr, ...spent } = res;
                   out.spent = spent;
@@ -2510,11 +2512,11 @@ OBR.onReady(async () => {
             }
             void sendFreshResources(cardId);
           }
-          await sendChat({ scope: "all", text: "", cast: out });
+          await sendChat({ scope: secret ? "gm" : "all", text: "", cast: out });
           if (roll && typeof itemId === "string") {
             try {
               await openQuickPopupAt(
-                { expression: roll, label: `${spellName} · ${out.spent?.name ?? ""}`, itemId },
+                { expression: roll, label: `${spellName} · ${out.spent?.name ?? ""}`, itemId, secret },
                 { x: 0, y: 0 },
               );
             } catch (err) {

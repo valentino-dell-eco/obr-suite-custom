@@ -24,6 +24,7 @@ import {
   type Resource,
 } from "./modules/resourceTracker/types";
 import { HIT_DICE_MODAL_ID, type HitDicePayload } from "./modules/characterCards/hit-dice";
+import { getSecretPref, setSecretPref } from "./modules/characterCards/spend";
 
 const lang = getLocalLang();
 const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
@@ -45,6 +46,7 @@ const resultEl = $("result");
 const noteEl = $("note");
 const rollBtn = $<HTMLButtonElement>("roll");
 const doneBtn = $<HTMLButtonElement>("done");
+const secretBox = $<HTMLInputElement>("secret");
 
 let res: Resource | null = null;
 let pools: HitDiePool[] = [];
@@ -126,6 +128,8 @@ async function roll(): Promise<void> {
   if (busy || !res || totalCount() <= 0) return;
   busy = true;
   rollBtn.disabled = true;
+  // Secret: whisper to the GM, local-only toast, hidden dice roll.
+  const secret = secretBox.checked;
   // Roll every chosen die; each heals roll + CON (minimum 0 per die).
   const rolled: Array<{ die: string; value: number }> = [];
   for (const p of pools) {
@@ -147,7 +151,7 @@ async function roll(): Promise<void> {
   if (updated) {
     res = updated;
     pools = readPools(updated);
-    void broadcastChanged(itemId, updated, updated.current - prev, prev);
+    void broadcastChanged(itemId, updated, updated.current - prev, prev, secret);
   }
 
   // 2. Heal the token (HP bar), capped at max HP.
@@ -171,15 +175,20 @@ async function roll(): Promise<void> {
   });
   const hpTxt = `${after.health ?? target}${maxHp != null ? ` / ${maxHp}` : ""}`;
 
-  // 3. Dice toast / history (rolled "by" the character's token).
+  // 3. Dice toast / history (rolled "by" the character's token). A
+  // secret roll is rolled by the player instead, so the dice module's
+  // hidden-roll visibility (GM + roller) applies.
   try {
+    const roller = secret
+      ? { hidden: true, rollerId: await OBR.player.getId(), rollerIsGM: (await OBR.player.getRole()) === "GM" }
+      : { rollerId: itemId };
     await broadcastDiceRoll({
       itemId,
       dice: rolled.map((r) => ({ type: r.die, value: r.value })),
       winnerIdx: -1,
       modifier: conMod * n,
       label: tt("hdLabel"),
-      rollerId: itemId,
+      ...roller,
     });
   } catch {}
 
@@ -195,7 +204,7 @@ async function roll(): Promise<void> {
       .replace("{n}", String(n))
       .replace("{dice}", en ? (n === 1 ? "die" : "dice") : "")
       .replace("{heal}", String(heal));
-    await sendChat({ scope: "all", text: `${text} (${mix} · ${hpTxt})`, tool: "rest" });
+    await sendChat({ scope: secret ? "gm" : "all", text: `${text} (${mix} · ${hpTxt})`, tool: "rest" });
   } catch {}
 
   resultEl.textContent = tt("hdResult")
@@ -214,6 +223,10 @@ OBR.onReady(() => {
   $("countLbl").textContent = tt("hdCount");
   rollBtn.textContent = tt("hdRoll");
   doneBtn.textContent = tt("hdDone");
+  $("secretLbl").textContent = tt("ccSecretLabel");
+  $("secretWrap").title = tt("ccSecretHint");
+  secretBox.checked = getSecretPref();
+  secretBox.addEventListener("change", () => setSecretPref(secretBox.checked));
   $("close").addEventListener("click", close);
   doneBtn.addEventListener("click", close);
   rollBtn.addEventListener("click", () => void roll());
