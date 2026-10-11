@@ -1483,6 +1483,8 @@ const TR: Dict = {
   ccFeatModalHint: { zh: "搜索资料库中的专长、能力与职业特性；选中后会把描述复制到角色卡。", en: "Search the library's feats, optional features and class features; the description is copied onto the card." },
   ccFeatAllTypes: { zh: "全部类型", en: "All types" },
   ccFeatSubclasses: { zh: "子职业", en: "Subclasses" },
+  ccFeatSource: { zh: "来源", en: "Source" },
+  ccFeatAllSources: { zh: "全部来源", en: "All sources" },
   ccFeatBack: { zh: "返回", en: "Back" },
   ccFeatSearchPh: { zh: "输入名称搜索…", en: "Type a name to search…" },
   ccSlotsShort: { zh: "法术位", en: "Spell slots" },

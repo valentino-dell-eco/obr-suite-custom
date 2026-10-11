@@ -489,6 +489,9 @@ function FeaturePickModal({
     start ? [{ kind: "types" }, { kind: "type", type: start }] : [{ kind: "types" }],
   );
   const step = path[path.length - 1];
+  // Source filter ("" = every source). Kept while going deeper, so
+  // "Druid" + "XPHB" carries from the class list into the class.
+  const [src, setSrc] = useState("");
   const en = _lang === "en";
   const cmp = (a: string, b: string) => a.localeCompare(b, en ? "en" : "zh");
 
@@ -526,8 +529,8 @@ function FeaturePickModal({
     return { classes, parentOf };
   }, [refs]);
 
-  /** The features in scope for the current step. */
-  const scope = useMemo((): FeatureRef[] => {
+  /** The features in scope for the current step (before the source filter). */
+  const stepScope = useMemo((): FeatureRef[] => {
     switch (step.kind) {
       case "types": return refs;
       case "type": return refs.filter((r) => featureType(r.c) === step.type);
@@ -538,6 +541,18 @@ function FeaturePickModal({
       case "source": return refs.filter((r) => featureType(r.c) === step.type && r.code === step.code);
     }
   }, [step, refs, classInfo]);
+  /** Sources present in this step (for the source select). */
+  const sourcesHere = useMemo(
+    () => [...new Set(stepScope.map((r) => r.code))].sort(cmp),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stepScope],
+  );
+  // No source select on the type list and inside the feats' book steps.
+  const showSrc = step.kind !== "types" && !(step.kind === "type" && step.type === "c7") && step.kind !== "source";
+  const scope = useMemo(
+    () => (showSrc && src ? stepScope.filter((r) => r.code === src) : stepScope),
+    [stepScope, src, showSrc],
+  );
 
   const typeLabel = (type: string) =>
     type === "class" ? T("searchCategoryClassFeature" as any)
@@ -607,10 +622,13 @@ function FeaturePickModal({
       .map((tp) => groupRow(typeLabel(tp), counts.get(tp)!, () => go({ kind: "type", type: tp })));
   } else if (step.kind === "type" && step.type === "class") {
     // Classes.
-    const list = [...classInfo.classes].sort(cmp);
+    const list = [...classInfo.classes]
+      .filter((cls) => scope.some((r) => r.c === 30 && r.className === cls))
+      .sort(cmp);
     body = list.map((cls) => {
       const n = scope.filter((r) => r.c === 30 && r.className === cls).length;
-      return groupRow(cls, n, () => go({ kind: "class", cls }));
+      const books = [...new Set(stepScope.filter((r) => r.c === 30 && r.className === cls).map((r) => r.code))].join(", ");
+      return groupRow(cls, n, () => go({ kind: "class", cls }), src ? "" : books);
     });
   } else if (step.kind === "type" && step.type === "c7") {
     // Feats by book.
@@ -622,15 +640,20 @@ function FeaturePickModal({
   } else if (step.kind === "class") {
     // The class's own features by level, then its subclasses.
     const own = scope.filter((r) => r.c === 30).sort(byLevel);
+    // Subclasses from every book (a PHB class often takes an XGE / TCE
+    // subclass); the source filter applies inside the subclass.
     const subs = new Map<string, number>();
-    for (const r of scope) if (r.c === 41) subs.set(r.className, (subs.get(r.className) ?? 0) + 1);
+    for (const r of stepScope) if (r.c === 41) subs.set(r.className, (subs.get(r.className) ?? 0) + 1);
     body = (
       <>
         {own.map((r, i) => featureRow(r, i, false))}
         {subs.size > 0 && <div class="cc-modal-sub-h">{T("ccFeatSubclasses")}</div>}
         {[...subs.entries()]
           .sort((a, b) => cmp(a[0], b[0]))
-          .map(([sub, n]) => groupRow(sub, n, () => go({ kind: "subclass", cls: step.cls, sub })))}
+          .map(([sub, n]) => {
+            const books = [...new Set(stepScope.filter((r) => r.c === 41 && r.className === sub).map((r) => r.code))].join(", ");
+            return groupRow(sub, n, () => { go({ kind: "subclass", cls: step.cls, sub }); setSrc(""); }, books);
+          })}
       </>
     );
   } else {
@@ -651,7 +674,7 @@ function FeaturePickModal({
             <>
               {i > 0 && <span class="sep">›</span>}
               {i < path.length - 1 ? (
-                <button class="crumb" onClick={() => { setPath(path.slice(0, i + 1)); setQuery(""); }}>
+                <button class="crumb" onClick={() => { setPath(path.slice(0, i + 1)); setQuery(""); if (i === 0) setSrc(""); }}>
                   {stepLabel(st)}
                 </button>
               ) : (
@@ -660,6 +683,17 @@ function FeaturePickModal({
             </>
           ))}
         </div>
+        {showSrc && sourcesHere.length > 1 && (
+          <label class="cc-pick-src">
+            <span>{T("ccFeatSource")}</span>
+            <select class="cc-edit-text" value={src} onChange={(e: any) => setSrc(e.target.value)}>
+              <option value="">{T("ccFeatAllSources")}</option>
+              {[...new Set([...sourcesHere, ...(src ? [src] : [])])].map((code) => (
+                <option value={code}>{code}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <input
           class="cc-edit-text"
           autofocus
@@ -685,7 +719,7 @@ function FeaturePickModal({
           {path.length > 1 && (
             <button
               class="cc-btn"
-              onClick={() => { setPath(path.slice(0, -1)); setQuery(""); }}
+              onClick={() => { setPath(path.slice(0, -1)); setQuery(""); if (path.length === 2) setSrc(""); }}
             >
               ‹ {T("ccFeatBack")}
             </button>
