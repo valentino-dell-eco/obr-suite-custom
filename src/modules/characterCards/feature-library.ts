@@ -14,7 +14,7 @@ import {
   getEnabledLibraryBases,
   libraryConfigSignature,
 } from "../../utils/libraryIndex";
-import { getLocalDataByKeySource } from "../../utils/localContent";
+import { getLocalDataByKeySource, getLocalSourceNames } from "../../utils/localContent";
 import { passesVersion } from "./spell-library";
 import { entriesToText } from "./spell-detail";
 
@@ -66,25 +66,62 @@ export function loadFeatureRefs(): Promise<FeatureRef[]> {
     const idx = await loadLibraryIndex();
     const out: FeatureRef[] = [];
     const seen = new Set<string>();
+    const add = (ref: FeatureRef) => {
+      const k = `${FEATURE_CATEGORIES[ref.c].key}|${ref.engName.toLowerCase()}|${ref.className.toLowerCase()}|${ref.level ?? ""}|${ref.code}`;
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(ref);
+    };
+    // Locally imported homebrew (e.g. LaserLlama's classes): its index
+    // entries carry only the feature name, so class / subclass
+    // features are read from the imported data itself (class name,
+    // subclass, level) instead.
+    const localClassSources = new Map<DataKey, Set<string>>();
     for (const e of idx.x) {
       if (!e || !(e.c in FEATURE_CATEGORIES)) continue;
       const code = typeof (e as any).s === "string" ? String((e as any).s).toUpperCase() : "";
       if (!code || !passesVersion(code)) continue;
+      if ((e as any).__local && (e.c === 30 || e.c === 41)) {
+        const key = FEATURE_CATEGORIES[e.c].key;
+        if (!localClassSources.has(key)) localClassSources.set(key, new Set());
+        localClassSources.get(key)!.add(code);
+        continue;
+      }
       const en = splitClassName(String(e.n ?? ""));
       const cn = splitClassName(String(e.cn ?? ""));
       if (!en.name && !cn.name) continue;
-      const ref: FeatureRef = {
+      add({
         c: e.c,
         engName: en.name || cn.name,
         cnName: cn.name,
         code,
         level: en.level ?? cn.level,
-        className: en.cls || cn.cls,
-      };
-      const k = `${FEATURE_CATEGORIES[e.c].key}|${ref.engName.toLowerCase()}|${ref.className.toLowerCase()}|${ref.level ?? ""}`;
-      if (seen.has(k)) continue;
-      seen.add(k);
-      out.push(ref);
+        // Class features whose index name has no "<class> <level>;"
+        // prefix are grouped under their source.
+        className: en.cls || cn.cls || ((e.c === 30 || e.c === 41) ? `(${code})` : ""),
+      });
+    }
+    for (const [key, codes] of localClassSources) {
+      const c = key === "classFeature" ? 30 : 41;
+      for (const code of codes) {
+        let rows: any[] = [];
+        try { rows = getLocalDataByKeySource(key, code); } catch {}
+        for (const r of rows) {
+          const eng = String(r?.ENG_name ?? r?.name ?? "").trim();
+          if (!eng) continue;
+          const cls = String(r?.className ?? "").trim();
+          const sub = String(r?.subclassShortName ?? "").trim();
+          const lv = Number(r?.level);
+          add({
+            c,
+            engName: eng,
+            cnName: r?.ENG_name ? String(r.name ?? "").trim() : "",
+            code,
+            level: Number.isFinite(lv) ? lv : null,
+            className: c === 41 ? `${sub} ${cls}`.trim() || `(${code})` : cls || `(${code})`,
+          });
+        }
+      }
     }
     return out;
   })();
@@ -177,4 +214,66 @@ export async function fetchFeatureDescription(ref: FeatureRef): Promise<string> 
     rows.find(nameOk);
   if (!row) return "";
   return entriesToText(row.entries).trim();
+}
+
+// --- Source names ("Player's Handbook · PHB") -----------------------------
+
+const KNOWN_SOURCES: Record<string, string> = {
+  PHB: "Player's Handbook (2014)",
+  XPHB: "Player's Handbook (2024)",
+  DMG: "Dungeon Master's Guide (2014)",
+  XDMG: "Dungeon Master's Guide (2024)",
+  MM: "Monster Manual (2014)",
+  XMM: "Monster Manual (2025)",
+  TCE: "Tasha's Cauldron of Everything",
+  XGE: "Xanathar's Guide to Everything",
+  SCAG: "Sword Coast Adventurer's Guide",
+  EGW: "Explorer's Guide to Wildemount",
+  MOT: "Mythic Odysseys of Theros",
+  FTD: "Fizban's Treasury of Dragons",
+  MPMM: "Mordenkainen Presents: Monsters of the Multiverse",
+  BMT: "The Book of Many Things",
+  EFA: "Eberron: Forge of the Artificer",
+  ERLW: "Eberron: Rising from the Last War",
+  TDCSR: "Tal'Dorei Campaign Setting Reborn",
+  AAG: "Astral Adventurer's Guide",
+  SATO: "Sigil and the Outlands",
+  VRGR: "Van Richten's Guide to Ravenloft",
+  GGR: "Guildmasters' Guide to Ravnica",
+  AI: "Acquisitions Incorporated",
+  UA: "Unearthed Arcana",
+  PSA: "Plane Shift: Amonkhet",
+  HB: "Homebrew",
+};
+
+let namesCache: { sig: string; en: boolean; p: Promise<Map<string, string>> } | null = null;
+
+/** Full book names by uppercase source code: the library's books.json
+ *  (English or Chinese name by `en`), imported homebrew `_meta`, then
+ *  a built-in list of common books. */
+export function loadSourceNames(en: boolean): Promise<Map<string, string>> {
+  const sig = libraryConfigSignature();
+  if (namesCache && namesCache.sig === sig && namesCache.en === en) return namesCache.p;
+  const p = (async () => {
+    const out = new Map<string, string>();
+    try {
+      for (const [k, v] of getLocalSourceNames()) out.set(k, v);
+    } catch {}
+    for (const base of getEnabledLibraryBases()) {
+      try {
+        const res = await fetch(`${base}/data/books.json`, { cache: "no-cache" });
+        if (!res.ok) continue;
+        const data = await res.json();
+        for (const b of data.book ?? []) {
+          const code = String(b?.source ?? b?.id ?? "").toUpperCase();
+          const name = String((en ? b?.ENG_name ?? b?.name : b?.name ?? b?.ENG_name) ?? "").trim();
+          if (code && name && !out.has(code)) out.set(code, name);
+        }
+      } catch {}
+    }
+    for (const [k, v] of Object.entries(KNOWN_SOURCES)) if (!out.has(k)) out.set(k, v);
+    return out;
+  })();
+  namesCache = { sig, en, p };
+  return p;
 }

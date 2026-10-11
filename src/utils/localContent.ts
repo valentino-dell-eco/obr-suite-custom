@@ -364,6 +364,23 @@ export function getLocalIndexFile(): SearchIndexFile {
  *  in search/page.ts) and a source code, return the locally-stored
  *  entries for that key+source. Used by search/page.ts loadCategoryData
  *  to short-circuit URL fetches when the data is local. */
+/** Full source names declared by imported homebrew files
+ *  (`_meta.sources[].json` → `full`), keyed by uppercase code. */
+export function getLocalSourceNames(): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const meta of readIndex().files) {
+    const content = readFile(meta.id);
+    const list = content?._meta?.sources;
+    if (!Array.isArray(list)) continue;
+    for (const src of list) {
+      const code = String(src?.json ?? "").trim().toUpperCase();
+      const full = String(src?.full ?? "").trim();
+      if (code && full && !out.has(code)) out.set(code, full);
+    }
+  }
+  return out;
+}
+
 export function getLocalDataByKeySource(key: string, source: string): any[] {
   const idx = readIndex();
   const out: any[] = [];

@@ -33,6 +33,7 @@ import {
   FEATURE_CATEGORIES,
   fetchFeatureDescription,
   loadFeatureRefs,
+  loadSourceNames,
   type FeatureRef,
 } from "./feature-library";
 import { t } from "../../i18n";
@@ -511,6 +512,19 @@ function FeaturePickModal({
     return () => document.removeEventListener("keydown", h);
   }, [onCancel]);
 
+  // Full book names for the source select ("Player's Handbook (2014) · PHB").
+  const [srcNames, setSrcNames] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    loadSourceNames(en).then((m) => { if (!cancelled) setSrcNames(m); }).catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const srcLabel = (code: string) => {
+    const name = srcNames.get(code.toUpperCase());
+    return name ? `${name} · ${code}` : code;
+  };
+
   const labelOf = (r: FeatureRef) => (en ? r.engName : r.cnName || r.engName);
 
   // Class names (from class features) and each subclass's parent class.
@@ -543,9 +557,9 @@ function FeaturePickModal({
   }, [step, refs, classInfo]);
   /** Sources present in this step (for the source select). */
   const sourcesHere = useMemo(
-    () => [...new Set(stepScope.map((r) => r.code))].sort(cmp),
+    () => [...new Set(stepScope.map((r) => r.code))].sort((a, b) => cmp(srcLabel(a), srcLabel(b))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [stepScope],
+    [stepScope, srcNames],
   );
   // No source select on the type list and inside the feats' book steps.
   const showSrc = step.kind !== "types" && !(step.kind === "type" && step.type === "c7") && step.kind !== "source";
@@ -562,7 +576,7 @@ function FeaturePickModal({
       : st.kind === "type" ? typeLabel(st.type)
       : st.kind === "class" ? st.cls
       : st.kind === "subclass" ? st.sub
-      : st.code;
+      : srcLabel(st.code);
   const go = (st: PickStep) => { setPath([...path, st]); setQuery(""); };
 
   const pick = async (r: FeatureRef, key: string) => {
@@ -636,7 +650,7 @@ function FeaturePickModal({
     for (const r of scope) bySrc.set(r.code, (bySrc.get(r.code) ?? 0) + 1);
     body = [...bySrc.entries()]
       .sort((a, b) => cmp(a[0], b[0]))
-      .map(([code, n]) => groupRow(code, n, () => go({ kind: "source", type: "c7", code })));
+      .map(([code, n]) => groupRow(srcLabel(code), n, () => go({ kind: "source", type: "c7", code })));
   } else if (step.kind === "class") {
     // The class's own features by level, then its subclasses.
     const own = scope.filter((r) => r.c === 30).sort(byLevel);
@@ -689,7 +703,7 @@ function FeaturePickModal({
             <select class="cc-edit-text" value={src} onChange={(e: any) => setSrc(e.target.value)}>
               <option value="">{T("ccFeatAllSources")}</option>
               {[...new Set([...sourcesHere, ...(src ? [src] : [])])].map((code) => (
-                <option value={code}>{code}</option>
+                <option value={code}>{srcLabel(code)}</option>
               ))}
             </select>
           </label>
