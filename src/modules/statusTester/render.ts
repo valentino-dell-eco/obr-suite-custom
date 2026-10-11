@@ -60,7 +60,7 @@ type Role = "bg" | "icon" | "emoji" | "title" | "att";
 
 const FONT = '-apple-system,"Segoe UI","Microsoft YaHei",sans-serif';
 const EMOJI_FONT =
-  '"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji","Twemoji Mozilla",sans-serif';
+  '"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif';
 const BG_ALPHA = 0.95;
 const STROKE_ALPHA = 0.45;
 const MIN_SCALE = 0.0001;
