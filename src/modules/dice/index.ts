@@ -13,6 +13,8 @@ import {
   getPanelOffset,
   getPanelSize,
   registerPanelBbox,
+  registerOccluder,
+  notifyOccludersChanged,
   BC_PANEL_DRAG_END,
   BC_PANEL_RESET,
   BC_PANEL_SIDE_HINT,
@@ -430,6 +432,7 @@ async function openHistory(mode: "transient" | "all" = "transient"): Promise<voi
     });
     historyOpen = true;
     broadcastHistoryState(true);
+    notifyOccludersChanged();
   } catch (e) {
     console.error("[obr-suite/dice] open history failed", e);
   }
@@ -438,7 +441,11 @@ async function closeHistory(): Promise<void> {
   try { await OBR.popover.close(HISTORY_POPOVER_ID); } catch {}
   historyOpen = false;
   broadcastHistoryState(false);
+  notifyOccludersChanged();
 }
+
+// Status chip popovers stay off the dice history while it's open.
+registerOccluder(PANEL_IDS.diceHistory, () => (historyOpen ? computePanelBbox(PANEL_IDS.diceHistory) : null));
 // --- Replay overlay state ---
 let activeReplayCid: string | null = null;
 async function openReplay(cid: string): Promise<void> {

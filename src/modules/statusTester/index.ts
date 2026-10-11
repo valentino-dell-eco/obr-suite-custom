@@ -48,6 +48,7 @@ import { openManageModal } from "./open";
 import { setupPalette, teardownPalette, togglePalette } from "./palette";
 import { getLocalSettings, initRoomSettings, onLocalSettingsChange } from "./settings";
 import { initStatusGridScale } from "./grid-scale";
+import { onOccludersChanged, openPanelRects, type PanelBbox } from "../../utils/panelLayout";
 
 const CHIP_URL = assetUrl("status-tester-chip.html");
 const MOVE_EPS = 2;
@@ -84,6 +85,12 @@ let stillTicks = SETTLE_TICKS;
 // Popovers already placed for the current (still) view and token set —
 // nothing to do until the camera moves or tokens/statuses change.
 let placedDirty = true;
+
+function overlapsAny(r: PanelBbox, list: PanelBbox[]): boolean {
+  return list.some(
+    (p) => r.left < p.left + p.width && r.left + r.width > p.left && r.top < p.top + p.height && r.top + r.height > p.top,
+  );
+}
 
 function popId(tokenId: string): string {
   return `${CHIP_POPOVER_ID}/${tokenId}`;
@@ -186,6 +193,10 @@ async function tick(): Promise<void> {
     }
     if (!placedDirty) return;
     placedDirty = false;
+    // Open suite panels (Room Chat, initiative, dice history): a chip
+    // under one of them gets no popover, so its hover list never pops
+    // up over the panel.
+    const panels = await openPanelRects();
     const wanted = new Set<string>();
     for (const [id, item] of candidates) {
       if (wanted.size >= MAX_POPOVERS) break;
@@ -206,6 +217,11 @@ async function tick(): Promise<void> {
       const w = chipWidthPx(item, hpx) + (c.align === "center" ? 2 : 1) * gearSpace;
       const left = Math.round(screen.x);
       const top = Math.round(screen.y - baseH / 2);
+      const x0 = c.align === "start" ? left : c.align === "end" ? left - w : left - w / 2;
+      if (overlapsAny({ left: x0, top, width: w, height: baseH }, panels)) {
+        wanted.delete(id);
+        continue;
+      }
       const prev = openPops.get(id);
       if (
         prev &&
@@ -335,6 +351,8 @@ export async function setupStatusTester(): Promise<void> {
   // Grid-distance levels ("Flying 30 ft") follow the scene grid scale.
   void initStatusGridScale(onSettings);
   unsubs.push(onLocalSettingsChange(onSettings));
+  // A suite panel opened / closed / moved → re-check which chips it covers.
+  unsubs.push(onOccludersChanged(() => { placedDirty = true; void tick(); }));
   startRenderer();
 
   const lang = getLocalLang();

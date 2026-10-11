@@ -275,3 +275,41 @@ export async function computePanelBbox(panelId: string): Promise<PanelBbox | nul
     return null;
   }
 }
+
+
+// === Occluders ========================================================
+// Panels that are OPEN right now, as viewport rects, so the status
+// chips' hover popovers (which OBR stacks above every other popover)
+// don't open on top of them. Providers return null while closed; a
+// panel calls notifyOccludersChanged() when it opens / closes / moves.
+
+const occluders = new Map<string, BboxProvider>();
+const occluderListeners = new Set<() => void>();
+
+export function registerOccluder(panelId: string, provider: BboxProvider): void {
+  occluders.set(panelId, provider);
+  notifyOccludersChanged();
+}
+
+export function notifyOccludersChanged(): void {
+  for (const fn of occluderListeners) {
+    try { fn(); } catch {}
+  }
+}
+
+export function onOccludersChanged(fn: () => void): () => void {
+  occluderListeners.add(fn);
+  return () => { occluderListeners.delete(fn); };
+}
+
+/** Rects of every open occluding panel. */
+export async function openPanelRects(): Promise<PanelBbox[]> {
+  const out: PanelBbox[] = [];
+  for (const p of occluders.values()) {
+    try {
+      const r = await p();
+      if (r && r.width > 0 && r.height > 0) out.push(r);
+    } catch {}
+  }
+  return out;
+}

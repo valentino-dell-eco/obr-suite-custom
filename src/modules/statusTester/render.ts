@@ -28,7 +28,9 @@ import OBR, {
   Command,
   isImage,
   type BoundingBox,
+  type FormattedText,
   type Image,
+  type RichText,
   type Item,
   type PathCommand,
 } from "@owlbear-rodeo/sdk";
@@ -38,6 +40,7 @@ import {
   PLUGIN_ID,
   StatusDef,
   displayTitle,
+  titleParts,
   iconUrl,
   isStatusToken,
   resolveVisible,
@@ -178,6 +181,18 @@ export function chipCenterX(anchor: { x: number; align: ChipAlign }, w: number):
 export function chipText(def: StatusDef, applied: AppliedStatus, extra = 0): string {
   const base = displayTitle(def, applied);
   return extra > 0 ? `${base} +${extra}` : base;
+}
+
+/** chipText() as OBR rich text: the level (+ unit) in italics. */
+export function chipRichText(def: StatusDef, applied: AppliedStatus, extra = 0): RichText {
+  const p = titleParts(def, applied);
+  const tail = extra > 0 ? ` +${extra}` : "";
+  const children: FormattedText[] = [];
+  if (p.title) children.push({ text: p.level ? `${p.title} ` : p.title + tail, bold: true });
+  if (p.level) children.push({ text: p.level, bold: true, italic: true });
+  if (p.level && tail) children.push({ text: tail, bold: true });
+  if (!children.length) children.push({ text: tail.trim(), bold: true });
+  return [{ type: "paragraph", children }];
 }
 
 /** The statuses actually drawn: all of them while rotating, only the
@@ -417,8 +432,10 @@ function buildToken(
       const textX = left + m.pad + m.iconSize + m.gap;
       const title = buildText()
         .id(itemId(token.id, applied.uid, "title"))
-        .textType("PLAIN")
+        // Rich text only when there's a level to italicise.
+        .textType(titleParts(def, applied).level ? "RICH" : "PLAIN")
         .plainText(text)
+        .richText(chipRichText(def, applied, drawn.extra))
         .position({ x: textX, y: center.y - h / 2 })
         .width(m.textW + m.pad * 0.5)
         .height(h)

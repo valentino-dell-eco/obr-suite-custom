@@ -22,6 +22,7 @@ import {
   canManage,
   cleanLevel,
   displayTitle,
+  displayTitleHtml,
   iconUrl,
   isStatusToken,
   newId,
@@ -76,7 +77,7 @@ function chipHtml(def: StatusDef | undefined, opts: { hidden?: boolean; applied?
   if (def.emoji) icon = `<span class="emoji">${escapeHtml(def.emoji)}</span>`;
   else if (def.icon) icon = `<img src="${escapeHtml(iconUrl(def.icon, fg !== "#ffffff"))}" alt="">`;
   const title = (opts.applied ? displayTitle(def, opts.applied) : def.title) || t(lang, "sttUntitled");
-  return `<span class="chip${opts.hidden ? " is-hidden" : ""}" style="background:${escapeHtml(def.color)};color:${escapeHtml(fg)}" title="${escapeHtml(title)}">${icon}<span class="t">${escapeHtml(title)}</span></span>`;
+  return `<span class="chip${opts.hidden ? " is-hidden" : ""}" style="background:${escapeHtml(def.color)};color:${escapeHtml(fg)}" title="${escapeHtml(title)}">${icon}<span class="t">${opts.applied && def.levels ? displayTitleHtml(def, opts.applied, escapeHtml) : escapeHtml(title)}</span></span>`;
 }
 
 function showError(msg: string): void {

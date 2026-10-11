@@ -11,10 +11,11 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
   card becomes a whisper only the caster and the GM see (marked "Secret"),
   any dice it rolls are secret rolls (caster + GM in the dice history) and
   the resource toast stays on the caster's screen.
-- **Status levels as grid distances.** New “Level is a grid distance” option (Status library, under “Has levels”): the level starts at one grid square, − / + step by the scene's grid scale (5 ft, 1.5 m, …) and the chip shows the unit — “Flying 30 ft”. Follows the scene grid when it changes. Level limits widened to ±9999 for distances.
+- **Status levels as grid distances.** New “Level is a grid distance” option (Status library, under “Has levels”): the level starts at one grid square, − / + step by the scene's grid scale (5 ft, 1.5 m, …) and the chip shows the unit — “Flying 30 ft”. Follows the scene grid when it changes. Level limits widened to ±9999 for distances. A status level (and its unit) is shown in italics on the chip.
 
 ### Fixed
 
+- **Status hover list no longer pops up over open panels.** A status chip covered by the Room Chat, the initiative panel or the dice history (while open) gets no hover area, so moving the mouse over the panel doesn't open the token's status list on top of it.
 - **“Die Roll” resources spent from a cast / use window now roll their dice.** Spending one opens the quick-roll popup with the resource's formula (multiplied by the amount spent: 2 × “1d6” → “2d6”), like spending it from the Resource Tracker; before, only the count went down.
 
 ## [2.1.0] — 2026-10-11

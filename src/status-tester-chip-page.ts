@@ -21,7 +21,7 @@ import {
   LS_GEAR_PREFIX,
   StatusDef,
   canManage,
-  displayTitle,
+  displayTitleHtml,
   iconUrl,
   resolveVisible,
   rotationIndex,
@@ -176,7 +176,7 @@ function listRowHtml(
   else if (e.def.icon) icon = `<img src="${escapeHtml(iconUrl(e.def.icon, fg !== "#ffffff"))}" alt="">`;
   const cls = ["row", current ? "cur" : "", e.applied.hidden ? "hid" : ""].filter(Boolean).join(" ");
   const tag = e.applied.hidden ? `<span class="tag">${escapeHtml(lang === "en" ? "hidden" : "隐藏")}</span>` : "";
-  return `<div class="${cls}" style="background:${escapeHtml(e.def.color)};color:${fg}">${icon}<span class="t">${escapeHtml(displayTitle(e.def, e.applied) || "—")}</span>${tag}</div>`;
+  return `<div class="${cls}" style="background:${escapeHtml(e.def.color)};color:${fg}">${icon}<span class="t">${displayTitleHtml(e.def, e.applied, escapeHtml) || "—"}</span>${tag}</div>`;
 }
 
 /** Hover popup listing every status on the token, below the chip. The

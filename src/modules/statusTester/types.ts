@@ -214,10 +214,32 @@ export function levelStart(def: Pick<StatusDef, "levelGrid"> | null | undefined)
 /** Title as shown on a chip: "Exhaustion 3", or "Flying 30 ft" for
  *  grid-distance levels. */
 export function displayTitle(def: StatusDef, applied?: Pick<AppliedStatus, "level"> | null): string {
-  if (!def.levels) return def.title;
+  const p = titleParts(def, applied);
+  return p.title && p.level ? `${p.title} ${p.level}` : p.title || p.level;
+}
+
+/** The chip title split in its name and its level ("30 ft" / "3"; ""
+ *  without levels) — the level is drawn in italics. */
+export function titleParts(
+  def: StatusDef,
+  applied?: Pick<AppliedStatus, "level"> | null,
+): { title: string; level: string } {
+  if (!def.levels) return { title: def.title, level: "" };
   const lv = applied?.level ?? levelStart(def);
-  const val = def.levelGrid && gridScale.unit ? `${lv} ${gridScale.unit}` : String(lv);
-  return def.title ? `${def.title} ${val}` : val;
+  const level = def.levelGrid && gridScale.unit ? `${lv} ${gridScale.unit}` : String(lv);
+  return { title: def.title, level };
+}
+
+/** displayTitle() as HTML, the level in <i>. `esc` escapes text. */
+export function displayTitleHtml(
+  def: StatusDef,
+  applied: Pick<AppliedStatus, "level"> | null | undefined,
+  esc: (s: string) => string,
+): string {
+  const p = titleParts(def, applied);
+  if (!p.level) return esc(p.title);
+  const lv = `<i class="lv">${esc(p.level)}</i>`;
+  return p.title ? `${esc(p.title)} ${lv}` : lv;
 }
 
 /** On-disk shape — short keys to save room-metadata bytes. */

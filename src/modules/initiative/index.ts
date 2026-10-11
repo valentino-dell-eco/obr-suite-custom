@@ -51,6 +51,9 @@ import {
   PANEL_IDS,
   getPanelOffset,
   registerPanelBbox,
+  registerOccluder,
+  notifyOccludersChanged,
+  computePanelBbox,
   BC_PANEL_DRAG_END,
   BC_PANEL_RESET,
   type DragEndPayload,
@@ -235,6 +238,7 @@ async function openPanel(expanded: boolean) {
       hidePaper: true,
     });
     panelIsOpen = true;
+    notifyOccludersChanged();
   } catch (e) {
     console.error("[obr-suite/initiative] openPanel failed", e);
   }
@@ -243,7 +247,11 @@ async function openPanel(expanded: boolean) {
 async function closePanel() {
   try { await OBR.popover.close(POPOVER_ID); } catch {}
   panelIsOpen = false;
+  notifyOccludersChanged();
 }
+
+// Status chip popovers stay off the panel while it's open.
+registerOccluder(PANEL_IDS.initiative, () => (panelIsOpen ? computePanelBbox(PANEL_IDS.initiative) : null));
 
 async function initKnownItems() {
   try {

@@ -7,6 +7,8 @@ import {
   getPanelOffset,
   getPanelSize,
   registerPanelBbox,
+  registerOccluder,
+  notifyOccludersChanged,
   BC_PANEL_DRAG_END,
   BC_PANEL_RESET,
 } from "../../utils/panelLayout";
@@ -74,6 +76,7 @@ async function openChat(): Promise<void> {
       disableClickAway: true,
     });
     popoverOpen = true;
+    notifyOccludersChanged();
   } catch (e) {
     console.warn("[room-chat] open failed", e);
   }
@@ -82,6 +85,7 @@ async function openChat(): Promise<void> {
 async function closeChat(): Promise<void> {
   popoverOpen = false;
   try { await OBR.popover.close(POPOVER_ID); } catch {}
+  notifyOccludersChanged();
 }
 
 async function reanchor(): Promise<void> {
@@ -219,6 +223,12 @@ export async function setupRoomChat(): Promise<void> {
   );
 
   registerPanelBbox(PANEL_IDS.roomChat, async () => {
+    const { left, top, w, h } = await anchor();
+    return { left, top, width: w, height: h };
+  });
+  // Status chip popovers stay off the chat while it's open.
+  registerOccluder(PANEL_IDS.roomChat, async () => {
+    if (!popoverOpen) return null;
     const { left, top, w, h } = await anchor();
     return { left, top, width: w, height: h };
   });
