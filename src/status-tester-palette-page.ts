@@ -23,6 +23,7 @@ import {
   iconUrl,
   textColorFor,
 } from "./modules/statusTester/types";
+import { emojiHtml } from "./modules/statusTester/emoji";
 import { onLibraryChange, readLibrary } from "./modules/statusTester/library";
 import { openLibraryModal } from "./modules/statusTester/open";
 import { addStatusToTokens } from "./modules/statusTester/apply";
@@ -51,7 +52,7 @@ let flashTimer: ReturnType<typeof setTimeout> | null = null;
 function chipHtml(def: StatusDef): string {
   const fg = textColorFor(def.color);
   let icon = "";
-  if (def.emoji) icon = `<span class="emoji">${escapeHtml(def.emoji)}</span>`;
+  if (def.emoji) icon = `<span class="emoji">${emojiHtml(def.emoji, escapeHtml)}</span>`;
   else if (def.icon) icon = `<img src="${escapeHtml(iconUrl(def.icon, fg !== "#ffffff"))}" alt="" draggable="false">`;
   const title = def.title || t(lang, "sttUntitled");
   return `<span class="chip" data-def="${escapeHtml(def.id)}" role="button" tabindex="0" aria-label="${escapeHtml(title)}" style="background:${escapeHtml(def.color)};color:${escapeHtml(fg)}">${icon}<span class="t">${escapeHtml(title)}</span></span>`;

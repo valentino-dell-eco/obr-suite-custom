@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>Status Tester chip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{
@@ -22,7 +25,10 @@ html,body{
 #chip.hidden-status{border:1px dashed rgba(255,255,255,.85);opacity:.75}
 #chip img{flex:none;display:block;pointer-events:none}
 #chip .emoji{flex:none;display:flex;align-items:center;justify-content:center;line-height:1;
-  font-family:"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif}
+  font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif}
+/* Same font as the map chip (OBR draws its text items in Roboto)
+   and the system emoji font first, like the map canvas. */
+#chip .title,#list .row .t{font-family:Roboto,-apple-system,"Segoe UI",sans-serif}
 #chip .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-weight:700;line-height:1}
 #chip .title b{ font-weight:700; }
 #chip .title .lv{ font-style:italic; font-weight:400; }
@@ -60,7 +66,7 @@ html,body{
   font-size:12px;line-height:1.2;white-space:nowrap}
 #list .row img{width:14px;height:14px;flex:none}
 #list .row .emoji{width:14px;text-align:center;flex:none;
-  font-family:"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif}
+  font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif}
 #list .row .t{overflow:hidden;text-overflow:ellipsis}
 #list .row .t b{ font-weight:700; }
 #list .row .t .lv{ font-style:italic; font-weight:400; }

@@ -48,6 +48,7 @@ import {
   textColorFor,
   type AppliedStatus,
 } from "./types";
+import { emojiImageState, emojiImageUrl, onEmojiChecked } from "./emoji";
 import {
   getLocalSettings,
   getRoomSettings,
@@ -61,6 +62,11 @@ type Role = "bg" | "icon" | "emoji" | "title" | "att";
 const FONT = '-apple-system,"Segoe UI","Microsoft YaHei",sans-serif';
 const EMOJI_FONT =
   '"Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif';
+// Font of the map chip's Text item: OBR draws text items with the fonts
+// its own page has loaded, so a CSS font stack isn't honoured — name
+// Roboto (OBR's UI font) so the hover list / manage chips can match it.
+// FONT above stays the text-measurement stack.
+const MAP_FONT = "Roboto";
 const BG_ALPHA = 0.95;
 const STROKE_ALPHA = 0.45;
 const MIN_SCALE = 0.0001;
@@ -370,6 +376,13 @@ function allIds(st: TokenState): string[] {
   return [...st.byId.keys()];
 }
 
+/** The emoji image to draw on the map, or null (text emoji). */
+function mapEmojiUrl(def: StatusDef): string | null {
+  if (!def.emoji) return null;
+  const url = emojiImageUrl(def.emoji);
+  return url && emojiImageState(url) === "ok" ? url : null;
+}
+
 function tokenSig(
   token: Image,
   statuses: Array<{ applied: AppliedStatus; def: StatusDef }>,
@@ -381,6 +394,8 @@ function tokenSig(
       !!s.applied.hidden,
       s.applied.level ?? null,
       s.def,
+      // Emoji drawn as image once it's known to load (see emoji.ts).
+      mapEmojiUrl(s.def) ? "img" : "txt",
     ]),
     getRoomSettings().position,
     getRoomSettings().offsetX,
@@ -478,7 +493,28 @@ function buildToken(
     reg("bg", bg);
 
     const iconCx = left + m.pad + m.iconSize / 2;
-    if (def.emoji) {
+    const emojiUrl = mapEmojiUrl(def);
+    if (emojiUrl) {
+      // Same emoji picture as the HTML lists (not the OS emoji font).
+      const s = shown ? entry.iconScale : MIN_SCALE;
+      const icon = buildImage(
+        { width: ICON_PX, height: ICON_PX, mime: "image/png", url: emojiUrl },
+        { dpi: sceneDpi, offset: { x: ICON_PX / 2, y: ICON_PX / 2 } },
+      )
+        .id(itemId(token.id, applied.uid, "icon"))
+        .position({ x: iconCx, y: center.y })
+        .scale({ x: s, y: s })
+        .layer("ATTACHMENT")
+        .zIndex(Z_FG)
+        .disableAutoZIndex(true)
+        .attachedTo(token.id)
+        .locked(true)
+        .disableHit(true)
+        .disableAttachmentBehavior(["SCALE", "ROTATION", "COPY"])
+        .metadata(ownerMeta(token.id))
+        .build();
+      reg("icon", icon);
+    } else if (def.emoji) {
       const box = m.iconSize * 1.5;
       const emoji = buildText()
         .id(itemId(token.id, applied.uid, "emoji"))
@@ -546,7 +582,7 @@ function buildToken(
         .width(m.textW + m.pad * 0.5)
         .height(h)
         .fontSize(m.fontSize)
-        .fontFamily(FONT)
+        .fontFamily(MAP_FONT)
         // niente .fontWeight(700) qui
         .textAlign("LEFT")
         .textAlignVertical("MIDDLE")
@@ -844,8 +880,12 @@ function stopRotation(): void {
   rotTimer = null;
 }
 
+let emojiUnsub: (() => void) | null = null;
+
 export function startRenderer(): void {
   active = true;
+  // An emoji image finished its load check → redraw with it.
+  if (!emojiUnsub) emojiUnsub = onEmojiChecked(() => scheduleSync());
   startRotation();
 }
 

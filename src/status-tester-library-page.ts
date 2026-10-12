@@ -25,6 +25,7 @@ import {
   sanitizeDef,
   textColorFor,
 } from "./modules/statusTester/types";
+import { emojiHtml } from "./modules/statusTester/emoji";
 import {
   ROOM_LIMIT_BYTES,
   encodedLibraryBytes,
@@ -107,7 +108,7 @@ function applyLabels(): void {
 function chipHtml(def: StatusDef): string {
   const fg = textColorFor(def.color);
   let icon = "";
-  if (def.emoji) icon = `<span class="emoji">${escapeHtml(def.emoji)}</span>`;
+  if (def.emoji) icon = `<span class="emoji">${emojiHtml(def.emoji, escapeHtml)}</span>`;
   else if (def.icon) icon = `<img src="${escapeHtml(iconUrl(def.icon, fg !== "#ffffff"))}" alt="">`;
   const title = (def.levels ? `${def.title} X` : def.title) || t(lang, "sttUntitled");
   return `<span class="chip" style="background:${escapeHtml(def.color)};color:${escapeHtml(fg)}" title="${escapeHtml(title)}">${icon}<span class="t">${escapeHtml(title)}</span></span>`;

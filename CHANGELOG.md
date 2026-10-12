@@ -15,6 +15,7 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 ### Fixed
 
+- **Status emojis look the same everywhere.** The map chip used the operating system's emoji font (drawn by OBR) while the library, palette, drop and hover lists used the browser's, so the same emoji looked different. All of them now show the same Google emoji image (emoji-datasource-google via jsDelivr); if an image can't be loaded the emoji text is shown as before.
 - **Status hover list no longer pops up over open panels.** A status chip covered by the Room Chat, the initiative panel or the dice history (while open) gets no hover area, so moving the mouse over the panel doesn't open the token's status list on top of it.
 - **“Die Roll” resources spent from a cast / use window now roll their dice.** Spending one opens the quick-roll popup with the resource's formula (multiplied by the amount spent: 2 × “1d6” → “2d6”), like spending it from the Resource Tracker; before, only the count went down.
 

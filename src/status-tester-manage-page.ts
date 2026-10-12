@@ -31,6 +31,7 @@ import {
   textColorFor,
   visibleApplied,
 } from "./modules/statusTester/types";
+import { emojiHtml } from "./modules/statusTester/emoji";
 import { onLibraryChange, readLibrary } from "./modules/statusTester/library";
 import { openLibraryModal } from "./modules/statusTester/open";
 import { announceStatusChange, type StatusChange } from "./modules/statusTester/announce";
@@ -74,7 +75,7 @@ function chipHtml(def: StatusDef | undefined, opts: { hidden?: boolean; applied?
   }
   const fg = textColorFor(def.color);
   let icon = "";
-  if (def.emoji) icon = `<span class="emoji">${escapeHtml(def.emoji)}</span>`;
+  if (def.emoji) icon = `<span class="emoji">${emojiHtml(def.emoji, escapeHtml)}</span>`;
   else if (def.icon) icon = `<img src="${escapeHtml(iconUrl(def.icon, fg !== "#ffffff"))}" alt="">`;
   const title = (opts.applied ? displayTitle(def, opts.applied) : def.title) || t(lang, "sttUntitled");
   return `<span class="chip${opts.hidden ? " is-hidden" : ""}" style="background:${escapeHtml(def.color)};color:${escapeHtml(fg)}" title="${escapeHtml(title)}">${icon}<span class="t">${opts.applied && def.levels ? displayTitleHtml(def, opts.applied, escapeHtml) : escapeHtml(title)}</span></span>`;

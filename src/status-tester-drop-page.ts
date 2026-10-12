@@ -36,6 +36,7 @@ import {
   textColorFor,
   displayTitleHtml,
 } from "./modules/statusTester/types";
+import { emojiHtml } from "./modules/statusTester/emoji";
 import { readLibrary } from "./modules/statusTester/library";
 import { addStatusToTokens } from "./modules/statusTester/apply";
 import { announceStatusChange } from "./modules/statusTester/announce";
@@ -94,7 +95,7 @@ function renderGhost(): void {
   if (!def) return;
   const fg = textColorFor(def.color);
   let icon = "";
-  if (def.emoji) icon = `<span class="emoji">${escapeHtml(def.emoji)}</span>`;
+  if (def.emoji) icon = `<span class="emoji">${emojiHtml(def.emoji, escapeHtml)}</span>`;
   else if (def.icon) icon = `<img src="${escapeHtml(iconUrl(def.icon, fg !== "#ffffff"))}" alt="">`;
   ghost.style.background = def.color;
   ghost.style.color = fg;

@@ -27,6 +27,7 @@ import {
   rotationIndex,
   textColorFor,
 } from "./modules/statusTester/types";
+import { emojiHtml } from "./modules/statusTester/emoji";
 import { onLibraryChange, readLibrary } from "./modules/statusTester/library";
 import { chipMetrics, chipText, drawnStatuses } from "./modules/statusTester/render";
 import {
@@ -151,7 +152,7 @@ function renderChip(): void {
   chipEl.classList.toggle("hidden-status", !!applied.hidden);
   let icon = "";
   if (def.emoji) {
-    icon = `<span class="emoji" style="width:${m.iconSize}px;height:${m.iconSize}px;font-size:${m.iconSize * 0.9}px">${escapeHtml(def.emoji)}</span>`;
+    icon = `<span class="emoji" style="width:${m.iconSize}px;height:${m.iconSize}px;font-size:${m.iconSize * 0.9}px">${emojiHtml(def.emoji, escapeHtml, `${m.iconSize}px`)}</span>`;
   } else if (def.icon) {
     icon = `<img src="${escapeHtml(iconUrl(def.icon, fg !== "#ffffff"))}" style="width:${m.iconSize}px;height:${m.iconSize}px" alt="">`;
   }
@@ -172,7 +173,7 @@ function listRowHtml(
 ): string {
   const fg = textColorFor(e.def.color);
   let icon = "";
-  if (e.def.emoji) icon = `<span class="emoji">${escapeHtml(e.def.emoji)}</span>`;
+  if (e.def.emoji) icon = `<span class="emoji">${emojiHtml(e.def.emoji, escapeHtml)}</span>`;
   else if (e.def.icon) icon = `<img src="${escapeHtml(iconUrl(e.def.icon, fg !== "#ffffff"))}" alt="">`;
   const cls = ["row", current ? "cur" : "", e.applied.hidden ? "hid" : ""].filter(Boolean).join(" ");
   const tag = e.applied.hidden ? `<span class="tag">${escapeHtml(lang === "en" ? "hidden" : "隐藏")}</span>` : "";
