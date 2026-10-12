@@ -65,8 +65,9 @@ export const LS_GEAR_PREFIX = "obr-suite/status-tester/gear/";
  *  (floor(now / ROTATE_MS) % n) so they stay in step without messages. */
 export const ROTATE_MS = 5000;
 
-/** Soft cap for the serialised library — warn above this. */
-export const LIBRARY_WARN_BYTES = 8 * 1024;
+/** Soft cap for the packed library in room metadata (16 KB shared by
+ *  every extension in the room) — the library page warns above this. */
+export const LIBRARY_WARN_BYTES = 3 * 1024;
 
 // --- Base icon set ---------------------------------------------------------
 // Files live under public/status-tester/icons/<id>.svg (white, 24×24

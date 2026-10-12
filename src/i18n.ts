@@ -2209,7 +2209,7 @@ const TR: Dict = {
   sttClose: { zh: "关闭", en: "Close" },
   sttReadOnlyLibrary: { zh: "只有 GM 可以编辑状态库", en: "Only the GM can edit the library" },
   sttReadOnlyToken: { zh: "你只能管理自己 token 上的状态", en: "You can only manage statuses on your own tokens" },
-  sttSizeWarning: { zh: "状态库较大（{n} KB）。房间元数据空间有限（约 16 KB，所有功能共用），请精简。", en: "The library is large ({n} KB). Room metadata is limited (~16 KB shared by every feature) — consider trimming it." },
+  sttSizeWarning: { zh: "状态库占用 {n} KB 房间元数据（建议不超过 3 KB；所有扩展共用 16 KB）。请精简状态或图片。", en: "The library takes {n} KB of room metadata (recommended max 3 KB; 16 KB is shared by every extension in the room) — consider removing statuses or images." },
   sttInvalidUrl: { zh: "无效的 URL（仅支持 http/https）", en: "Invalid URL (http/https only)" },
   sttTitleRequired: { zh: "请输入名称", en: "Please enter a title" },
   sttUnknownStatus: { zh: "（已删除的状态）", en: "(deleted status)" },

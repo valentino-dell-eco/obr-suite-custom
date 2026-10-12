@@ -13,6 +13,17 @@
 // plain array holding every status — is still read, and converted the
 // first time a GM client loads the module.
 //
+// v3 (current) packs the same diff deflated, with image attachments in
+// their own map instead of inside the definitions:
+//
+//   { v: 3, z: "<base64 deflate-raw of { c, d, a }>" }
+//     a — { statusId: { u, w, h, m?, d? } }  (m only when the URL's
+//          extension doesn't tell it)
+//
+// So a preset with an image stays an UNEDITED preset (its title still
+// follows the viewer's language) and the whole value is ~3× smaller.
+// v1 / v2 rooms are still read and converted to v3 by the GM client.
+//
 // Writes are "merge by id against a fresh read": the caller says which
 // ids it upserts / deletes, we re-read right before the single
 // setMetadata call and apply only those changes, so concurrent edits
@@ -28,6 +39,8 @@ import {
   serializeLibrary,
 } from "./types";
 import { LEGACY_PRESET_LOOK, PRESET_ICON, PRESET_IDS, presetDefs } from "./presets";
+import { isPacked, packJson, unpackJson } from "../../utils/metaCompress";
+import { guessMime, sanitizeAttachment, type StatusAttachment } from "./types";
 
 interface LibraryV2 {
   v: 2;
@@ -37,6 +50,35 @@ interface LibraryV2 {
 
 function isV2(raw: unknown): raw is LibraryV2 {
   return !!raw && typeof raw === "object" && (raw as { v?: unknown }).v === 2;
+}
+
+interface LibraryV3 {
+  v: 3;
+  z: string;
+}
+
+/** Unpacked v3 content. */
+interface LibraryV3Body {
+  c: unknown[];
+  d: string[];
+  a: Record<string, { u: string; w: number; h: number; m?: string; d?: number }>;
+}
+
+function isV3(raw: unknown): raw is LibraryV3 {
+  return isPacked(raw) && (raw as { v?: unknown }).v === 3;
+}
+
+function packAttachment(a: StatusAttachment): LibraryV3Body["a"][string] {
+  const out: LibraryV3Body["a"][string] = { u: a.url, w: a.width, h: a.height };
+  if (a.mime !== guessMime(a.url)) out.m = a.mime;
+  if (a.dpi) out.d = a.dpi;
+  return out;
+}
+
+function unpackAttachment(raw: unknown): StatusAttachment | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as { u?: unknown; w?: unknown; h?: unknown; m?: unknown; d?: unknown };
+  return sanitizeAttachment({ url: r.u, width: r.w, height: r.h, mime: r.m, dpi: r.d });
 }
 
 const PRESET_SET = new Set(PRESET_IDS);
@@ -71,7 +113,24 @@ function isUneditedPreset(d: StatusDef): boolean {
   return false;
 }
 
-/** Room value → the full library this viewer sees. */
+/** Room value (any version) → the full library this viewer sees. */
+export async function decodeLibrary(raw: unknown, lang: string = getLocalLang()): Promise<StatusDef[]> {
+  if (!isV3(raw)) return resolveLibrary(raw, lang);
+  let body: Partial<LibraryV3Body> = {};
+  try {
+    body = (await unpackJson<LibraryV3Body>(raw)) ?? {};
+  } catch (e) {
+    console.warn("[status-tester] library unpack failed", e);
+  }
+  const defs = resolveLibrary({ v: 2, c: Array.isArray(body.c) ? body.c : [], d: Array.isArray(body.d) ? body.d : [] }, lang);
+  const atts = body.a && typeof body.a === "object" ? body.a : {};
+  return defs.map((d) => {
+    const att = unpackAttachment(atts[d.id]);
+    return att ? { ...d, attachment: att } : d;
+  });
+}
+
+/** v1 / v2 room value → the full library this viewer sees. */
 export function resolveLibrary(raw: unknown, lang: string = getLocalLang()): StatusDef[] {
   const presets = presetDefs(lang);
   if (raw === undefined || raw === null) return presets;
@@ -88,20 +147,30 @@ export function resolveLibrary(raw: unknown, lang: string = getLocalLang()): Sta
   return out;
 }
 
-/** Full library → the compact room value. */
-export function encodeLibrary(defs: StatusDef[]): LibraryV2 {
+/** Full library → the packed (v3) room value. Attachments go to their
+ *  own map, so linking an image doesn't turn a preset into an edited
+ *  copy. */
+export async function encodeLibrary(defs: StatusDef[]): Promise<LibraryV3> {
   const have = new Set(defs.map((d) => d.id));
-  return {
-    v: 2,
-    c: serializeLibrary(defs.filter((d) => !isUneditedPreset(d))),
+  const a: LibraryV3Body["a"] = {};
+  const bare: StatusDef[] = [];
+  for (const d of defs) {
+    if (d.attachment) a[d.id] = packAttachment(d.attachment);
+    const { attachment: _att, ...rest } = d;
+    bare.push(rest);
+  }
+  const body: LibraryV3Body = {
+    c: serializeLibrary(bare.filter((d) => !isUneditedPreset(d))),
     d: PRESET_IDS.filter((id) => !have.has(id)),
+    a,
   };
+  return { v: 3, ...(await packJson(body)) };
 }
 
 /** Bytes the library takes in room metadata. */
-export function encodedLibraryBytes(defs: StatusDef[]): number {
+export async function encodedLibraryBytes(defs: StatusDef[]): Promise<number> {
   try {
-    return new TextEncoder().encode(JSON.stringify(encodeLibrary(defs))).length;
+    return new TextEncoder().encode(JSON.stringify(await encodeLibrary(defs))).length;
   } catch {
     return 0;
   }
@@ -110,18 +179,19 @@ export function encodedLibraryBytes(defs: StatusDef[]): number {
 export async function readLibrary(): Promise<StatusDef[]> {
   try {
     const meta = await OBR.room.getMetadata();
-    return resolveLibrary(meta[LIBRARY_KEY]);
+    return await decodeLibrary(meta[LIBRARY_KEY]);
   } catch {
     return presetDefs(getLocalLang());
   }
 }
 
-export function libraryFromMetadata(meta: Record<string, unknown>): StatusDef[] {
-  return resolveLibrary(meta[LIBRARY_KEY]);
+export function libraryFromMetadata(meta: Record<string, unknown>): Promise<StatusDef[]> {
+  return decodeLibrary(meta[LIBRARY_KEY]);
 }
 
 export function onLibraryChange(cb: (defs: StatusDef[]) => void): () => void {
   let last = "";
+  let seq = 0;
   return OBR.room.onMetadataChange((meta) => {
     // Room metadata is shared by every module — only react when OUR
     // key actually changed.
@@ -129,7 +199,11 @@ export function onLibraryChange(cb: (defs: StatusDef[]) => void): () => void {
     try { raw = JSON.stringify(meta[LIBRARY_KEY] ?? null); } catch {}
     if (raw === last) return;
     last = raw;
-    cb(resolveLibrary(meta[LIBRARY_KEY]));
+    // Unpacking is async: drop a result a newer change overtook.
+    const my = ++seq;
+    void decodeLibrary(meta[LIBRARY_KEY]).then((defs) => {
+      if (my === seq) cb(defs);
+    });
   });
 }
 
@@ -164,20 +238,20 @@ export async function writeLibraryChanges(changes: {
     if (i >= 0) next[i] = d;
     else next = [...next, d];
   }
-  await OBR.room.setMetadata({ [LIBRARY_KEY]: encodeLibrary(next) });
+  await OBR.room.setMetadata({ [LIBRARY_KEY]: await encodeLibrary(next) });
   return next;
 }
 
-/** GM load: rooms still holding the original full-list format are
- *  converted to the compact diff (frees most of the space). Nothing
- *  is written for a room that never touched the library — the presets
- *  are implicit. Call from a GM client only. */
+/** GM load: rooms still holding an older format (full list, or the
+ *  unpacked v2 diff) are converted to the packed v3 value (frees most
+ *  of the space). Nothing is written for a room that never touched the
+ *  library — the presets are implicit. Call from a GM client only. */
 export async function seedPresetsIfMissing(lang: string): Promise<boolean> {
   try {
     const meta = await OBR.room.getMetadata();
     const raw = meta[LIBRARY_KEY];
-    if (!Array.isArray(raw)) return false;
-    await OBR.room.setMetadata({ [LIBRARY_KEY]: encodeLibrary(resolveLibrary(raw, lang)) });
+    if (!Array.isArray(raw) && !isV2(raw)) return false;
+    await OBR.room.setMetadata({ [LIBRARY_KEY]: await encodeLibrary(resolveLibrary(raw, lang)) });
     return true;
   } catch (e) {
     console.warn("[status-tester] library conversion failed", e);

@@ -134,14 +134,19 @@ async function showRoomFull(): Promise<void> {
   warnEl.hidden = false;
 }
 
+let warnSeq = 0;
 function updateWarning(defs: StatusDef[]): void {
-  const bytes = encodedLibraryBytes(defs);
-  if (bytes > LIBRARY_WARN_BYTES) {
-    warnEl.textContent = t(lang, "sttSizeWarning").replace("{n}", (bytes / 1024).toFixed(1));
-    warnEl.hidden = false;
-  } else {
-    warnEl.hidden = true;
-  }
+  // Measured on the packed room value (async); a newer call wins.
+  const my = ++warnSeq;
+  void encodedLibraryBytes(defs).then((bytes) => {
+    if (my !== warnSeq) return;
+    if (bytes > LIBRARY_WARN_BYTES) {
+      warnEl.textContent = t(lang, "sttSizeWarning").replace("{n}", (bytes / 1024).toFixed(1));
+      warnEl.hidden = false;
+    } else {
+      warnEl.hidden = true;
+    }
+  });
 }
 
 // --- List view -------------------------------------------------------------
