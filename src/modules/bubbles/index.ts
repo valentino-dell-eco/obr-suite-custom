@@ -34,6 +34,7 @@ import OBR, {
   Vector2,
 } from "@owlbear-rodeo/sdk";
 import { assetUrl } from "../../asset-base";
+import { setupNamePlate, teardownNamePlate } from "./name-plate";
 
 const PLUGIN_ID = "com.obr-suite/bubbles";
 const BUBBLE_OWNER_KEY = `${PLUGIN_ID}/owner`;
@@ -45,7 +46,8 @@ const BUBBLE_ROLE_KEY = `${PLUGIN_ID}/role`;
 type BubbleRole =
   | "hp-bg" | "hp-fill" | "hp-shimmer" | "hp-text"
   | "ac-shield" | "ac-text"
-  | "temp-bg"  | "temp-text";
+  | "temp-bg"  | "temp-text"
+  | "name-frame" | "name-tab" | "name-text";
 
 function bubbleMeta(tokenId: string, role: BubbleRole): Record<string, unknown> {
   return { [BUBBLE_OWNER_KEY]: tokenId, [BUBBLE_ROLE_KEY]: role };
@@ -129,6 +131,39 @@ const BUBBLES_NAME = "com.owlbear-rodeo-bubbles-extension/name";
 // HP bar even without a cc / bestiary binding, so user-spawned
 // "plain" tokens with HP/AC also get the bar.
 const HP_BAR_FLAG_KEY = "com.obr-suite/hp-bar/enabled";
+
+// "Show token name" — a name plate drawn as a mask around the HP bar
+// (a tab above the bar carrying the token's name + a rim around the
+// bar). Needs BOTH the scene-wide setting (`showTokenName` in the
+// bubbles settings, off by default) AND the per-token flag below
+// (toggled from the token's context menu, off by default). The colour
+// is per token too (context menu → colour picker).
+export const NAME_SHOW_KEY = `${PLUGIN_ID}/name-show`;
+export const NAME_COLOR_KEY = `${PLUGIN_ID}/name-color`;
+export const DEFAULT_NAME_COLOR = "#164d78";
+
+/** The token's display name: its OBR label when it has one, else the
+ *  item name. */
+export function tokenDisplayName(item: Item): string {
+  const label = String((item as any).text?.plainText ?? "").trim();
+  return label || String(item.name ?? "").trim();
+}
+
+function nameColorOf(meta: Record<string, unknown>): string {
+  const c = meta[NAME_COLOR_KEY];
+  return typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c) ? c : DEFAULT_NAME_COLOR;
+}
+
+/** Black or white text, whichever reads better on `hex`. */
+function nameTextColor(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return 1.05 / (L + 0.05) >= (L + 0.05) / 0.05 ? "#ffffff" : "#111111";
+}
 
 // --- Functional constants matching upstream for visual parity ----------
 const BAR_HEIGHT = 20;
@@ -353,6 +388,7 @@ let cachedAutoScaleText = false;
 let cachedVerticalOffset = DEFAULT_VERTICAL_OFFSET;
 let cachedOffsetByText = false;
 let cachedOverheadMode = false;
+let cachedShowTokenName = false;
 function readCombatActive(meta: Record<string, unknown>): boolean {
   const c = meta[COMBAT_STATE_KEY] as { inCombat?: boolean; preparing?: boolean } | undefined;
   return !!(c?.inCombat || c?.preparing);
@@ -374,6 +410,14 @@ function readSceneOffsetByText(meta: Record<string, unknown>): boolean {
 function readSceneOverheadMode(meta: Record<string, unknown>): boolean {
   const settings = meta[SCENE_BUBBLES_SETTINGS_KEY] as { overheadMode?: unknown } | undefined;
   return !!settings?.overheadMode;
+}
+function readSceneShowTokenName(meta: Record<string, unknown>): boolean {
+  const settings = meta[SCENE_BUBBLES_SETTINGS_KEY] as { showTokenName?: unknown } | undefined;
+  return !!settings?.showTokenName;
+}
+/** Scene-wide "Show token name" (bubbles settings). */
+export function isShowTokenNameOn(): boolean {
+  return cachedShowTokenName;
 }
 // One-shot migration: if the scene has NO bubble-settings object yet
 // but this client carries legacy per-client localStorage values for
@@ -403,6 +447,7 @@ async function migrateLocalBubbleSettings(): Promise<void> {
         verticalOffset: lsOffset ?? DEFAULT_VERTICAL_OFFSET,
         offsetByText: lsOffsetByText,
         overheadMode: lsOverhead,
+        showTokenName: readSceneShowTokenName(meta as Record<string, unknown>),
       },
     });
   } catch (e) {
@@ -785,8 +830,32 @@ interface BubbleEntry {
   rebuildHash: string;
   data: BubbleData;
   statsVisible: boolean;
+  /** Name tab in scene coords (for the double-click rename overlay);
+   *  null when no name plate is drawn. */
+  nameRect: NameRect | null;
 }
 const entries = new Map<string, BubbleEntry>();
+
+export interface NameRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  name: string;
+  color: string;
+}
+
+/** Name tab of a token's name plate (scene coords), or null. */
+export function getNameRect(tokenId: string): NameRect | null {
+  return entries.get(tokenId)?.nameRect ?? null;
+}
+
+const nameRectListeners = new Set<() => void>();
+/** Runs after every sync that changed something. */
+export function onBubblesSynced(fn: () => void): () => void {
+  nameRectListeners.add(fn);
+  return () => { nameRectListeners.delete(fn); };
+}
 
 let role: "GM" | "PLAYER" = "PLAYER";
 let myPlayerId = "";  // own id — used to detect token ownership for full-bar override
@@ -1454,6 +1523,189 @@ function buildStatBubbleText(ctx: BuildContext, L: BarLayout, center: Vector2, v
     .build();
 }
 
+// Name plate ("Show token name"): one shape in the plate colour that
+// wraps the HP bar (rim) and rises above it into a tab carrying the
+// name, left-aligned like a flag:
+//
+//        ╱‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾╭──╮   ← "ear" behind the AC shield
+//       ╱  Toshiro Okamura     │🛡│     (standard mode, AC present)
+//   ╭──╱───────────────────────╯  │
+//   │ ███████ 28/38 ░░░░░░░░░░░░░ │   ← rim around the bar
+//   ╰─────────────────────────────╯
+//
+// Slanted left edge, straight right edge flush with the rim. Drawn
+// under the bar and the shield (they keep their own look on top).
+/** Closed polygon with rounded corners: each vertex i is filleted with
+ *  radii[i] (0 = sharp; clamped to half of the adjacent edges). Works
+ *  for concave corners too. */
+function roundedPolygon(pts: Vector2[], radii: number[], segments = 6): Vector2[] {
+  const n = pts.length;
+  const out: Vector2[] = [];
+  for (let i = 0; i < n; i++) {
+    const p = pts[i];
+    const r0 = radii[i] ?? 0;
+    if (r0 <= 0) { out.push(p); continue; }
+    const a = pts[(i - 1 + n) % n];
+    const b = pts[(i + 1) % n];
+    const la = Math.hypot(a.x - p.x, a.y - p.y);
+    const lb = Math.hypot(b.x - p.x, b.y - p.y);
+    const r = Math.min(r0, la / 2, lb / 2);
+    if (r <= 0 || la === 0 || lb === 0) { out.push(p); continue; }
+    const s = { x: p.x + ((a.x - p.x) / la) * r, y: p.y + ((a.y - p.y) / la) * r };
+    const e = { x: p.x + ((b.x - p.x) / lb) * r, y: p.y + ((b.y - p.y) / lb) * r };
+    // Quadratic Bézier s → e with the vertex as control point.
+    for (let k = 0; k <= segments; k++) {
+      const t = k / segments;
+      const u = 1 - t;
+      out.push({
+        x: u * u * s.x + 2 * u * t * p.x + t * t * e.x,
+        y: u * u * s.y + 2 * u * t * p.y + t * t * e.y,
+      });
+    }
+  }
+  return out;
+}
+
+function buildNamePlate(
+  ctx: BuildContext,
+  L: BarLayout,
+  name: string,
+  color: string,
+): { items: any[]; rect: NameRect } {
+  const pad = Math.max(1, L.barHeight * 0.16);
+  const frameX = L.barOrigin.x - pad;
+  const frameY = L.barOrigin.y - pad;
+  const frameW = L.barWidth + pad * 2;
+  const frameH = L.barHeight + pad * 2;
+  const frameR = L.barCornerRadius > 0 ? L.barCornerRadius + pad : 0;
+  const frameRight = frameX + frameW;
+
+  const tabH = L.barHeight * 1.2;
+  const tabTop = frameY - tabH;
+  // The tab runs a little into the rim so the two shapes join without
+  // a seam.
+  const tabBottom = frameY + pad+6;
+  const leftBottomX = frameX + frameR * 0.4;
+  const leftTopX = leftBottomX + tabH * 0.38;
+  // Rounded corners (outer and inner), like the rest of the bar.
+  const round = L.barHeight * 0.28;
+
+  // "Ear" behind the AC shield (standard mode: the shield floats above
+  // the bar's right end, taller than the tab).
+  const ear =
+    !L.overheadMode && L.acCenter
+      ? {
+          x: L.acCenter.x - L.diameter / 2 - pad,
+          top: Math.min(tabTop, L.acCenter.y - L.diameter / 2 - pad),
+        }
+      : null;
+
+  const corners: Array<[Vector2, number]> = [
+    [{ x: leftBottomX, y: tabBottom }, 0],
+    [{ x: leftTopX, y: tabTop }, round],
+  ];
+  if (ear && ear.top < tabTop - 0.5) {
+    corners.push(
+      [{ x: ear.x, y: tabTop }, round * 0.7],
+      [{ x: ear.x, y: ear.top }, round],
+      [{ x: frameRight, y: ear.top }, round],
+    );
+  } else {
+    corners.push([{ x: frameRight, y: tabTop }, round]);
+  }
+  corners.push([{ x: frameRight, y: tabBottom }, 0]);
+  const pts = roundedPolygon(corners.map((c) => c[0]), corners.map((c) => c[1]));
+  const tabOriginX = leftBottomX;
+  const tabOriginY = Math.min(tabTop, ear?.top ?? tabTop);
+
+  // Name: left-aligned from just past the slanted edge, up to the
+  // shield / temp-HP bubble (they're drawn on top of the plate).
+  const label = name || "—";
+  const textX = leftTopX + tabH * 0.22;
+  let textRight = frameRight - pad * 2.5;
+  if (!L.overheadMode && L.acCenter) textRight = Math.min(textRight, L.acCenter.x - L.diameter / 2 - pad);
+  if (!L.overheadMode && L.tempCenter) textRight = Math.min(textRight, L.tempCenter.x - L.diameter / 2 - pad);
+  const textW = Math.max(L.barHeight, textRight - textX);
+  const visibleH = frameY - tabTop+2.5;
+  const fontSize = fitBarFontSize(label, L.barFontSize * 0.95, textW);
+  const textColor = nameTextColor(color);
+
+  const common = (b: any) => b
+    .layer("ATTACHMENT")
+    .attachedTo(ctx.token.id)
+    .locked(true)
+    .disableHit(true)
+    .visible(ctx.visible)
+    .disableAutoZIndex(true)
+    .disableAttachmentBehavior(DISABLE_INHERIT);
+
+  const frame = common(buildCurve()
+    .fillColor(color)
+    .fillOpacity(1)
+    .strokeOpacity(0)
+    .strokeWidth(0)
+    .tension(0)
+    .closed(true)
+    .points(roundedRectanglePoints(frameW, frameH, frameR))
+    .position({ x: frameX, y: frameY }))
+    .zIndex(9000)
+    .metadata(bubbleMeta(ctx.token.id, "name-frame"))
+    .build();
+
+  const tab = common(buildCurve()
+    .fillColor(color)
+    .fillOpacity(1)
+    .strokeOpacity(0)
+    .strokeWidth(0)
+    .tension(0)
+    .closed(true)
+    .points(pts.map((p) => ({ x: p.x - tabOriginX, y: p.y - tabOriginY })))
+    .position({ x: tabOriginX, y: tabOriginY }))
+    .zIndex(9001)
+    .metadata(bubbleMeta(ctx.token.id, "name-tab"))
+    .build();
+
+  const text = buildText()
+    .plainText(label)
+    .textType("PLAIN")
+    .textAlign("LEFT")
+    .textAlignVertical("MIDDLE")
+    .fontFamily(FONT_FAMILY)
+    .fontSize(fontSize)
+    .fontWeight(700)
+    .fillColor(textColor)
+    .fillOpacity(1)
+    .strokeOpacity(0)
+    .strokeWidth(0)
+    .lineHeight(0.95)
+    .width(textW)
+    .height(visibleH)
+    .position({ x: textX, y: tabTop + L.barTextOffset })
+    .layer("TEXT")
+    .attachedTo(ctx.token.id)
+    .locked(true)
+    .disableHit(true)
+    .visible(ctx.visible)
+    .disableAutoZIndex(true)
+    .zIndex(29000)
+    .disableAttachmentBehavior(DISABLE_INHERIT)
+    .metadata(bubbleMeta(ctx.token.id, "name-text"))
+    .build();
+
+  return {
+    items: [frame, tab, text],
+    // Double-click area: the tab left of the shield.
+    rect: {
+      x: leftBottomX,
+      y: tabTop,
+      w: (ear ? ear.x : frameRight) - leftBottomX,
+      h: visibleH,
+      name,
+      color,
+    },
+  };
+}
+
 // --- Sync --------------------------------------------------------------
 
 interface Wanted {
@@ -1463,6 +1715,8 @@ interface Wanted {
   layout: BarLayout;
   rebuildHash: string;
   statsVisible: boolean;
+  /** Name plate to draw (name + colour), or null. */
+  plate: { name: string; color: string } | null;
 }
 
 // Geometry-only in-place update — used when the token's data
@@ -1674,6 +1928,14 @@ async function syncBubbles(): Promise<void> {
     try {
       const meta = await OBR.scene.getMetadata();
       cachedCombatActive = readCombatActive(meta);
+      // Scene switch: the new scene's "Show token name" setting.
+      const showName = readSceneShowTokenName(meta as Record<string, unknown>);
+      if (showName !== cachedShowTokenName) {
+        cachedShowTokenName = showName;
+        for (const fn of showNameListeners) {
+          try { fn(showName); } catch {}
+        }
+      }
     } catch {}
     const isGM = role === "GM";
 
@@ -1725,6 +1987,12 @@ async function syncBubbles(): Promise<void> {
       }
 
       const statsVisible = !d.hide;
+      // Name plate: scene setting ON + token flag ON + there is a bar
+      // to wrap.
+      const plate =
+        cachedShowTokenName && meta[NAME_SHOW_KEY] === true && effectiveData.maxHp > 0
+          ? { name: tokenDisplayName(it), color: nameColorOf(meta) }
+          : null;
       const layout = computeLayout(it, sceneDpi, effectiveData, userScale, verticalOffset, offsetByTextFlag, autoScaleText, overheadModeFlag);
       // Silhouette suppresses AC and the temp bubble entry. The
       // geometryKey reflects what items will exist so a viewMode
@@ -1764,6 +2032,7 @@ async function syncBubbles(): Promise<void> {
         // parent.scale sign — flips position-offset signs in builders.
         // Need a rebuild on flip so the new bake takes effect.
         layout.flipX, layout.flipY,
+        plate ? `N:${plate.color}:${plate.name}` : "-",
       ].join("|");
       wanted.set(it.id, {
         tok: it,
@@ -1772,6 +2041,7 @@ async function syncBubbles(): Promise<void> {
         layout,
         rebuildHash,
         statsVisible,
+        plate,
       });
     }
 
@@ -1810,6 +2080,13 @@ async function syncBubbles(): Promise<void> {
       const newIds: string[] = [];
       const shimmerIds: string[] = [];
       const isSilhouette = w.viewMode === "silhouette";
+      let nameRect: NameRect | null = null;
+      if (w.plate && w.data.maxHp > 0) {
+        const np = buildNamePlate(ctx, w.layout, w.plate.name, w.plate.color);
+        toAdd.push(...np.items);
+        newIds.push(...np.items.map((i) => i.id));
+        nameRect = np.rect;
+      }
 
       if (w.data.maxHp > 0) {
         const ratio = Math.max(0, Math.min(1, w.data.hp / w.data.maxHp));
@@ -1836,6 +2113,7 @@ async function syncBubbles(): Promise<void> {
         rebuildHash: w.rebuildHash,
         data: w.data,
         statsVisible: w.statsVisible,
+        nameRect,
       });
     }
 
@@ -1861,6 +2139,11 @@ async function syncBubbles(): Promise<void> {
     for (const e of entries.values()) if (e.shimmerIds.length) { anyShimmer = true; break; }
     if (anyShimmer) ensureAnimationTimer();
     else stopAnimationTimer();
+    if (orphans.length || toAdd.length || toDelete.length) {
+      for (const fn of nameRectListeners) {
+        try { fn(); } catch {}
+      }
+    }
   } finally {
     inSync = false;
     if (queuedSync) {
@@ -1934,6 +2217,13 @@ async function sweepStaleBubbleItems(): Promise<void> {
 
 // --- Module lifecycle --------------------------------------------------
 
+const showNameListeners = new Set<(on: boolean) => void>();
+/** Scene "Show token name" changed (context menus follow it). */
+export function onShowTokenNameChange(fn: (on: boolean) => void): () => void {
+  showNameListeners.add(fn);
+  return () => { showNameListeners.delete(fn); };
+}
+
 export async function setupBubbles(): Promise<void> {
   try { role = (await OBR.player.getRole()) as "GM" | "PLAYER"; } catch {}
   try { myPlayerId = await OBR.player.getId(); } catch {}
@@ -1984,6 +2274,7 @@ export async function setupBubbles(): Promise<void> {
     cachedVerticalOffset = readSceneVerticalOffset(meta as Record<string, unknown>);
     cachedOffsetByText = readSceneOffsetByText(meta as Record<string, unknown>);
     cachedOverheadMode = readSceneOverheadMode(meta as Record<string, unknown>);
+    cachedShowTokenName = readSceneShowTokenName(meta as Record<string, unknown>);
   } catch {}
 
   // Combat state and synced bubble settings changes.
@@ -1995,6 +2286,14 @@ export async function setupBubbles(): Promise<void> {
       const nextVOffset = readSceneVerticalOffset(meta as Record<string, unknown>);
       const nextOffsetByText = readSceneOffsetByText(meta as Record<string, unknown>);
       const nextOverhead = readSceneOverheadMode(meta as Record<string, unknown>);
+      const nextShowName = readSceneShowTokenName(meta as Record<string, unknown>);
+      if (nextShowName !== cachedShowTokenName) {
+        cachedShowTokenName = nextShowName;
+        for (const fn of showNameListeners) {
+          try { fn(nextShowName); } catch {}
+        }
+        scheduleSync();
+      }
       if (
         next !== cachedCombatActive ||
         nextThreshold !== cachedPlayerThreshold ||
@@ -2077,6 +2376,8 @@ export async function setupBubbles(): Promise<void> {
   // in-memory `entries` map, so it catches orphans we never tracked.
   await sweepStaleBubbleItems();
   void syncBubbles();
+  // "Show token name": context menus + double-click rename overlay.
+  void setupNamePlate();
 }
 
 // 2026-05-10: removed `setupBubbleGuardMode` + the SELECT-tool
@@ -2095,6 +2396,7 @@ const LEGACY_GUARD_MODE_ID = "com.obr-suite/bubbles/guard-mode";
 
 export async function teardownBubbles(): Promise<void> {
   for (const u of unsubs.splice(0)) u();
+  await teardownNamePlate();
   if (pendingTimer) {
     clearTimeout(pendingTimer);
     pendingTimer = null;

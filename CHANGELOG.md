@@ -6,6 +6,7 @@ All notable changes to this project follow [Keep a Changelog](https://keepachang
 
 ### Added
 
+- **HP bar: show token name.** New “Show token name” option in the HP Bubbles settings (DM, off by default). When on, the token's right-click menu offers “Show / Hide token name” (off by default on every token) and “Edit name tag” (the token's name + the tag colour, with presets; “Default color” = the suite dark blue; with several tokens selected only the colour). A shown name is drawn as one mask around the HP bar and AC: a rim around the bar rising into a tab with a slanted left edge, the name left-aligned in bold, and a raised corner behind the AC shield; text black or white for contrast. Renaming writes the token's OBR label when it has one, otherwise the item name. GM: any token; players: their own.
 - **Secret activations.** The spell cast, feature use and short-rest hit
   dice windows have a "Secret" checkbox (remembered per browser): the chat
   card becomes a whisper only the caster and the GM see (marked "Secret"),

@@ -105,6 +105,7 @@ let bubbleAutoScaleText = false;
 let bubbleVerticalOffset = DEFAULT_BUBBLES_VERTICAL_OFFSET;
 let bubbleOffsetByText = false;
 let bubbleOverheadMode = false;
+let bubbleShowTokenName = false;
 
 interface Supporter {
   name: string;
@@ -320,6 +321,15 @@ function readBubbleOverheadModeFromMeta(
   return !!settings?.overheadMode;
 }
 
+function readBubbleShowTokenNameFromMeta(
+  meta: Record<string, unknown>,
+): boolean {
+  const settings = meta[BUBBLES_SETTINGS_KEY] as
+    | { showTokenName?: unknown }
+    | undefined;
+  return !!settings?.showTokenName;
+}
+
 async function refreshBubbleSettings(): Promise<void> {
   try {
     const meta = await OBR.scene.getMetadata();
@@ -329,12 +339,14 @@ async function refreshBubbleSettings(): Promise<void> {
     bubbleVerticalOffset = readBubbleVerticalOffsetFromMeta(m);
     bubbleOffsetByText = readBubbleOffsetByTextFromMeta(m);
     bubbleOverheadMode = readBubbleOverheadModeFromMeta(m);
+    bubbleShowTokenName = readBubbleShowTokenNameFromMeta(m);
   } catch {
     bubblePlayerThreshold = DEFAULT_BUBBLES_PLAYER_THRESHOLD;
     bubbleAutoScaleText = false;
     bubbleVerticalOffset = DEFAULT_BUBBLES_VERTICAL_OFFSET;
     bubbleOffsetByText = false;
     bubbleOverheadMode = false;
+    bubbleShowTokenName = false;
   }
 }
 
@@ -361,6 +373,7 @@ async function writeBubbleSettings(): Promise<void> {
       verticalOffset: bubbleVerticalOffset,
       offsetByText: bubbleOffsetByText,
       overheadMode: bubbleOverheadMode,
+      showTokenName: bubbleShowTokenName,
     },
   });
 }
@@ -383,6 +396,10 @@ async function setBubbleOffsetByText(value: boolean): Promise<void> {
 }
 async function setBubbleOverheadMode(value: boolean): Promise<void> {
   bubbleOverheadMode = !!value;
+  await writeBubbleSettings();
+}
+async function setBubbleShowTokenName(value: boolean): Promise<void> {
+  bubbleShowTokenName = !!value;
   await writeBubbleSettings();
 }
 
@@ -3002,6 +3019,11 @@ const TABS: TabDef[] = [
         lang === "zh"
           ? `${dmHint}标准模式：血条贴在 token 底部，气泡浮在上方。头顶模式：血条悬浮在 token 头顶一小段距离上方，取消圆角并加上边框，护盾和临时血在血条尽头（最右侧）与血条同平面显示。头顶模式下「按字号上偏移」自动失效。`
           : `${dmHint}Standard: HP bar sits below the token with stat bubbles floating above it. Overhead: bar hovers a short gap above the token's head, sharp corners + border, AC shield (+ Temp HP) appear inline at the bar's right end on the same plane. The 'Offset by font size' toggle is force-disabled in Overhead mode.`;
+      const showNameLbl = lang === "zh" ? "显示 token 名字" : "Show token name";
+      const showNameDesc =
+        lang === "zh"
+          ? `${dmHint}开启后，右键 token 菜单出现「显示 / 隐藏 token 名字」（每个 token 默认隐藏）和「编辑名字标签」（修改 token 名字和颜色）。显示时名字作为蒙版包住血条和 AC：血条上方左对齐的名字标签 + 血条外框，默认深蓝色。`
+          : `${dmHint}When ON, the token's right-click menu gets "Show / Hide token name" (hidden by default on every token) and "Edit name tag" (token name and colour). A shown name is drawn as a mask around the HP bar and AC: a left-aligned name tab above the bar plus a rim around it, dark blue by default.`;
       const thresholdLbl = lang === "zh" ? "玩家进度阈值" : "Player threshold";
       const thresholdDesc =
         lang === "zh"
@@ -3084,6 +3106,17 @@ const TABS: TabDef[] = [
                   data-key="bubblesAutoScaleText"
                   ${isGM ? "" : "disabled"}
                   aria-pressed="${bubbleAutoScaleText ? "true" : "false"}"></button>
+        </div>
+        <div class="row">
+          <div class="lbl">
+            ${showNameLbl}
+            <div class="desc"><em>${showNameDesc}</em></div>
+          </div>
+          <button type="button"
+                  class="tog ${bubbleShowTokenName ? "on" : ""}"
+                  data-key="bubblesShowTokenName"
+                  ${isGM ? "" : "disabled"}
+                  aria-pressed="${bubbleShowTokenName ? "true" : "false"}"></button>
         </div>
         <div class="row">
           <div class="lbl">
@@ -3250,6 +3283,17 @@ const TABS: TabDef[] = [
               if (activeTab === "bubbles") renderContent();
             });
           });
+      }
+      // "Show token name" — DM-synced (scene metadata).
+      const showNameBtn = root.querySelector<HTMLButtonElement>(
+        'button[data-key="bubblesShowTokenName"]',
+      );
+      if (showNameBtn && isGM) {
+        showNameBtn.addEventListener("click", async () => {
+          if (showNameBtn.disabled) return;
+          await setBubbleShowTokenName(!bubbleShowTokenName);
+          if (activeTab === "bubbles") renderContent();
+        });
       }
       // DM-only one-shot repair: clears legacy `hide=true` from every
       // bubble metadata blob in the current scene.
@@ -4222,7 +4266,9 @@ OBR.onReady(async () => {
     const nextVOffset = readBubbleVerticalOffsetFromMeta(m);
     const nextOffsetByText = readBubbleOffsetByTextFromMeta(m);
     const nextOverhead = readBubbleOverheadModeFromMeta(m);
+    const nextShowName = readBubbleShowTokenNameFromMeta(m);
     if (
+      nextShowName !== bubbleShowTokenName ||
       next !== bubblePlayerThreshold ||
       nextAutoScale !== bubbleAutoScaleText ||
       nextVOffset !== bubbleVerticalOffset ||
@@ -4234,6 +4280,7 @@ OBR.onReady(async () => {
       bubbleVerticalOffset = nextVOffset;
       bubbleOffsetByText = nextOffsetByText;
       bubbleOverheadMode = nextOverhead;
+      bubbleShowTokenName = nextShowName;
       if (activeTab === "bubbles") renderContent();
     }
   });
