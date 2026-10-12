@@ -1,5 +1,6 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { getState } from "../state";
+import { isPacked, packJson, unpackJson } from "../utils/metaCompress";
 
 // Cross-scene character-card sync.
 //
@@ -28,14 +29,20 @@ async function readRoomCards(): Promise<any[] | null> {
   try {
     const m = await OBR.room.getMetadata();
     const v = m[ROOM_CARDS_KEY];
+    // Older rooms: the plain array. Now: deflated (room metadata is
+    // 16 KB for every extension together).
     if (Array.isArray(v)) return v;
+    if (isPacked(v)) {
+      const list = await unpackJson<unknown>(v);
+      return Array.isArray(list) ? list : null;
+    }
     return null;
   } catch { return null; }
 }
 
 async function writeRoomCards(cards: any[] | null): Promise<void> {
   try {
-    await OBR.room.setMetadata({ [ROOM_CARDS_KEY]: cards ?? undefined });
+    await OBR.room.setMetadata({ [ROOM_CARDS_KEY]: cards ? await packJson(cards) : undefined });
   } catch (e) {
     console.warn("[obr-suite/cross-scene-cards] room write failed", e);
   }
@@ -55,6 +62,18 @@ async function writeSceneCards(cards: any[]): Promise<void> {
   } catch (e) {
     console.warn("[obr-suite/cross-scene-cards] scene write failed", e);
   }
+}
+
+// Rooms written before the deflated format keep the plain array until
+// the card list changes — rewrite it packed right away (GM only, so
+// players don't race on the same write) to free room metadata.
+async function compactLegacyMirror(): Promise<void> {
+  try {
+    if ((await OBR.player.getRole()) !== "GM") return;
+    const m = await OBR.room.getMetadata();
+    const v = m[ROOM_CARDS_KEY];
+    if (Array.isArray(v)) await writeRoomCards(v);
+  } catch {}
 }
 
 // On scene-ready: if sync is on AND room has a mirror, hydrate the
@@ -122,6 +141,7 @@ export async function setupCrossSceneCards(): Promise<void> {
       await mirrorCardsIfChanged();
     }),
   );
+  void compactLegacyMirror();
   // Initial hydrate if scene is already ready when this module starts.
   try {
     if (await OBR.scene.isReady()) {
