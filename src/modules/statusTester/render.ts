@@ -498,7 +498,7 @@ function buildToken(
       // Same emoji picture as the HTML lists (not the OS emoji font).
       const s = shown ? entry.iconScale : MIN_SCALE;
       const icon = buildImage(
-        { width: ICON_PX, height: ICON_PX, mime: "image/png", url: emojiUrl },
+        { width: ICON_PX, height: ICON_PX, mime: "image/svg+xml", url: emojiUrl },
         { dpi: sceneDpi, offset: { x: ICON_PX / 2, y: ICON_PX / 2 } },
       )
         .id(itemId(token.id, applied.uid, "icon"))
