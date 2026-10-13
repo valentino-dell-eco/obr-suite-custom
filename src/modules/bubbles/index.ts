@@ -1589,6 +1589,7 @@ function buildNamePlate(
   const leftBottomX = frameX ;
   // 45°: dx = dy = tabH. Questa riga È l'angolo a 45°.
   const leftTopX = frameX ;
+  
   const round = L.barHeight * 0.28;
 
   // "Ear" dietro lo scudo CA.
