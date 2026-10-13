@@ -6,16 +6,31 @@
 // name.
 import OBR, { type Item } from "@owlbear-rodeo/sdk";
 import { getLocalLang } from "./state";
-import { DEFAULT_NAME_COLOR, NAME_COLOR_KEY, tokenDisplayName } from "./modules/bubbles/index";
+import {
+  DEFAULT_NAME_COLOR,
+  NAME_COLOR_KEY,
+  tokenDisplayName,
+} from "./modules/bubbles/index";
 import { NAME_COLOR_MODAL_ID } from "./modules/bubbles/name-plate";
 
 const en = getLocalLang() === "en";
-const ids = (new URLSearchParams(location.search).get("ids") ?? "").split(",").filter(Boolean);
-const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+const ids = (new URLSearchParams(location.search).get("ids") ?? "")
+  .split(",")
+  .filter(Boolean);
+const $ = <T extends HTMLElement>(id: string) =>
+  document.getElementById(id) as T;
 
 const SWATCHES = [
-  DEFAULT_NAME_COLOR, "#1c2030", "#2e7d32", "#8e2c2c", "#6a3d9a",
-  "#b8860b", "#c2185b", "#00838f", "#4e5566", "#e6e8ee",
+  DEFAULT_NAME_COLOR,
+  "#1c2030",
+  "#2e7d32",
+  "#8e2c2c",
+  "#6a3d9a",
+  "#b8860b",
+  "#c2185b",
+  "#00838f",
+  "#4e5566",
+  "#e6e8ee",
 ];
 
 const preview = $("preview");
@@ -23,9 +38,18 @@ const nameEl = $<HTMLInputElement>("name");
 const picker = $<HTMLInputElement>("picker");
 const hex = $<HTMLInputElement>("hex");
 const swatches = $("swatches");
+const nameCount = $("nameCount");
+const NAME_MAX = 20;
 let color = DEFAULT_NAME_COLOR;
 let originalName = "";
 let multi = false;
+
+function updateNameCount(): void {
+  const len = nameEl.value.length;
+  nameCount.textContent = `${len}/${NAME_MAX}`;
+  nameCount.classList.toggle("warn", len >= NAME_MAX - 3 && len < NAME_MAX);
+  nameCount.classList.toggle("full", len >= NAME_MAX);
+}
 
 function textColorFor(c: string): string {
   const n = parseInt(c.slice(1), 16);
@@ -33,7 +57,10 @@ function textColorFor(c: string): string {
     const s = v / 255;
     return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
   };
-  const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  const L =
+    0.2126 * lin((n >> 16) & 255) +
+    0.7152 * lin((n >> 8) & 255) +
+    0.0722 * lin(n & 255);
   return 1.05 / (L + 0.05) >= (L + 0.05) / 0.05 ? "#ffffff" : "#111111";
 }
 
@@ -89,28 +116,39 @@ $("colorLbl").textContent = en ? "Color" : "颜色";
 $("reset").textContent = en ? "Default color" : "默认颜色";
 $("cancel").textContent = en ? "Cancel" : "取消";
 $("apply").textContent = en ? "Apply" : "应用";
-swatches.innerHTML = SWATCHES
-  .map((c) => `<div class="sw" data-c="${c}" style="background:${c}" title="${c}"></div>`)
-  .join("");
+swatches.innerHTML = SWATCHES.map(
+  (c) =>
+    `<div class="sw" data-c="${c}" style="background:${c}" title="${c}"></div>`,
+).join("");
 
 OBR.onReady(async () => {
   let items: Item[] = [];
-  try { items = await OBR.scene.items.getItems(ids); } catch {}
+  try {
+    items = await OBR.scene.items.getItems(ids);
+  } catch {}
   multi = items.length > 1;
   const first = items[0];
   const c = (first?.metadata as any)?.[NAME_COLOR_KEY];
   if (typeof c === "string") setColor(c);
   originalName = first ? tokenDisplayName(first) : "";
   nameEl.value = originalName;
+  updateNameCount();
   if (multi) {
     // Several tokens: colour only.
     nameEl.hidden = true;
     $("nameLbl").hidden = true;
+    $("nameCount").hidden = true;
     preview.textContent = `${tokenDisplayName(first)} +${items.length - 1}`;
   }
   paint();
-  if (!multi) { nameEl.focus(); nameEl.select(); }
-  nameEl.addEventListener("input", paint);
+  if (!multi) {
+    nameEl.focus();
+    nameEl.select();
+  }
+  nameEl.addEventListener("input", () => {
+    paint();
+    updateNameCount();
+  });
   swatches.addEventListener("click", (e) => {
     const sw = (e.target as HTMLElement).closest<HTMLElement>(".sw")?.dataset.c;
     if (sw) setColor(sw);

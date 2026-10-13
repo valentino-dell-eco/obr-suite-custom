@@ -1580,18 +1580,18 @@ function buildNamePlate(
   const frameR = L.barCornerRadius > 0 ? L.barCornerRadius + pad : 0;
   const frameRight = frameX + frameW;
 
-  const tabH = L.barHeight * 1.2;
+  // --- Linguetta: bordo sinistro a 45°, base a filo del raccordo frame --
+  const tabH = L.barHeight * 1.0;
   const tabTop = frameY - tabH;
-  // The tab runs a little into the rim so the two shapes join without
-  // a seam.
-  const tabBottom = frameY + pad+6;
-  const leftBottomX = frameX + frameR * 0.4;
-  const leftTopX = leftBottomX + tabH * 0.38;
-  // Rounded corners (outer and inner), like the rest of the bar.
+  // Base della diagonale: esattamente dove il raccordo TL del frame
+  // termina (frameX + frameR). Così la diagonale "nasce" dal corner già
+  // raccordato, senza lasciare spazi vuoti né sbordare.
+  const leftBottomX = frameX ;
+  // 45°: dx = dy = tabH. Questa riga È l'angolo a 45°.
+  const leftTopX = frameX ;
   const round = L.barHeight * 0.28;
 
-  // "Ear" behind the AC shield (standard mode: the shield floats above
-  // the bar's right end, taller than the tab).
+  // "Ear" dietro lo scudo CA.
   const ear =
     !L.overheadMode && L.acCenter
       ? {
@@ -1600,75 +1600,75 @@ function buildNamePlate(
         }
       : null;
 
+  // --- Poligono UNICO, senso orario da BL frame ----------------------
   const corners: Array<[Vector2, number]> = [
-    [{ x: leftBottomX, y: tabBottom }, 0],
-    [{ x: leftTopX, y: tabTop }, round],
+    [{ x: frameX, y: frameY + frameH }, frameR],     // BL frame
+    [{ x: frameRight, y: frameY + frameH }, frameR], // BR frame
   ];
   if (ear && ear.top < tabTop - 0.5) {
     corners.push(
-      [{ x: ear.x, y: tabTop }, round * 0.7],
-      [{ x: ear.x, y: ear.top }, round],
       [{ x: frameRight, y: ear.top }, round],
+      [{ x: ear.x, y: ear.top }, round],
+      [{ x: ear.x, y: tabTop }, round * 0.7],
     );
   } else {
-    corners.push([{ x: frameRight, y: tabTop }, round]);
+    corners.push([{ x: frameRight, y: tabTop }, round]); // cima DX linguetta
   }
-  corners.push([{ x: frameRight, y: tabBottom }, 0]);
-  const pts = roundedPolygon(corners.map((c) => c[0]), corners.map((c) => c[1]));
-  const tabOriginX = leftBottomX;
-  const tabOriginY = Math.min(tabTop, ear?.top ?? tabTop);
+  corners.push(
+    [{ x: leftTopX, y: tabTop }, round],             // cima SX linguetta
+    [{ x: leftBottomX, y: frameY }, 0],              // base diagonale 45°
+    [{ x: frameX, y: frameY }, frameR],              // TL frame
+  );
 
-  // Name: left-aligned from just past the slanted edge, up to the
-  // shield / temp-HP bubble (they're drawn on top of the plate).
-  const label = name || "—";
-  const textX = leftTopX + tabH * 0.22;
+  const pts = roundedPolygon(
+    corners.map((c) => c[0]),
+    corners.map((c) => c[1]),
+  );
+  const originX = frameX;
+  const originY = Math.min(tabTop, ear?.top ?? tabTop);
+
+  // --- Nome: max 20 char, CENTRATO -----------------------------------
+  const label = (name || "—").slice(0, 20);
+  const textLeft = leftBottomX;
   let textRight = frameRight - pad * 2.5;
-  if (!L.overheadMode && L.acCenter) textRight = Math.min(textRight, L.acCenter.x - L.diameter / 2 - pad);
-  if (!L.overheadMode && L.tempCenter) textRight = Math.min(textRight, L.tempCenter.x - L.diameter / 2 - pad);
-  const textW = Math.max(L.barHeight, textRight - textX);
-  const visibleH = frameY - tabTop+2.5;
+  if (!L.overheadMode && L.acCenter)
+    textRight = Math.min(textRight, L.acCenter.x - L.diameter / 2 - pad);
+  if (!L.overheadMode && L.tempCenter)
+    textRight = Math.min(textRight, L.tempCenter.x - L.diameter / 2 - pad);
+  const textW = Math.max(L.barHeight, textRight - textLeft);
+  const visibleH = frameY - tabTop + 2.5;
   const fontSize = fitBarFontSize(label, L.barFontSize * 0.95, textW);
   const textColor = nameTextColor(color);
 
-  const common = (b: any) => b
-    .layer("ATTACHMENT")
-    .attachedTo(ctx.token.id)
-    .locked(true)
-    .disableHit(true)
-    .visible(ctx.visible)
-    .disableAutoZIndex(true)
-    .disableAttachmentBehavior(DISABLE_INHERIT);
+  const common = (b: any) =>
+    b
+      .layer("ATTACHMENT")
+      .attachedTo(ctx.token.id)
+      .locked(true)
+      .disableHit(true)
+      .visible(ctx.visible)
+      .disableAutoZIndex(true)
+      .disableAttachmentBehavior(DISABLE_INHERIT);
 
-  const frame = common(buildCurve()
-    .fillColor(color)
-    .fillOpacity(1)
-    .strokeOpacity(0)
-    .strokeWidth(0)
-    .tension(0)
-    .closed(true)
-    .points(roundedRectanglePoints(frameW, frameH, frameR))
-    .position({ x: frameX, y: frameY }))
+  const plate = common(
+    buildCurve()
+      .fillColor(color)
+      .fillOpacity(1)
+      .strokeOpacity(0)
+      .strokeWidth(0)
+      .tension(0)
+      .closed(true)
+      .points(pts.map((p) => ({ x: p.x - originX, y: p.y - originY })))
+      .position({ x: originX, y: originY }),
+  )
     .zIndex(9000)
-    .metadata(bubbleMeta(ctx.token.id, "name-frame"))
-    .build();
-
-  const tab = common(buildCurve()
-    .fillColor(color)
-    .fillOpacity(1)
-    .strokeOpacity(0)
-    .strokeWidth(0)
-    .tension(0)
-    .closed(true)
-    .points(pts.map((p) => ({ x: p.x - tabOriginX, y: p.y - tabOriginY })))
-    .position({ x: tabOriginX, y: tabOriginY }))
-    .zIndex(9001)
-    .metadata(bubbleMeta(ctx.token.id, "name-tab"))
+    .metadata(bubbleMeta(ctx.token.id, "name-plate"))
     .build();
 
   const text = buildText()
     .plainText(label)
     .textType("PLAIN")
-    .textAlign("LEFT")
+    .textAlign("CENTER")            // ← testo centrato nella bandiera
     .textAlignVertical("MIDDLE")
     .fontFamily(FONT_FAMILY)
     .fontSize(fontSize)
@@ -1680,7 +1680,7 @@ function buildNamePlate(
     .lineHeight(0.95)
     .width(textW)
     .height(visibleH)
-    .position({ x: textX, y: tabTop + L.barTextOffset })
+    .position({ x: textLeft, y: tabTop + L.barTextOffset })
     .layer("TEXT")
     .attachedTo(ctx.token.id)
     .locked(true)
@@ -1693,8 +1693,7 @@ function buildNamePlate(
     .build();
 
   return {
-    items: [frame, tab, text],
-    // Double-click area: the tab left of the shield.
+    items: [plate, text],
     rect: {
       x: leftBottomX,
       y: tabTop,

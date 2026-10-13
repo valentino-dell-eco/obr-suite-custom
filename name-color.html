@@ -21,6 +21,13 @@ html,body{height:100%;width:100%;overflow:hidden;background:transparent;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;clip-path:polygon(9px 0,calc(100% - 9px) 0,100% 100%,0 100%)}
 .row{display:flex;align-items:center;gap:8px}
 .lbl{font-size:11px;color:#9aa0b3;margin-bottom:-6px}
+.lbl-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:-6px}
+.lbl-row .lbl{margin-bottom:0}
+.count{font-size:10px;color:#6e7690;letter-spacing:.02em;
+  font-family:ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums;
+  transition:color .12s}
+.count.warn{color:#f5a623}
+.count.full{color:#e74c3c}
 .name{width:100%;font-size:13px;padding:7px 9px;border-radius:6px;background:#1a2036;border:1px solid rgba(255,255,255,0.18);
   color:#e6e8ee;outline:none}
 .name:focus,.hex:focus{border-color:#5dade2}
@@ -45,8 +52,11 @@ button.btn{font-size:12px;font-weight:700;border:none;border-radius:8px;padding:
   </div>
   <div class="body">
     <div class="preview" id="preview"></div>
-    <div class="lbl" id="nameLbl"></div>
-    <input type="text" class="name" id="name" maxlength="60" spellcheck="false" autocomplete="off">
+    <div class="lbl-row">
+      <span class="lbl" id="nameLbl"></span>
+      <span class="count" id="nameCount">0/20</span>
+    </div>
+    <input type="text" class="name" id="name" maxlength="20" spellcheck="false" autocomplete="off">
     <div class="lbl" id="colorLbl"></div>
     <div class="swatches" id="swatches"></div>
     <div class="row">
