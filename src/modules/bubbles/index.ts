@@ -1580,16 +1580,11 @@ function buildNamePlate(
   const frameR = L.barCornerRadius > 0 ? L.barCornerRadius + pad : 0;
   const frameRight = frameX + frameW;
 
-  // --- Linguetta: bordo sinistro a 45°, base a filo del raccordo frame --
+  // --- Linguetta ---
   const tabH = L.barHeight * 1.0;
   const tabTop = frameY - tabH;
-  // Base della diagonale: esattamente dove il raccordo TL del frame
-  // termina (frameX + frameR). Così la diagonale "nasce" dal corner già
-  // raccordato, senza lasciare spazi vuoti né sbordare.
-  const leftBottomX = frameX ;
-  // 45°: dx = dy = tabH. Questa riga È l'angolo a 45°.
-  const leftTopX = frameX ;
-
+  const leftBottomX = frameX;
+  const leftTopX = frameX;
   const round = L.barHeight * 0.28;
 
   // "Ear" dietro lo scudo CA.
@@ -1601,7 +1596,7 @@ function buildNamePlate(
         }
       : null;
 
-  // --- Poligono UNICO, senso orario da BL frame ----------------------
+  // --- Poligono UNICO del Name Plate ---
   const corners: Array<[Vector2, number]> = [
     [{ x: frameX, y: frameY + frameH }, frameR],     // BL frame
     [{ x: frameRight, y: frameY + frameH }, frameR], // BR frame
@@ -1613,12 +1608,12 @@ function buildNamePlate(
       [{ x: ear.x, y: tabTop }, round * 0.7],
     );
   } else {
-    corners.push([{ x: frameRight, y: tabTop }, round]); // cima DX linguetta
+    corners.push([{ x: frameRight, y: tabTop }, round]);
   }
   corners.push(
-    [{ x: leftTopX, y: tabTop }, round],             // cima SX linguetta
-    [{ x: leftBottomX, y: frameY }, 0],              // base diagonale 45°
-    [{ x: frameX, y: frameY }, frameR],              // TL frame
+    [{ x: leftTopX, y: tabTop }, round],
+    [{ x: leftBottomX, y: frameY }, 0],
+    [{ x: frameX, y: frameY }, frameR],
   );
 
   const pts = roundedPolygon(
@@ -1628,17 +1623,16 @@ function buildNamePlate(
   const originX = frameX;
   const originY = Math.min(tabTop, ear?.top ?? tabTop);
 
-  // --- Nome: max 20 char, CENTRATO -----------------------------------
+  // --- Area del Testo (delimitata esattamente nell'area della linguetta) ---
   const label = (name || "—").slice(0, 20);
-  const textLeft = leftBottomX;
-  let textRight = frameRight - pad * 2.5;
-  if (!L.overheadMode && L.acCenter)
-    textRight = Math.min(textRight, L.acCenter.x - L.diameter / 2 - pad);
-  if (!L.overheadMode && L.tempCenter)
-    textRight = Math.min(textRight, L.tempCenter.x - L.diameter / 2 - pad);
+  
+  // Margini interni per far sì che il testo stia dentro la linguetta senza toccare i bordi
+  const textLeft = leftTopX + pad * 1.5;
+  const textRight = (ear ? ear.x : frameRight) - pad * 1.5;
   const textW = Math.max(L.barHeight, textRight - textLeft);
-  const visibleH = frameY - tabTop + 2.5;
-  const fontSize = fitBarFontSize(label, L.barFontSize * 0.95, textW);
+  
+  const visibleH = frameY - tabTop;
+  const fontSize = fitBarFontSize(label, L.barFontSize * 0.85, textW);
   const textColor = nameTextColor(color);
 
   const common = (b: any) =>
@@ -1666,11 +1660,14 @@ function buildNamePlate(
     .metadata(bubbleMeta(ctx.token.id, "name-plate"))
     .build();
 
+  const textOffsetDown = 1.5;
+  const dynamicOffset = Math.max(0, 12 - label.length * 0.5);
+  // Testo posizionato esattamente al centro dell'area della linguetta
   const text = buildText()
     .plainText(label)
     .textType("PLAIN")
-    .textAlign("CENTER")            // ← testo centrato nella bandiera
-    .textAlignVertical("MIDDLE")
+    .textAlign("CENTER")            // Centrato orizzontalmente nell'area
+    .textAlignVertical("MIDDLE")    // Centrato verticalmente nella linguetta
     .fontFamily(FONT_FAMILY)
     .fontSize(fontSize)
     .fontWeight(700)
@@ -1681,7 +1678,7 @@ function buildNamePlate(
     .lineHeight(0.95)
     .width(textW)
     .height(visibleH)
-    .position({ x: textLeft, y: tabTop + L.barTextOffset })
+    .position({ x:textLeft + dynamicOffset, y: tabTop + (tabH - visibleH) / 2 + textOffsetDown })
     .layer("TEXT")
     .attachedTo(ctx.token.id)
     .locked(true)
