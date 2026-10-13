@@ -47,7 +47,7 @@ type BubbleRole =
   | "hp-bg" | "hp-fill" | "hp-shimmer" | "hp-text"
   | "ac-shield" | "ac-text"
   | "temp-bg"  | "temp-text"
-  | "name-frame" | "name-tab" | "name-text";
+  | "name-frame" | "name-tab" | "name-text"| "name-plate";
 
 function bubbleMeta(tokenId: string, role: BubbleRole): Record<string, unknown> {
   return { [BUBBLE_OWNER_KEY]: tokenId, [BUBBLE_ROLE_KEY]: role };
@@ -1589,7 +1589,7 @@ function buildNamePlate(
   const leftBottomX = frameX ;
   // 45°: dx = dy = tabH. Questa riga È l'angolo a 45°.
   const leftTopX = frameX ;
-  
+
   const round = L.barHeight * 0.28;
 
   // "Ear" dietro lo scudo CA.
