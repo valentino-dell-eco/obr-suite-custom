@@ -666,8 +666,16 @@ const TR: Dict = {
   ccPanelUploaded: { zh: "已上传", en: "Uploaded" },
   ccPanelUploadFailed: { zh: "上传失败", en: "Upload failed" },
   ccPanelUploadHint: {
-    zh: "请检查：① 角色卡版本是否受支持（v1.0.12 即 2024 / v1.0.12-2014mode 即 2014 悲灵卡）；② 角色卡内是否嵌入了损坏 / 超大图片（先在 Excel 里删除图片再上传）。",
-    en: "Please check: (1) sheet version is supported (v1.0.12 = 2024 / v1.0.12-2014mode = 2014 悲灵 sheets); (2) no broken or oversized embedded images (remove images in Excel first, then re-upload).",
+    zh: "只支持套件的 SRD 5.1 角色卡（面板顶部可下载模板），或角色卡 JSON。",
+    en: "Only the suite's SRD 5.1 character sheet (template download at the top of the panel) or a card JSON can be imported.",
+  },
+  ccPanelNotSrdSheet: {
+    zh: "这不是套件的 SRD 5.1 角色卡（缺少 cc.* 键）。请从面板顶部下载 SRD 5.1 模板。",
+    en: "This isn't the suite's SRD 5.1 character sheet (no cc.* keys). Download the SRD 5.1 template from the top of the panel.",
+  },
+  ccPanelDownloadSrd: {
+    zh: "下载 SRD 5.1 角色卡模板（xlsx）",
+    en: "Download the SRD 5.1 character sheet template (xlsx)",
   },
   ccPanelOnlyXlsx: {
     zh: "只支持 .xlsx 文件",

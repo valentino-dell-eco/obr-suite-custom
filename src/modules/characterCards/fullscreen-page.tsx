@@ -54,6 +54,8 @@ import { ICON_LIBRARY } from "../resourceTracker/icons";
 import { amountFromClick, ensureSpendVisualStyles, spendVisualHtml } from "./spend-visual";
 import { bestNameMatch, getSecretPref, setSecretPref } from "./spend";
 import type { IconId } from "../resourceTracker/types";
+import { CC_ORIGIN } from "./backend";
+import { UnsupportedSheetError, srdSheetToCard } from "./xlsx-import";
 
 // [CC-FLOW] Module-evaluation marker for the fullscreen iframe document.
 // Compare the timestamp of this log against "[CC-FLOW] index.ts module
@@ -249,7 +251,7 @@ function fireNameSearch(q: string): void {
 // affordances (used sparingly). Reads as "more suite", not a
 // third-party widget.
 
-const SERVER_ORIGIN = "https://obr.dnd.center";
+const SERVER_ORIGIN = CC_ORIGIN;
 
 // Broadcast id mirrored from panel-page.ts. When any client uploads,
 // refreshes, or imports a card data.json, it sends BC_CARD_UPDATED so
@@ -5558,48 +5560,15 @@ function App() {
             );
           }
         } else if (lower.endsWith(".xlsx")) {
+          // The suite's SRD 5.1 sheet, converted to the card JSON here.
           try {
-            const fd = new FormData();
-            fd.append("file", f);
-            const u = encodeURIComponent("fullscreen-import");
-            const r = await fetch(
-              `${SERVER_ORIGIN}/api/character/upload?room=${encodeURIComponent(roomId)}&uploader=${u}`,
-              { method: "POST", body: fd },
-            );
-            if (!r.ok) {
-              const body = await r.text();
-              summary.push(
-                `✕ ${f.name} ${T("ccXlsxFailHttp").replace("{status}", String(r.status)).replace("{body}", body.slice(0, 120))}`,
-              );
-            } else {
-              const entry = await r.json();
-              try {
-                const corrected = await reconcileUploadedCardShieldState({
-                  apiBase: `${SERVER_ORIGIN}/api/character`,
-                  roomId,
-                  cardId: entry.id,
-                  xlsx: f,
-                });
-                if (corrected) {
-                  const reconcilePayload = {
-                    cardId: entry.id,
-                    url: `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(entry.id)}/`,
-                  };
-                  relayBroadcast(BC_CARD_UPDATED, reconcilePayload, "LOCAL");
-                  relayBroadcast(BC_CARD_UPDATED, reconcilePayload, "REMOTE");
-                }
-              } catch (e: any) {
-                summary.push(
-                  `⚠ ${f.name} ${T("ccShieldReconcileFail").replace("{err}", e?.message || String(e))}`,
-                );
-              }
-              summary.push(
-                `✓ ${f.name} → ${T("ccNewCardArrow").replace("{name}", entry.name)}`,
-              );
-            }
+            const parsed = await srdSheetToCard(f, { fileName: f.name });
+            summary.push(await createCardFromJson(parsed, f.name));
           } catch (e: any) {
             summary.push(
-              `✕ ${f.name} ${T("ccXlsxFail").replace("{err}", e?.message || String(e))}`,
+              e instanceof UnsupportedSheetError
+                ? `✕ ${f.name} ${T("ccPanelNotSrdSheet")}`
+                : `✕ ${f.name} ${T("ccXlsxFail").replace("{err}", e?.message || String(e))}`,
             );
           }
         } else {

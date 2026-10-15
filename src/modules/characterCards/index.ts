@@ -25,6 +25,7 @@ import {
   BC_PANEL_RESET,
   type DragEndPayload,
 } from "../../utils/panelLayout";
+import { CC_ORIGIN } from "./backend";
 
 // [CC-FLOW] Module-evaluation marker. This fires the instant this file
 // is imported/bundled into a document — BEFORE setupCharacterCards() is
@@ -127,7 +128,7 @@ const CTX_BIND = "com.obr-suite/cc-bind-menu";
 // alone — mid-session HP edits shouldn't be wiped by a passive
 // refresh.
 const BC_CARD_UPDATED = "com.obr-suite/cc-card-updated";
-const SERVER_ORIGIN = "https://obr.dnd.center";
+const SERVER_ORIGIN = CC_ORIGIN;
 
 // Standalone TOOL id — a top-level button in OBR's tool toolbar
 // (alongside Move / Select / Measure / …), NOT an action nested

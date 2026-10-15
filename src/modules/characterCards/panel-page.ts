@@ -42,6 +42,8 @@ import {
   showChargesRollModal,
   ChargesGroup,
 } from "./recovery-ui";
+import { CC_API, cardDataUrl } from "./backend";
+import { UnsupportedSheetError, srdSheetToCard } from "./xlsx-import";
 
 // Mirrors fullscreen-page.tsx's own BIND_META_KEY — the token-binding
 // metadata key written by characterCards' bind-page.ts. Used below to
@@ -59,19 +61,23 @@ interface TemplateConfig {
   langCode: "zh" | "en";
 }
 
+// The suite's own SRD 5.1 sheet (converted to JSON in the browser by
+// xlsx-import.ts) — the only xlsx the suite's backend accepts.
+const SRD_SHEET_FILE = "SRD-5.1-Character-Sheet.xlsx";
 const TEMPLATES: Record<"zh" | "en", TemplateConfig> = {
-  zh: {
-    langCode: "zh",
-    files: [
-      { name: "2014 模板", filename: "DND5E人物卡_悲灵_弗人_枭熊适配版.xlsx" },
-      { name: "2024 模板", filename: "DND5R人物卡_悲灵_弗人_枭熊适配版.xlsx" },
-    ],
-  },
-  en: {
-    langCode: "en",
-    files: [{ name: "Character Sheet", filename: "GSheet v2.1.xlsx" }],
-  },
+  zh: { langCode: "zh", files: [{ name: "SRD 5.1", filename: SRD_SHEET_FILE }] },
+  en: { langCode: "en", files: [{ name: "SRD 5.1", filename: SRD_SHEET_FILE }] },
 };
+
+/** xlsx → card JSON, with a readable error for other sheets. */
+async function convertSheet(file: File): Promise<Record<string, any>> {
+  try {
+    return await srdSheetToCard(file, { fileName: file.name });
+  } catch (e) {
+    if (e instanceof UnsupportedSheetError) throw new Error(tt("ccPanelNotSrdSheet"));
+    throw e;
+  }
+}
 
 function getTemplateConfigForLang(language: string): TemplateConfig {
   return language === "zh" ? TEMPLATES.zh : TEMPLATES.en;
@@ -129,7 +135,7 @@ async function minimizeSheet(cardId: string): Promise<void> {
   try { await OBR.modal.close(PANEL_MODAL_ID); } catch {}
 }
 // const API_BASE = "https://obr.dnd.center/api/character";
-const API_BASE = "/api-dnd-center/api/character";
+const API_BASE = CC_API;
 const SCENE_META_KEY = "com.character-cards/list";
 const LS_PREFIX = "character-cards/";
 
@@ -591,42 +597,20 @@ async function uploadFile(file: File) {
   const sideEl = document.getElementById("side");
   sideEl?.classList.add("busy");
   try {
-    const fd = new FormData();
-    fd.append("file", file);
+    // The sheet is converted to the card JSON here, in the browser;
+    // the backend only stores JSON.
+    const card = await convertSheet(file);
     const u = encodeURIComponent(playerName);
-    const r = await fetch(`${API_BASE}/upload?room=${roomId}&uploader=${u}`, {
+    const r = await fetch(`${API_BASE}/create-from-json?room=${roomId}&uploader=${u}`, {
       method: "POST",
-      body: fd,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(card),
     });
     if (!r.ok) {
       const err = await r.text();
       throw new Error(err || `HTTP ${r.status}`);
     }
     const entry = (await r.json()) as CardEntry;
-    try {
-      const corrected = await reconcileUploadedCardShieldState({
-        apiBase: API_BASE,
-        roomId,
-        cardId: entry.id,
-        xlsx: file,
-      });
-      if (corrected) {
-        try {
-          const payload = { cardId: entry.id, url: `${entry.url}data.json` };
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
-            destination: "LOCAL",
-          });
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, payload, {
-            destination: "REMOTE",
-          });
-        } catch {}
-      }
-    } catch (e) {
-      console.warn(
-        "[cc-panel] shield equipped reconcile after upload failed",
-        e,
-      );
-    }
     const updated = [entry, ...cards];
     await writeCardsToScene(updated);
     cards = updated;
@@ -992,42 +976,24 @@ async function refreshCardFromPicker(card: CardEntry): Promise<void> {
   const btn = row?.querySelector<HTMLButtonElement>(".card-refresh");
   btn?.classList.add("spinning");
   try {
-    const fd = new FormData();
-    fd.append("file", file);
+    // Re-convert the sheet and replace the card, keeping what the
+    // suite added to it (token binding, owners).
+    const next = await convertSheet(file);
+    try {
+      const curRes = await fetch(cardDataUrl(roomId, card.id), { cache: "no-store" });
+      if (curRes.ok) {
+        const cur = await curRes.json();
+        if (cur?.meta?.boundedTokenId) next.meta = { ...next.meta, boundedTokenId: cur.meta.boundedTokenId };
+        if (Array.isArray(cur?.owners_id)) next.owners_id = cur.owners_id;
+      }
+    } catch {}
+    next._saved_at = new Date().toISOString();
     const r = await fetch(
-      `${API_BASE}/refresh?room=${roomId}&card=${encodeURIComponent(card.id)}`,
-      { method: "POST", body: fd },
+      `${API_BASE}/${encodeURIComponent(roomId)}/${encodeURIComponent(card.id)}/data`,
+      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) },
     );
     if (!r.ok) throw new Error((await r.text()) || `HTTP ${r.status}`);
     const updated = (await r.json()) as CardEntry;
-    try {
-      const corrected = await reconcileUploadedCardShieldState({
-        apiBase: API_BASE,
-        roomId,
-        cardId: updated.id,
-        xlsx: file,
-      });
-      if (corrected) {
-        try {
-          // 2026-05-14 — see same LOCAL+REMOTE comment in uploadFile.
-          const reconcilePayload = {
-            cardId: updated.id,
-            url: `${updated.url}data.json`,
-          };
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, {
-            destination: "LOCAL",
-          });
-          OBR.broadcast.sendMessage(BC_CARD_UPDATED, reconcilePayload, {
-            destination: "REMOTE",
-          });
-        } catch {}
-      }
-    } catch (e) {
-      console.warn(
-        "[cc-panel] shield equipped reconcile after refresh failed",
-        e,
-      );
-    }
     cards = cards.map((c) => (c.id === updated.id ? { ...c, ...updated } : c));
     await writeCardsToScene(cards);
     // No iframe to refresh here anymore — cc-fullscreen.html is its own
@@ -1580,12 +1546,7 @@ function renderTemplateButtons() {
 
   let templateHtml = "";
   for (const file of config.files) {
-    const title =
-      lang === "zh"
-        ? file.name.includes("2014")
-          ? tt("ccPanelDownload2014")
-          : tt("ccPanelDownload2024")
-        : "Download Character Sheet Template";
+    const title = tt("ccPanelDownloadSrd");
     templateHtml += `<a class="icon-btn" href="${file.filename}"
       download="${file.filename}" target="_blank" rel="noopener"
       title="${title}">${file.name}</a>`;

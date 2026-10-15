@@ -2,6 +2,7 @@ import OBR from "@owlbear-rodeo/sdk";
 import { ICONS } from "../../icons";
 import { applyI18nDom, t } from "../../i18n";
 import { getLocalLang } from "../../state";
+import { CC_ORIGIN } from "./backend";
 
 const lang = getLocalLang();
 const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
@@ -15,7 +16,7 @@ const SCENE_META_KEY = "com.character-cards/list";
 // (Source of truth lives in `modules/initiative/utils/metadata.ts`.)
 const INIT_DEXMOD_META = "com.initiative-tracker/dexMod";
 
-const SERVER_ORIGIN = "https://obr.dnd.center";
+const SERVER_ORIGIN = CC_ORIGIN;
 
 interface CardEntry {
   id: string;

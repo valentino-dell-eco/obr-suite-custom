@@ -1,4 +1,5 @@
 import { readBooleanFlag } from "./data-normalize.js";
+import { cardDataUrl } from "./backend";
 
 const EOCD_SIG = 0x06054b50;
 const CEN_SIG = 0x02014b50;
@@ -8,12 +9,15 @@ function decodeUtf8(bytes: Uint8Array): string {
   return new TextDecoder("utf-8").decode(bytes);
 }
 
-function xmlUnescape(text: string): string {
+export function xmlUnescape(text: string): string {
   return text
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, "\"")
     .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
     .replace(/&amp;/g, "&");
 }
 
@@ -33,7 +37,7 @@ async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(buf);
 }
 
-async function readZipEntries(source: Blob | ArrayBuffer | Uint8Array): Promise<Map<string, Uint8Array>> {
+export async function readZipEntries(source: Blob | ArrayBuffer | Uint8Array): Promise<Map<string, Uint8Array>> {
   const buf = source instanceof Blob
     ? await source.arrayBuffer()
     : source instanceof Uint8Array
@@ -77,7 +81,7 @@ async function readZipEntries(source: Blob | ArrayBuffer | Uint8Array): Promise<
   return out;
 }
 
-function extractSharedStrings(xml: string): string[] {
+export function extractSharedStrings(xml: string): string[] {
   const out: string[] = [];
   const items = xml.match(/<si\b[\s\S]*?<\/si>/g) || [];
   for (const item of items) {
@@ -135,7 +139,7 @@ export async function reconcileUploadedCardShieldState(params: {
   const equipped = await readShieldEquippedFromXlsx(params.xlsx);
   if (equipped == null) return false;
 
-  const dataUrl = `https://obr.dnd.center/characters/${encodeURIComponent(params.roomId)}/${encodeURIComponent(params.cardId)}/data.json`;
+  const dataUrl = cardDataUrl(params.roomId, params.cardId);
   const res = await fetch(dataUrl, { cache: "no-cache" });
   if (!res.ok) throw new Error(`fetch data.json failed: HTTP ${res.status}`);
   const data = await res.json();

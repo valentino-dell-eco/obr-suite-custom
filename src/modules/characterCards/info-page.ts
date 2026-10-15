@@ -32,6 +32,7 @@ import {
   showLrExtraConfirm,
   showChargesRollModal,
 } from "./recovery-ui";
+import { CC_ORIGIN } from "./backend";
 
 // 2026-05-13 — Was previously dev-only (gated through STABLE_HIDES /
 // STABLE_HIDES_CC) until cc-fullscreen + hp-bar integration matured.
@@ -575,7 +576,7 @@ type CardCacheEntry = { data: any; source: CardDataSource };
 const cardCache = new Map<string, CardCacheEntry>();
 
 // const SERVER_ORIGIN = "https://obr.dnd.center";
-const SERVER_ORIGIN = "/api-dnd-center";
+const SERVER_ORIGIN = CC_ORIGIN;
 const API_BASE = `${SERVER_ORIGIN}/api/character`;
 const LS_PREFIX = "character-cards/";
 
@@ -898,7 +899,7 @@ function render(
   const lvl = d.total_level != null ? `Lv${d.total_level}` : "";
   const sub = [cls, lvl].filter(Boolean).join(" ");
 
-  const rawUrl = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`;
+  const rawUrl = `${CC_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/`;
 
   const hp = cs.hp || {};
   const statFallback: Partial<Record<keyof BubblesData, number>> = {

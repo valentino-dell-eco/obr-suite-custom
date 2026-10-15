@@ -20,6 +20,7 @@ import {
   applySet,
   deleteSet,
 } from "./dice-skins";
+import { cardDataUrl } from "../characterCards/backend";
 
 let lang = getLocalLang();
 const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
@@ -2621,7 +2622,7 @@ async function fetchCardData(cardId: string): Promise<any | null> {
   if (cardDataCache.has(cardId)) return cardDataCache.get(cardId);
   try {
     const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const url = `https://obr.dnd.center/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
+    const url = cardDataUrl(roomId, cardId);
     const res = await fetch(url);
     if (!res.ok) return null;
     const d = await res.json();
