@@ -7,6 +7,6 @@ declare const require: {
 };
 
 interface ImportMetaEnv {
-  /** Character-card backend (obr-suite-backend Worker), e.g. https://obr-suite-backend.<subdomain>.workers.dev */
+  /** Character-card backend (echo-version-backend Worker), e.g. https://echo-version-backend.<subdomain>.workers.dev */
   readonly VITE_CC_BACKEND?: string;
 }
