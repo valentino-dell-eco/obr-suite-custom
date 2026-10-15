@@ -1,5 +1,6 @@
 import { Monster, ParsedMonster, MonsterEdition } from "./types";
 import { getAllLocalMonsters, initLocalContent } from "../../utils/localContent";
+import { IMG_BASE } from "../characterCards/backend";
 
 // "2014" = strictly PHB + MM (the original core books). "2024" = strictly
 // XPHB + XMM (the 2024 reprint). Every other source — DMG/XDMG, TCE, XGE,
@@ -80,9 +81,9 @@ function getUnionDisabledSources(): Set<string> {
     return new Set<string>();
   }
 }
-// Images: proxied through our own server so OBR can load them as WebGL textures
-// (5e.tools doesn't send CORS headers, so direct loading fails in scene rendering).
-const IMG_BASE = "https://obr.dnd.center/5etools-img";
+// Images: served by our backend (echo-version-backend → /img/5etools/) so OBR
+// can load them as WebGL textures (5e.tools doesn't send CORS headers, so
+// direct loading fails in scene rendering). IMG_BASE: characterCards/backend.ts.
 
 const SIZE_MAP: Record<string, string> = {
   T: "超小型", S: "小型", M: "中型", L: "大型", H: "巨型", G: "超巨型",

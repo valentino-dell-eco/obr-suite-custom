@@ -6,6 +6,7 @@
 //   POST   {CC_API}/upload?room=&uploader=                (multipart .json)
 //   PUT    {CC_API}/{room}/{card}/data                    (card JSON)
 //   DELETE {CC_API}/{room}/{card}
+//   GET    {CC_ORIGIN}/img/5etools/bestiary/...           (monster token images, see IMG_BASE)
 //
 // Its address comes from VITE_CC_BACKEND (the .env file in the project
 // root, or the Pages project's build environment variables), e.g.
@@ -20,6 +21,12 @@ if (!configured && typeof console !== "undefined") {
 }
 export const CC_ORIGIN = configured;
 export const CC_API = `${CC_ORIGIN}/api/character`;
+
+/** Bestiary token images (5etools image layout), served by the same
+ *  Worker with open CORS so OBR can load them as textures. Replaces
+ *  obr.dnd.center/5etools-img; that address stays as the fallback only
+ *  while VITE_CC_BACKEND is unset. */
+export const IMG_BASE = CC_ORIGIN ? `${CC_ORIGIN}/img/5etools` : "https://obr.dnd.center/5etools-img";
 
 export function cardDataUrl(roomId: string, cardId: string): string {
   return `${CC_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;

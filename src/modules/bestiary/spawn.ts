@@ -1,6 +1,7 @@
 import OBR, { buildImage } from "@owlbear-rodeo/sdk";
 import { ParsedMonster } from "./types";
 import { getRawMonster, makeSlug } from "./data";
+import { IMG_BASE } from "../characterCards/backend";
 
 // The bestiary panel iframe doesn't run startSceneSync(), so calling
 // getState() from src/state.ts here would return only DEFAULT_STATE.
@@ -96,7 +97,7 @@ function probeImage(url: string): Promise<{ ok: boolean; w: number; h: number }>
   });
 }
 
-const FALLBACK_TOKEN_URL = `https://obr.dnd.center/5etools-img/bestiary/tokens/MM/Commoner.webp`;
+const FALLBACK_TOKEN_URL = `${IMG_BASE}/bestiary/tokens/MM/Commoner.webp`;
 
 /** Detect the right MIME type from a token URL extension. OBR's
  *  image-fetcher validates the ImageContent.mime field against the
