@@ -11,6 +11,8 @@ import {
   makeSlug,
 } from "./data";
 import { spawnMonster } from "./spawn";
+import { pawnUrlFor } from "./token-fallback";
+import { TOKEN_IMAGES_KEY, readCreatureImages, type CreatureImage } from "./token-image";
 import { t } from "../../i18n";
 import {
   getLocalLang,
@@ -268,7 +270,41 @@ function dvToEditionSet(dv: SuiteDataVersion): Set<MonsterEdition> {
   return new Set<MonsterEdition>(["2014", "2024", "other"]);
 }
 
+/** Per-creature images the GM picked (monster card → image button),
+ *  kept in sync with scene metadata so the list shows them. */
+function usePickedCreatureImages(): Record<string, CreatureImage> {
+  const [picked, setPicked] = useState<Record<string, CreatureImage>>({});
+  useEffect(() => {
+    let alive = true;
+    let lastSig = "";
+    const apply = (next: Record<string, CreatureImage>) => {
+      const sig = JSON.stringify(next);
+      if (sig === lastSig) return;
+      lastSig = sig;
+      if (alive) setPicked(next);
+    };
+    void readCreatureImages().then(apply);
+    const unsub = OBR.scene.onMetadataChange((meta) => {
+      const raw = meta[TOKEN_IMAGES_KEY];
+      const next: Record<string, CreatureImage> = {};
+      if (raw && typeof raw === "object") {
+        for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+          const o = v as CreatureImage | null;
+          if (o && typeof o.url === "string" && o.url) next[k] = o;
+        }
+      }
+      apply(next);
+    });
+    return () => {
+      alive = false;
+      unsub();
+    };
+  }, []);
+  return picked;
+}
+
 function App() {
+  const pickedImages = usePickedCreatureImages();
   const [monsters, setMonsters] = useState<ParsedMonster[]>([]);
   const [filtered, setFiltered] = useState<ParsedMonster[]>([]);
   const [query, setQuery] = useState(() => readLS("query", ""));
@@ -754,13 +790,16 @@ function App() {
         </div>
       </div>
       <div class="list">
-        {filtered.map((mon) => (
-          <MonsterCard
-            key={`${mon.source}-${mon.engName}`}
-            monster={mon}
-            onSpawn={handleSpawn}
-          />
-        ))}
+        {filtered.map((mon) => {
+          const picked = pickedImages[makeSlug(mon.source, mon.engName)];
+          return (
+            <MonsterCard
+              key={`${mon.source}-${mon.engName}`}
+              monster={picked ? { ...mon, tokenUrl: picked.url } : mon}
+              onSpawn={handleSpawn}
+            />
+          );
+        })}
         {!loading && filtered.length === 0 && (
           <div class="empty">{t(lang, "bestiaryNoMatch")}</div>
         )}
@@ -821,6 +860,11 @@ function MonsterCard({
   onSpawn: (m: ParsedMonster) => void;
 }) {
   const [imgErr, setImgErr] = useState(false);
+  // If the image doesn't load, show the creature-type pawn instead;
+  // only if that fails too, the letter placeholder.
+  const pawn = pawnUrlFor(monster.type);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const imgSrc = monster.tokenUrl && failedUrl !== monster.tokenUrl ? monster.tokenUrl : pawn;
 
   // Drag-spawn: pointerdown arms a watcher that fires the START
   // broadcast once the cursor moves past the threshold. The card calls
@@ -912,14 +956,17 @@ function MonsterCard({
       onClick={() => onSpawn(monster)}
     >
       <div class="card-left">
-        {!imgErr && monster.tokenUrl ? (
+        {!imgErr && imgSrc ? (
           <img
-            src={monster.tokenUrl}
+            src={imgSrc}
             alt=""
             class="token"
             loading="lazy"
             draggable={false}
-            onError={() => setImgErr(true)}
+            onError={() => {
+              if (imgSrc !== pawn) setFailedUrl(monster.tokenUrl);
+              else setImgErr(true);
+            }}
           />
         ) : (
           <div class="token-placeholder">{monster.name.charAt(0)}</div>
