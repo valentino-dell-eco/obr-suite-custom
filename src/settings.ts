@@ -1636,6 +1636,40 @@ function localFileRowHtml(f: LocalFileMeta, lang: Language): string {
 const EN_5ETOOLS_BASE =
   "https://cdn.jsdelivr.net/gh/5etools-mirror-3/5etools-src@main";
 
+// One-click preset for the token-image source (state.tokenImageBase):
+// the 5etools image mirror on GitHub, which sends CORS headers. The
+// suite itself ships no monster images — see renderTokenImagesBlock.
+const TOKEN_IMG_5ETOOLS_BASE =
+  "https://raw.githubusercontent.com/5etools-mirror-3/5etools-img/main";
+
+function renderTokenImagesBlock(lang: Language): string {
+  const cur = getState().tokenImageBase ?? "";
+  const zh = lang === "zh";
+  const note = zh
+    ? `套件本身不附带怪物图片：未设置来源时，怪物使用对应生物类型的棋子。DM 可在此填写一个按 5etools-img 结构组织的图片地址（<code>bestiary/tokens/&lt;来源&gt;/&lt;名称&gt;.webp</code>），该地址必须开放跨域（CORS）。<br><b>注意：</b>这些图片不属于 SRD 5.1，版权归各自所有者。设置图片来源者需自行确认有权使用。`
+    : `The suite ships no monster images: without a source, monsters get a pawn for their creature type. The GM can set an image collection laid out like 5etools-img (<code>bestiary/tokens/&lt;SOURCE&gt;/&lt;Name&gt;.webp</code>); it must send CORS headers.<br><b>Note:</b> these images are not part of the SRD 5.1 and belong to their owners. Whoever sets an image source is responsible for having the right to use it.`;
+  const status = cur
+    ? `${zh ? "当前来源" : "Current source"}: <code>${escapeAttr(cur)}</code>`
+    : zh ? "当前：未设置（使用生物类型棋子）" : "Current: none (creature-type pawns)";
+  const controls = isGM
+    ? `
+      <div class="lib-img-row">
+        <input class="lib-img-input" type="url" spellcheck="false" placeholder="https://…" value="${escapeAttr(cur)}">
+        <button class="lib-img-save" type="button">${zh ? "保存" : "Save"}</button>
+        <button class="lib-img-clear" type="button"${cur ? "" : " disabled"}>${zh ? "移除" : "Remove"}</button>
+      </div>
+      ${cur === TOKEN_IMG_5ETOOLS_BASE ? "" : `<button class="lib-img-preset" type="button" title="${TOKEN_IMG_5ETOOLS_BASE}">${zh ? "+ 5etools 图片 (GitHub)" : "+ 5etools images (GitHub)"}</button>`}`
+    : `<p class="role-notice">${zh ? "玩家端只读 · 由 DM 设置" : "Read-only · Set by DM"}</p>`;
+  return `
+    <div class="lib-img">
+      <div class="lib-img-title">🖼 ${zh ? "怪物 token 图片" : "Monster token images"}</div>
+      <p class="lib-img-note">${note}</p>
+      <p class="lib-img-status">${status}</p>
+      ${controls}
+    </div>
+  `;
+}
+
 function renderLibrariesBody(lang: Language): string {
   const s = getState();
   const libs = s.libraries ?? [];
@@ -1812,6 +1846,7 @@ Any creature within 5 ft. takes {@damage 1d4} cold damage at the start of its tu
     ${head}
     <div class="lib-list" id="libList">${list}</div>
     <div class="lib-actions">${addBtn}</div>
+    ${renderTokenImagesBlock(lang)}
     ${renderLocalContentBlock(lang)}
     ${tutorial}
   `;
@@ -2057,6 +2092,37 @@ function wireLibrariesBody(root: HTMLElement): void {
       ];
       await setState({ libraries: next });
     });
+
+  // Token-image source (state.tokenImageBase). GM only.
+  const imgInput = root.querySelector<HTMLInputElement>(".lib-img-input");
+  const setImgBase = async (raw: string) => {
+    if (!isGM) return;
+    const v = raw.trim().replace(/\/+$/, "");
+    if (v && !/^https:\/\/[^\s]+$/i.test(v)) {
+      window.alert(
+        getLocalLang() === "zh"
+          ? "请输入以 https:// 开头的地址。"
+          : "Enter an address starting with https://",
+      );
+      return;
+    }
+    await setState({ tokenImageBase: v });
+  };
+  root
+    .querySelector<HTMLButtonElement>(".lib-img-save")
+    ?.addEventListener("click", () => void setImgBase(imgInput?.value ?? ""));
+  imgInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void setImgBase(imgInput.value);
+    }
+  });
+  root
+    .querySelector<HTMLButtonElement>(".lib-img-clear")
+    ?.addEventListener("click", () => void setImgBase(""));
+  root
+    .querySelector<HTMLButtonElement>(".lib-img-preset")
+    ?.addEventListener("click", () => void setImgBase(TOKEN_IMG_5ETOOLS_BASE));
 
   // One-click preset: add the official 5etools English source. Idempotent —
   // bail if a library with this exact baseUrl already exists.

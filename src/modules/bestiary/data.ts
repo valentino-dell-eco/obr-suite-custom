@@ -1,6 +1,6 @@
 import { Monster, ParsedMonster, MonsterEdition } from "./types";
 import { getAllLocalMonsters, initLocalContent } from "../../utils/localContent";
-import { IMG_BASE } from "../characterCards/backend";
+import { pawnUrlFor } from "./token-fallback";
 
 // "2014" = strictly PHB + MM (the original core books). "2024" = strictly
 // XPHB + XMM (the 2024 reprint). Every other source — DMG/XDMG, TCE, XGE,
@@ -81,9 +81,20 @@ function getUnionDisabledSources(): Set<string> {
     return new Set<string>();
   }
 }
-// Images: served by our backend (echo-version-backend → /img/5etools/) so OBR
-// can load them as WebGL textures (5e.tools doesn't send CORS headers, so
-// direct loading fails in scene rendering). IMG_BASE: characterCards/backend.ts.
+// Token images: the suite ships none. The GM can set a token-image source
+// laid out like 5etools-img (Settings → Libraries → token images,
+// state.tokenImageBase); it must send CORS headers so OBR can load the
+// images as WebGL textures. Without one — or for monsters it has no image
+// for — the monster gets a pawn for its creature type (token-fallback.ts).
+function getTokenImageBase(): string {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getState } = require("../../state") as typeof import("../../state");
+    return String(getState().tokenImageBase ?? "").trim().replace(/\/+$/, "");
+  } catch {
+    return "";
+  }
+}
 
 const SIZE_MAP: Record<string, string> = {
   T: "超小型", S: "小型", M: "中型", L: "大型", H: "巨型", G: "超巨型",
@@ -133,30 +144,31 @@ function nameToTokenName(name: string): string {
   return (name || "").replace(/"/g, "");
 }
 
-function buildTokenUrl(m: any): string {
+function buildTokenUrl(m: any, imgBase: string): string {
   // Matches 5etools Renderer.monster.getTokenUrl logic, plus our
   // homebrew extensions:
   //   • `tokenHref: { type: "external", url }`  → external image (used
   //     by local-content packs that ship their own token URLs instead
-  //     of relying on the IMG_BASE convention)
-  //   • `tokenHref: { type: "internal", path }` → IMG_BASE-relative
+  //     of relying on the token-image source)
+  //   • `tokenHref: { type: "internal", path }` → relative to the token-image source
   //   • `tokenUrl: "..."`                       → legacy direct URL
   if (m.tokenHref && typeof m.tokenHref === "object") {
     const th = m.tokenHref;
     if (th.type === "external" && typeof th.url === "string" && th.url) return th.url;
     if (th.type === "internal" && typeof th.path === "string" && th.path) {
-      return `${IMG_BASE}/${th.path.replace(/^\/+/, "")}`;
+      return imgBase ? `${imgBase}/${th.path.replace(/^\/+/, "")}` : "";
     }
   }
   if (m.tokenUrl) return m.tokenUrl; // legacy
+  if (!imgBase) return "";
   if (m.token?.source && m.token?.name) {
-    return `${IMG_BASE}/bestiary/tokens/${m.token.source}/${encodeURIComponent(nameToTokenName(m.token.name))}.webp`;
+    return `${imgBase}/bestiary/tokens/${m.token.source}/${encodeURIComponent(nameToTokenName(m.token.name))}.webp`;
   }
   if (m.hasToken === false) return "";
   const src = m.source;
   const nm = m.ENG_name || m.name;
   if (!src || !nm) return "";
-  return `${IMG_BASE}/bestiary/tokens/${src}/${encodeURIComponent(nameToTokenName(nm))}.webp`;
+  return `${imgBase}/bestiary/tokens/${src}/${encodeURIComponent(nameToTokenName(nm))}.webp`;
 }
 
 /** Parse a 5etools-style HP block to a single number. The standard
@@ -180,10 +192,11 @@ export function parseHpNumber(hp: any): number {
   return 0;
 }
 
-function parseMon(m: any): ParsedMonster | null {
+function parseMon(m: any, imgBase: string): ParsedMonster | null {
   try {
     if (!m || !m.name) return null;
     const source = m.source || "?";
+    const type = parseType(m.type);
     return {
       name: m.name || "???",
       engName: m.ENG_name || m.name || "???",
@@ -193,8 +206,8 @@ function parseMon(m: any): ParsedMonster | null {
       dexMod: Math.floor(((m.dex || 10) - 10) / 2),
       cr: m.cr ?? "?",
       size: SIZE_MAP[m.size?.[0]] || m.size?.[0] || "?",
-      type: parseType(m.type),
-      tokenUrl: buildTokenUrl(m),
+      type,
+      tokenUrl: buildTokenUrl(m, imgBase) || pawnUrlFor(type),
       edition: detectEdition(source),
     };
   } catch {
@@ -203,6 +216,8 @@ function parseMon(m: any): ParsedMonster | null {
 }
 
 let cachedMonsters: ParsedMonster[] | null = null;
+/** tokenImageBase the cache was built with — token URLs depend on it. */
+let cachedImgBase = "";
 let loadingPromise: Promise<ParsedMonster[]> | null = null;
 const rawBySlug = new Map<string, any>();
 
@@ -314,6 +329,8 @@ function resolveCopy(m: any, bySlug: Map<string, any>, stack: Set<string>): any 
 }
 
 export async function loadAllMonsters(): Promise<ParsedMonster[]> {
+  const imgBase = getTokenImageBase();
+  if (cachedMonsters && imgBase !== cachedImgBase) clearMonsterCache();
   if (cachedMonsters) return cachedMonsters;
   if (loadingPromise) return loadingPromise;
 
@@ -444,7 +461,7 @@ export async function loadAllMonsters(): Promise<ParsedMonster[]> {
       uniqueRaw.push(m);
     }
     let all = uniqueRaw
-      .map(parseMon)
+      .map((m) => parseMon(m, imgBase))
       .filter((x): x is ParsedMonster => x !== null);
     // Cross-library dedup: when two libraries (e.g. kiwee main +
     // kiwee partnered) ship the same monster under slightly
@@ -484,6 +501,7 @@ export async function loadAllMonsters(): Promise<ParsedMonster[]> {
     });
 
     cachedMonsters = all;
+    cachedImgBase = imgBase;
     return all;
   })();
 

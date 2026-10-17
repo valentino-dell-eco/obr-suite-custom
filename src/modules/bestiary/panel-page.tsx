@@ -325,17 +325,19 @@ function App() {
   // "删除和修改库时也要删除数据" — the panel reflects deletion
   // immediately rather than the next time the panel reopens.
   useEffect(() => {
-    let lastLibSig = JSON.stringify(
-      (getState().libraries || []).map(
+    let lastLibSig = JSON.stringify([
+      getState().tokenImageBase ?? "",
+      ...(getState().libraries || []).map(
         (l) => `${l.id}|${l.enabled}|${l.baseUrl}`,
       ),
-    );
+    ]);
     const unsub = onStateChange(() => {
-      const sig = JSON.stringify(
-        (getState().libraries || []).map(
+      const sig = JSON.stringify([
+        getState().tokenImageBase ?? "",
+        ...(getState().libraries || []).map(
           (l) => `${l.id}|${l.enabled}|${l.baseUrl}`,
         ),
-      );
+      ]);
       if (sig === lastLibSig) return;
       lastLibSig = sig;
       setLoading(true);

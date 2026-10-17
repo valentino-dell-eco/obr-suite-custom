@@ -1,7 +1,7 @@
 import OBR, { buildImage } from "@owlbear-rodeo/sdk";
 import { ParsedMonster } from "./types";
 import { getRawMonster, makeSlug } from "./data";
-import { IMG_BASE } from "../characterCards/backend";
+import { GENERIC_PAWN_URL, pawnUrlFor } from "./token-fallback";
 
 // The bestiary panel iframe doesn't run startSceneSync(), so calling
 // getState() from src/state.ts here would return only DEFAULT_STATE.
@@ -86,18 +86,32 @@ function getImageSize(url: string): Promise<{ w: number; h: number }> {
 }
 
 /** Same as getImageSize but also reports whether the image actually
- *  loaded. Lets spawnMonster fall back to a placeholder when a
- *  homebrew monster has no token (the auto-built kiwee URL 404s). */
+ *  loaded. Lets spawnMonster fall back to a pawn when a monster has no
+ *  token image. Loaded with CORS, like OBR does for WebGL textures, so
+ *  a source that doesn't send CORS headers counts as unavailable; gives
+ *  up after PROBE_TIMEOUT_MS so an unreachable source can't stall the
+ *  spawn. */
+const PROBE_TIMEOUT_MS = 6000;
 function probeImage(url: string): Promise<{ ok: boolean; w: number; h: number }> {
   return new Promise((resolve) => {
     const img = new Image();
-    img.onload = () => resolve({ ok: true, w: img.naturalWidth, h: img.naturalHeight });
-    img.onerror = () => resolve({ ok: false, w: 280, h: 280 });
+    const timer = setTimeout(() => {
+      img.src = "";
+      resolve({ ok: false, w: 280, h: 280 });
+    }, PROBE_TIMEOUT_MS);
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      clearTimeout(timer);
+      resolve({ ok: true, w: img.naturalWidth, h: img.naturalHeight });
+    };
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve({ ok: false, w: 280, h: 280 });
+    };
     img.src = url;
   });
 }
 
-const FALLBACK_TOKEN_URL = `${IMG_BASE}/bestiary/tokens/MM/Commoner.webp`;
 
 /** Detect the right MIME type from a token URL extension. OBR's
  *  image-fetcher validates the ImageContent.mime field against the
@@ -126,19 +140,20 @@ export async function spawnMonster(
    *  jitter" behaviour for the click-to-spawn path. */
   position?: { x: number; y: number },
 ) {
-  // Probe the chosen tokenUrl up-front. If it 404s (typical for
-  // homebrew monsters whose auto-built kiwee URL doesn't exist),
-  // fall back to the Commoner placeholder so the token still spawns
-  // — DM can swap in a real image later via OBR's image picker.
-  let tokenUrl = monster.tokenUrl || FALLBACK_TOKEN_URL;
-  if (tokenUrl !== FALLBACK_TOKEN_URL) {
+  // Probe the chosen tokenUrl up-front. If it doesn't load (no image
+  // for this monster at the token-image source, source offline, CORS),
+  // fall back to the pawn for the creature type so the token still
+  // spawns — the DM can swap in a real image later via OBR's picker.
+  const pawnUrl = pawnUrlFor(monster.type);
+  let tokenUrl = monster.tokenUrl || pawnUrl;
+  if (tokenUrl !== pawnUrl && tokenUrl !== GENERIC_PAWN_URL) {
     const probe = await probeImage(tokenUrl);
     if (!probe.ok) {
       console.warn(
-        "[obr-suite/bestiary] tokenUrl 404, using Commoner fallback:",
+        "[obr-suite/bestiary] token image unavailable, using the creature-type pawn:",
         tokenUrl,
       );
-      tokenUrl = FALLBACK_TOKEN_URL;
+      tokenUrl = pawnUrl;
     }
   }
 

@@ -637,6 +637,33 @@ body{display:flex;flex-direction:column;border:1px solid var(--border-strong);bo
 }
 .lib-add-en-btn:hover{background:rgba(46,204,113,0.28)}
 
+/* Monster token images source (state.tokenImageBase) */
+.lib-img{
+  margin:0 0 14px;padding:10px 12px;
+  border:1px solid rgba(201,164,92,0.35);
+  background:rgba(201,164,92,0.08);
+  border-radius:6px;
+}
+.lib-img-title{font-weight:700;font-size:12px;margin-bottom:6px}
+.lib-img-note{font-size:11px;line-height:1.5;color:var(--text-dim);margin:0 0 6px}
+.lib-img-status{font-size:11px;margin:0 0 8px;word-break:break-all}
+.lib-img-row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.lib-img-input{
+  flex:1;min-width:0;padding:5px 8px;
+  background:rgba(0,0,0,0.25);color:inherit;
+  border:1px solid rgba(255,255,255,0.18);border-radius:4px;
+  font-size:11px;font-family:inherit;
+}
+.lib-img-save,.lib-img-clear,.lib-img-preset{
+  padding:5px 10px;border-radius:4px;font-size:11px;font-weight:700;
+  cursor:pointer;font-family:inherit;white-space:nowrap;
+  background:rgba(201,164,92,0.18);border:1px solid rgba(201,164,92,0.45);color:#e6c98a;
+}
+.lib-img-clear{background:rgba(231,76,60,0.14);border-color:rgba(231,76,60,0.35);color:#ff8b7a}
+.lib-img-save:hover,.lib-img-preset:hover{background:rgba(201,164,92,0.30)}
+.lib-img-clear:hover:not(:disabled){background:rgba(231,76,60,0.26)}
+.lib-img-clear:disabled{opacity:0.45;cursor:not-allowed}
+
 /* Preview button + diagnostic panel inside each library row */
 .lib-preview-btn{
   flex-shrink:0;

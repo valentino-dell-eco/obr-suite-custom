@@ -125,6 +125,12 @@ export interface SuiteState {
   // is a valid combo.
   crossSceneSyncCards: boolean;
   libraries: LibraryConfig[];
+  // Base URL of a token-image collection laid out like 5etools-img
+  // (`bestiary/tokens/<SOURCE>/<Name>.webp`), set by the GM in
+  // Settings → Libraries. Empty = no monster images: the bestiary uses
+  // a pawn for the creature type (modules/bestiary/token-fallback.ts).
+  // The suite ships no such images itself.
+  tokenImageBase: string;
 }
 
 export const DEFAULT_LIBRARIES: LibraryConfig[] = [
@@ -237,6 +243,7 @@ export const DEFAULT_STATE: SuiteState = {
   crossSceneSyncSettings: false,
   crossSceneSyncCards: false,
   libraries: DEFAULT_LIBRARIES,
+  tokenImageBase: "",
 };
 
 let cached: SuiteState = DEFAULT_STATE;
@@ -309,6 +316,10 @@ function merge(partial: any): SuiteState {
     crossSceneSyncCards:
       partial.crossSceneSyncCards ?? DEFAULT_STATE.crossSceneSyncCards,
     libraries,
+    tokenImageBase:
+      typeof partial.tokenImageBase === "string"
+        ? partial.tokenImageBase.trim().replace(/\/+$/, "")
+        : DEFAULT_STATE.tokenImageBase,
   };
 }
 
@@ -323,6 +334,7 @@ function suiteStateEqual(a: SuiteState, b: SuiteState): boolean {
   if (a.initiativeHidePercentHpBar !== b.initiativeHidePercentHpBar) return false;
   if (a.crossSceneSyncSettings !== b.crossSceneSyncSettings) return false;
   if (a.crossSceneSyncCards !== b.crossSceneSyncCards) return false;
+  if ((a.tokenImageBase ?? "") !== (b.tokenImageBase ?? "")) return false;
   for (const k of Object.keys(a.enabled) as ModuleId[]) {
     if (a.enabled[k] !== b.enabled[k]) return false;
   }
