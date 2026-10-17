@@ -29,7 +29,7 @@ export const GENERIC_PAWN_URL = assetUrl("monster-pawn.svg");
  *  a JSON blob (`{"choose":["beast","monstrosity"]}`) or a swarm
  *  ("swarm of Tiny beasts"). Pick the first known type mentioned. */
 export function creatureTypeOf(type: unknown): CreatureType | null {
-  const s = String(type ?? "").toLowerCase();
+  const s = (typeof type === "string" ? type : JSON.stringify(type ?? "")).toLowerCase();
   let best: { t: CreatureType; at: number } | null = null;
   for (const t of CREATURE_TYPES) {
     const at = s.indexOf(t);

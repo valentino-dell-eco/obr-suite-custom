@@ -2,6 +2,7 @@ import OBR, { buildImage } from "@owlbear-rodeo/sdk";
 import { ParsedMonster } from "./types";
 import { getRawMonster, makeSlug } from "./data";
 import { GENERIC_PAWN_URL, pawnUrlFor } from "./token-fallback";
+import { creatureImageFor } from "./token-image";
 
 // The bestiary panel iframe doesn't run startSceneSync(), so calling
 // getState() from src/state.ts here would return only DEFAULT_STATE.
@@ -144,9 +145,13 @@ export async function spawnMonster(
   // for this monster at the token-image source, source offline, CORS),
   // fall back to the pawn for the creature type so the token still
   // spawns — the DM can swap in a real image later via OBR's picker.
+  // An image the GM picked for this creature (monster card → image
+  // button) wins over the library image.
+  const slugForImage = makeSlug(monster.source, monster.engName);
+  const picked = await creatureImageFor(slugForImage);
   const pawnUrl = pawnUrlFor(monster.type);
-  let tokenUrl = monster.tokenUrl || pawnUrl;
-  if (tokenUrl !== pawnUrl && tokenUrl !== GENERIC_PAWN_URL) {
+  let tokenUrl = picked?.url || monster.tokenUrl || pawnUrl;
+  if (!picked && tokenUrl !== pawnUrl && tokenUrl !== GENERIC_PAWN_URL) {
     const probe = await probeImage(tokenUrl);
     if (!probe.ok) {
       console.warn(
@@ -168,7 +173,9 @@ export async function spawnMonster(
     OBR.viewport.getHeight(),
     OBR.viewport.getPosition(),
     OBR.viewport.getScale(),
-    getImageSize(tokenUrl),
+    picked && picked.url === tokenUrl
+      ? Promise.resolve({ w: picked.width, h: picked.height })
+      : getImageSize(tokenUrl),
   ]);
 
   let worldX: number;
@@ -263,7 +270,7 @@ export async function spawnMonster(
       width: imgSize.w,
       height: imgSize.h,
       url: tokenUrl,
-      mime: mimeFromUrl(tokenUrl),
+      mime: picked && picked.url === tokenUrl ? picked.mime : mimeFromUrl(tokenUrl),
     },
     { dpi: imgSize.w, offset: { x: halfW, y: halfH } }
   )
@@ -278,7 +285,7 @@ export async function spawnMonster(
   // When auto-name is on, prefill the OBR-native plainText label so
   // players see the monster's display name under the token without
   // the DM needing to click-sync per token. Mirrors the shape used by
-  // monster-info-page.ts → toggleTokenNameText.
+  // the old monster-info name-click (now the HP bar name tag).
   if (autoName) {
     const anyItem = item as any;
     anyItem.text = {

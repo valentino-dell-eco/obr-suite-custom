@@ -171,6 +171,16 @@ function buildTokenUrl(m: any, imgBase: string): string {
   return `${imgBase}/bestiary/tokens/${src}/${encodeURIComponent(nameToTokenName(nm))}.webp`;
 }
 
+/** Library token image URL for a raw monster ("" when there is none:
+ *  no token-image source set, or the monster has no image there). */
+export function libraryTokenUrl(m: any, imgBase: string): string {
+  try {
+    return buildTokenUrl(m, imgBase.trim().replace(/\/+$/, ""));
+  } catch {
+    return "";
+  }
+}
+
 /** Parse a 5etools-style HP block to a single number. The standard
  *  shape is `{ average: 63, formula: "7d10+21" }` but homebrew /
  *  custom bestiary entries sometimes use `{ special: "96" }` (or

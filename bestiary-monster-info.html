@@ -104,7 +104,7 @@ html,body{
 .name{font-size:15px;font-weight:700;color:#e94560;flex-shrink:0;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .name-wrap{display:flex;align-items:center;gap:5px;min-width:0;flex-shrink:0}
 /* When a token is selected the name renders as a button so clicking
-   it syncs/clears the token's plainText label. Same visual size as
+   it shows / hides the token's HP bar name tag. Same visual size as
    the static .name div; hover halo + cursor:pointer advertise click
    affordance. */
 button.name.name-btn{
@@ -123,6 +123,36 @@ button.name.name-btn:active{transform:scale(0.97)}
 button.name.name-btn:focus-visible{
   outline:1px dashed rgba(233,69,96,.65);outline-offset:2px;
 }
+/* Name tag on (HP bar name plate shown on this token): underline. */
+button.name.name-btn.tag-on{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px}
+/* Per-creature token image button + menu (GM). */
+.img-wrap{position:relative;flex-shrink:0}
+.img-btn{
+  appearance:none;border:none;background:transparent;padding:2px;margin:0;
+  width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;
+  color:rgba(255,255,255,0.55);cursor:pointer;border-radius:4px;
+  transition:color .12s, background .12s;
+}
+.img-btn:hover{color:#fff;background:rgba(255,255,255,0.08)}
+.img-btn svg{width:15px;height:15px;display:block;pointer-events:none}
+.img-menu{
+  position:absolute;top:26px;left:0;z-index:50;min-width:250px;
+  background:#1d2333;border:1px solid rgba(255,255,255,0.14);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.45);padding:6px;
+}
+.img-menu[hidden]{display:none}
+.img-menu-title{font-size:10.5px;color:rgba(255,255,255,0.55);padding:2px 6px 6px}
+.img-opt{
+  appearance:none;display:flex;align-items:center;gap:6px;width:100%;
+  border:none;background:transparent;color:#e8ecf4;text-align:left;
+  font-family:inherit;font-size:12px;padding:6px;border-radius:5px;cursor:pointer;
+}
+.img-opt:hover{background:rgba(255,255,255,0.08)}
+.img-opt.active{color:#7ec8f0;font-weight:700}
+.img-check{width:12px;flex-shrink:0;text-align:center}
+.img-menu-note{font-size:10.5px;color:rgba(255,255,255,0.45);padding:6px 6px 2px;line-height:1.4}
+.img-menu-status{font-size:10.5px;color:#9fe0b0;padding:2px 6px 0;min-height:0}
+.img-menu-status:empty{display:none}
 button.name.name-btn:disabled{opacity:0.5;cursor:wait}
 .sub{font-size:11px;color:#aaa;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 

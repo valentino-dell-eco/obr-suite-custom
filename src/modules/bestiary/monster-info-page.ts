@@ -19,6 +19,26 @@ import {
 } from "../../utils/statEdit";
 import { mountResourcePanel } from "../resourceTracker/panel";
 import { getLocalLang, onLangChange } from "../../state";
+import { libraryTokenUrl } from "./data";
+import {
+  creatureImageFor,
+  resolveLibraryImage,
+  setCreatureImage,
+  type CreatureImage,
+} from "./token-image";
+
+// Name tag = the HP bar's name plate (bubbles/index.ts → buildNamePlate):
+// a per-token flag, drawn only while the scene setting "Show token
+// name" (HP bar settings) is on.
+const NAME_SHOW_KEY = "com.obr-suite/bubbles/name-show";
+const BUBBLES_SETTINGS_KEY = "com.obr-suite/bubbles/settings";
+const SUITE_STATE_KEY = "com.obr-suite/state";
+let nameTagOn = false;
+let sceneShowTokenName = false;
+// Suite tokenImageBase (scene metadata) — for the library image.
+let sceneTokenImageBase = "";
+// Raw monster data currently shown (for the token-image menu).
+let currentRaw: any = null;
 
 // 2026-05-10: language-aware section titles, ability labels, save /
 // check labels, etc. Foreign players using the kiwee Chinese mirror
@@ -241,39 +261,159 @@ const FULL: Record<string, string> = {
 const ORDER: Array<"str" | "dex" | "con" | "int" | "wis" | "cha"> =
   ["str", "dex", "con", "int", "wis", "cha"];
 
+function nameTagTitle(): string {
+  const en = _curLang === "en";
+  const base = nameTagOn
+    ? (en ? "Click → hide the name tag" : "点击 → 隐藏名字标签")
+    : (en ? "Click → show the name tag" : "点击 → 显示名字标签");
+  if (sceneShowTokenName) return base;
+  return base + (en
+    ? " (turn on “Show token name” in the HP bar settings to see it)"
+    : "（需在血条设置中开启「显示 token 名字」才会显示）");
+}
+
 function renderNameButton(name: string, clickable: boolean): string {
   if (!clickable) {
     return `<div class="name">${escapeHtml(name)}</div>`;
   }
-  const title = _curLang === "en"
-    ? `Click → set / clear token name: ${name}`
-    : `点击 → 同步 / 清除 token 名字：${name}`;
-  return `<button class="name name-btn" type="button" data-name-text="${escapeHtml(name)}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(name)}</button>`;
+  const title = nameTagTitle();
+  return `<button class="name name-btn${nameTagOn ? " tag-on" : ""}" type="button" aria-pressed="${nameTagOn}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(name)}</button>`;
 }
 
-async function toggleTokenNameText(itemId: string, name: string, btn: HTMLButtonElement): Promise<void> {
-  const cleanName = name.trim();
-  if (!cleanName) return;
+function refreshNameButton(): void {
+  const btn = root.querySelector<HTMLButtonElement>(".name-btn");
+  if (!btn) return;
+  btn.classList.toggle("tag-on", nameTagOn);
+  btn.setAttribute("aria-pressed", String(nameTagOn));
+  const title = nameTagTitle();
+  btn.title = title;
+  btn.setAttribute("aria-label", title);
+}
+
+/** Show / hide the HP bar name tag on this token. */
+async function toggleNameTag(itemId: string, btn: HTMLButtonElement): Promise<void> {
   btn.disabled = true;
+  const next = !nameTagOn;
   try {
-    const items = await OBR.scene.items.getItems([itemId]);
-    const current = String((items[0] as any)?.text?.plainText ?? "").trim();
-    const next = current === cleanName ? "" : cleanName;
     await OBR.scene.items.updateItems([itemId], (drafts) => {
       for (const d of drafts) {
-        const anyDraft = d as any;
-        anyDraft.text = {
-          ...(anyDraft.text ?? {}),
-          type: anyDraft.text?.type ?? "PLAIN",
-          plainText: next,
-        };
+        if (next) (d.metadata as Record<string, unknown>)[NAME_SHOW_KEY] = true;
+        else delete (d.metadata as Record<string, unknown>)[NAME_SHOW_KEY];
       }
     });
+    nameTagOn = next;
+    refreshNameButton();
   } catch (e) {
-    console.warn("[monster-info] toggle token name text failed", e);
+    console.warn("[monster-info] toggle name tag failed", e);
   } finally {
     btn.disabled = false;
   }
+}
+
+// === Token image (per creature) =============================================
+
+function renderImageButton(): string {
+  const en = _curLang === "en";
+  const t = en ? "Token image for this creature" : "此生物的 token 图片";
+  return `<div class="img-wrap gm-only">
+      <button class="img-btn" id="token-img-btn" type="button" title="${t}" aria-label="${t}" aria-haspopup="menu">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">
+          <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6"/>
+          <circle cx="5.6" cy="6.4" r="1.3"/>
+          <path d="M2.4 12.2 L6.4 8.6 L9 10.8 L11 9 L13.8 11.6"/>
+        </svg>
+      </button>
+      <div class="img-menu" id="token-img-menu" role="menu" hidden></div>
+    </div>`;
+}
+
+async function openImageMenu(menu: HTMLElement): Promise<void> {
+  const slug = currentSlug;
+  if (!slug) return;
+  const en = _curLang === "en";
+  const picked = await creatureImageFor(slug);
+  if (currentSlug !== slug) return;
+  menu.innerHTML = `
+    <div class="img-menu-title">${en ? "Token image — all tokens of this creature" : "Token 图片 — 此生物的所有 token"}</div>
+    <button class="img-opt${picked ? "" : " active"}" data-act="library" type="button" role="menuitemradio" aria-checked="${!picked}">
+      <span class="img-check">${picked ? "" : "✓"}</span>${en ? "Library image" : "库图片"}
+    </button>
+    <button class="img-opt${picked ? " active" : ""}" data-act="pick" type="button" role="menuitemradio" aria-checked="${!!picked}">
+      <span class="img-check">${picked ? "✓" : ""}</span>${en ? "Choose from my Owlbear Rodeo library…" : "从我的 Owlbear Rodeo 素材库选择…"}
+    </button>
+    <div class="img-menu-note">${en
+      ? "Tokens whose image you replaced by hand keep their own image."
+      : "手动替换过图片的 token 保留各自的图片。"}</div>
+    <div class="img-menu-status" aria-live="polite"></div>`;
+  menu.hidden = false;
+}
+
+async function applyImageChoice(act: "library" | "pick", menu: HTMLElement): Promise<void> {
+  const slug = currentSlug;
+  const m = currentRaw;
+  if (!slug || !m) return;
+  const en = _curLang === "en";
+  const status = menu.querySelector<HTMLElement>(".img-menu-status");
+  const say = (txt: string) => { if (status) status.textContent = txt; };
+  try {
+    let img: CreatureImage | null = null;
+    if (act === "pick") {
+      const name = stripTags(m.ENG_name ?? m.name ?? "");
+      const res = await OBR.assets.downloadImages(false, name, "CHARACTER");
+      const first = res?.[0];
+      if (!first?.image?.url) return; // cancelled
+      img = {
+        url: first.image.url,
+        mime: first.image.mime,
+        width: first.image.width,
+        height: first.image.height,
+      };
+    }
+    say(en ? "Updating tokens…" : "正在更新 token…");
+    const libUrl = libraryTokenUrl(m, sceneTokenImageBase);
+    const library = await resolveLibraryImage(libUrl, m.type);
+    const n = await setCreatureImage(slug, img, library, libUrl, m.type);
+    if (currentSlug !== slug) return;
+    await openImageMenu(menu);
+    const st = menu.querySelector<HTMLElement>(".img-menu-status");
+    if (st) {
+      st.textContent = en
+        ? `Done — ${n} token${n === 1 ? "" : "s"} updated.`
+        : `完成 — 已更新 ${n} 个 token。`;
+    }
+  } catch (e) {
+    console.warn("[monster-info] token image change failed", e);
+    say(en ? "Couldn't change the image." : "无法更改图片。");
+  }
+}
+
+function bindImageMenu(): void {
+  const btn = root.querySelector<HTMLButtonElement>("#token-img-btn");
+  const menu = root.querySelector<HTMLElement>("#token-img-menu");
+  if (!btn || !menu) return;
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!menu.hidden) {
+      menu.hidden = true;
+      return;
+    }
+    void openImageMenu(menu);
+  });
+  menu.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const opt = (e.target as HTMLElement).closest<HTMLButtonElement>(".img-opt");
+    if (!opt) return;
+    const act = opt.dataset.act === "pick" ? "pick" : "library";
+    void applyImageChoice(act, menu);
+  });
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!menu.hidden && !menu.contains(e.target as Node) && e.target !== btn) menu.hidden = true;
+    },
+    { capture: true },
+  );
 }
 
 function mod(score: number): number {
@@ -643,6 +783,9 @@ function applyRoleGating() {
   });
   root.querySelectorAll<HTMLElement>(".use-card-stats-row").forEach((el) => {
     el.style.display = isGMRole ? "" : "none";
+  });  // Per-creature token image: GM only (changes every token of it).
+  root.querySelectorAll<HTMLElement>(".img-wrap").forEach((el) => {
+    el.style.display = isGMRole ? "" : "none";
   });
 }
 
@@ -659,6 +802,7 @@ async function adjustHeight() {
 }
 
 function render(m: any) {
+  currentRaw = m;
   // 2026-05-10: snapshot language at the top of every render so all
   // i18n branches see the same value, even if the user flips lang
   // mid-render via a broadcast (would otherwise produce mixed-lang
@@ -934,6 +1078,7 @@ function render(m: any) {
       </button>
       <div class="name-wrap">
         ${renderNameButton(name, !!currentItemId)}
+        ${renderImageButton()}
       </div>
       <div class="sub">${escapeHtml(sub)}</div>
     </div>
@@ -979,12 +1124,13 @@ function render(m: any) {
     });
   }
   bindStatRowInputs();
-  const nameBtn = root.querySelector<HTMLButtonElement>(".name-btn[data-name-text]");
+  const nameBtn = root.querySelector<HTMLButtonElement>(".name-btn");
   if (nameBtn && currentItemId) {
     nameBtn.addEventListener("click", () => {
-      void toggleTokenNameText(currentItemId!, nameBtn.dataset.nameText || name, nameBtn);
+      void toggleNameTag(currentItemId!, nameBtn);
     });
   }
+  bindImageMenu();
   // Re-apply role gating after each render — fresh DOM nodes need
   // their readOnly / display state set.
   applyRoleGating();
@@ -1208,6 +1354,8 @@ async function syncFromExternal(): Promise<void> {
     const meta = (items[0]?.metadata as Record<string, unknown> | undefined) ?? {};
     currentTokenHasCcBind = typeof meta[CC_BIND_KEY] === "string" && !!meta[CC_BIND_KEY];
     useCardStats = meta[USE_CARD_STATS_KEY] === true;
+    nameTagOn = meta[NAME_SHOW_KEY] === true;
+    refreshNameButton();
   } catch {}
   let live: BubblesData = {};
   try { live = await readBubbles(currentItemId, activeMetaKey()); } catch {}
@@ -1350,7 +1498,7 @@ async function showMonster(slug: string, itemId: string | null = currentItemId) 
   // character-card binding, and if so what's the GM's current
   // "useCardStats" choice for it. Both default to false/off when the
   // token (or its metadata) can't be read.
-  const tokenInfoP: Promise<{ owns: boolean; hasCcBind: boolean; useCard: boolean }> = itemId
+  const tokenInfoP: Promise<{ owns: boolean; hasCcBind: boolean; useCard: boolean; tagOn: boolean }> = itemId
     ? OBR.scene.items
         .getItems([itemId])
         .then((arr) => {
@@ -1359,10 +1507,11 @@ async function showMonster(slug: string, itemId: string | null = currentItemId) 
           const meta = (it?.metadata as Record<string, unknown> | undefined) ?? {};
           const hasCcBind = typeof meta[CC_BIND_KEY] === "string" && !!meta[CC_BIND_KEY];
           const useCard = meta[USE_CARD_STATS_KEY] === true;
-          return { owns, hasCcBind, useCard };
+          const tagOn = meta[NAME_SHOW_KEY] === true;
+          return { owns, hasCcBind, useCard, tagOn };
         })
-        .catch(() => ({ owns: false, hasCcBind: false, useCard: false }))
-    : Promise.resolve({ owns: false, hasCcBind: false, useCard: false });
+        .catch(() => ({ owns: false, hasCcBind: false, useCard: false, tagOn: false }))
+    : Promise.resolve({ owns: false, hasCcBind: false, useCard: false, tagOn: false });
   try {
     const [meta, tokenInfo] = await Promise.all([
       OBR.scene.getMetadata(),
@@ -1374,6 +1523,11 @@ async function showMonster(slug: string, itemId: string | null = currentItemId) 
     isOwner = tokenInfo.owns;
     currentTokenHasCcBind = tokenInfo.hasCcBind;
     useCardStats = tokenInfo.useCard;
+    nameTagOn = tokenInfo.tagOn;
+    const bubbleSettings = meta[BUBBLES_SETTINGS_KEY] as { showTokenName?: unknown } | undefined;
+    sceneShowTokenName = !!bubbleSettings?.showTokenName;
+    const suiteState = meta[SUITE_STATE_KEY] as { tokenImageBase?: unknown } | undefined;
+    sceneTokenImageBase = typeof suiteState?.tokenImageBase === "string" ? suiteState.tokenImageBase : "";
     // Load the bound token's bubbles snapshot from whichever
     // namespace is currently active for this token. render() reads
     // liveBubbles for the editable HP/AC rows.
