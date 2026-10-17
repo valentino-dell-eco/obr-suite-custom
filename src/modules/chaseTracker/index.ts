@@ -27,7 +27,7 @@
 //      opens an inline distance editor docked at the bottom of the
 //      popover — no separate modal.
 
-import OBR from "@owlbear-rodeo/sdk";
+import OBR, { type Item } from "@owlbear-rodeo/sdk";
 import { assetUrl } from "../../asset-base";
 import { IS_MOBILE } from "../../feature-flags";
 import { getLocalLang } from "../../state";
@@ -197,14 +197,12 @@ async function openPursuerPicker(tokenId: string): Promise<void> {
 async function sweepMissingTokens(): Promise<void> {
   if (!isGM) return;
   const chases = await readChases();
-  if (chases.length === 0) return;
-  const allIds = new Set(chases.flatMap((c) => c.participants.map((p) => p.tokenId)));
-  if (allIds.size === 0) return;
-  let existing: Set<string>;
-  try {
-    const items = await OBR.scene.items.getItems([...allIds]);
-    existing = new Set(items.map((i) => i.id));
-  } catch { return; }
+  let all: Item[];
+  try { all = await OBR.scene.items.getItems(); } catch { return; }
+  const existing = new Set(all.map((i) => i.id));
+
+  // 1) Drop participants whose token was deleted; drop a chase whose
+  //    quarry is gone (or that has nobody left).
   let changed = false;
   const next: ChaseEntry[] = [];
   for (const chase of chases) {
@@ -220,6 +218,38 @@ async function sweepMissingTokens(): Promise<void> {
     next.push({ ...chase, participants });
   }
   if (changed) await writeChases(next);
+
+  // 2) The chase list is the truth: clear the "member of" flag on any
+  //    token that isn't actually in the chase it points at. Stale flags
+  //    hide the "Add to Chase" menu entries; they come from copied /
+  //    duplicated member tokens (the flag is copied with the metadata),
+  //    tokens of a chase dropped because its quarry was deleted, or
+  //    scenes duplicated mid-chase.
+  const memberOf = new Map<string, string>();
+  for (const c of next) for (const p of c.participants) memberOf.set(p.tokenId, c.id);
+  const stale = all
+    .filter((it) => {
+      const flag = (it.metadata as Record<string, unknown>)[MEMBER_KEY];
+      return flag !== undefined && memberOf.get(it.id) !== flag;
+    })
+    .map((it) => it.id);
+  if (stale.length) {
+    try {
+      await OBR.scene.items.updateItems(stale, (items) => {
+        for (const item of items) delete (item.metadata as Record<string, unknown>)[MEMBER_KEY];
+      });
+    } catch {}
+  }
+}
+
+/** items.onChange fires on every drag frame — coalesce the sweep. */
+let sweepTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleSweep(): void {
+  if (sweepTimer) clearTimeout(sweepTimer);
+  sweepTimer = setTimeout(() => {
+    sweepTimer = null;
+    void sweepMissingTokens();
+  }, 400);
 }
 
 async function registerContextMenus(): Promise<void> {
@@ -332,9 +362,9 @@ export async function setupChaseTracker(): Promise<void> {
     console.warn("[chase-tracker] shortcut action failed", e);
   }
 
-  unsubs.push(OBR.scene.onMetadataChange(() => { void refreshOverlay(); }));
+  unsubs.push(OBR.scene.onMetadataChange(() => { void refreshOverlay(); scheduleSweep(); }));
   unsubs.push(
-    OBR.scene.items.onChange(() => { void sweepMissingTokens(); }),
+    OBR.scene.items.onChange(() => { scheduleSweep(); }),
   );
   unsubs.push(
     OBR.scene.onReadyChange((ready) => {
@@ -381,6 +411,10 @@ export async function setupChaseTracker(): Promise<void> {
 }
 
 export async function teardownChaseTracker(): Promise<void> {
+  if (sweepTimer) {
+    clearTimeout(sweepTimer);
+    sweepTimer = null;
+  }
   for (const u of unsubs.splice(0)) {
     try { u(); } catch {}
   }
