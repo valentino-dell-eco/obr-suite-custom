@@ -13,6 +13,12 @@ import {
 } from "../../utils/panelLayout";
 import { BC_LOCAL_CONTENT_CHANGED } from "../../utils/localContent";
 import { clearMonsterCache, loadAllMonsters, getRawMonster } from "./data";
+import {
+  BC_CREATURE_IMAGE,
+  BC_CREATURE_IMAGE_DONE,
+  handleCreatureImageRequest,
+  type CreatureImageRequest,
+} from "./token-image";
 import { onStateChange, getState, getLocalLang } from "../../state";
 import { createCanvasDragMode } from "../../utils/canvasDragMode";
 import {
@@ -446,6 +452,23 @@ export async function setupBestiary(): Promise<void> {
   // metadata, so without an overwrite-pass a modified local file
   // wouldn't propagate to currently-bound tokens (the user reported
   // "删除重新上传也没用 / re-upload doesn't update" 2026-05-10).
+  // Monster card → per-creature token image (runs here, not in the
+  // card popover, which can close while OBR's asset picker is open).
+  let creatureImageBusy = false;
+  unsubs.push(
+    OBR.broadcast.onMessage(BC_CREATURE_IMAGE, async (event) => {
+      if (creatureImageBusy) return;
+      creatureImageBusy = true;
+      try {
+        const result = await handleCreatureImageRequest(event.data as CreatureImageRequest);
+        try {
+          await OBR.broadcast.sendMessage(BC_CREATURE_IMAGE_DONE, result, { destination: "LOCAL" });
+        } catch {}
+      } finally {
+        creatureImageBusy = false;
+      }
+    }),
+  );
   unsubs.push(
     OBR.broadcast.onMessage(BC_LOCAL_CONTENT_CHANGED, () => {
       clearMonsterCache();

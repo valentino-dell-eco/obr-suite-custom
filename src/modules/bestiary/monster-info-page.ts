@@ -21,10 +21,11 @@ import { mountResourcePanel } from "../resourceTracker/panel";
 import { getLocalLang, onLangChange } from "../../state";
 import { libraryTokenUrl } from "./data";
 import {
+  BC_CREATURE_IMAGE,
+  BC_CREATURE_IMAGE_DONE,
   creatureImageFor,
-  resolveLibraryImage,
-  setCreatureImage,
-  type CreatureImage,
+  type CreatureImageRequest,
+  type CreatureImageResult,
 } from "./token-image";
 
 // Name tag = the HP bar's name plate (bubbles/index.ts → buildNamePlate):
@@ -354,37 +355,46 @@ async function applyImageChoice(act: "library" | "pick", menu: HTMLElement): Pro
   if (!slug || !m) return;
   const en = _curLang === "en";
   const status = menu.querySelector<HTMLElement>(".img-menu-status");
-  const say = (txt: string) => { if (status) status.textContent = txt; };
-  try {
-    let img: CreatureImage | null = null;
-    if (act === "pick") {
-      const name = stripTags(m.ENG_name ?? m.name ?? "");
-      const res = await OBR.assets.downloadImages(false, name, "CHARACTER");
-      const first = res?.[0];
-      if (!first?.image?.url) return; // cancelled
-      img = {
-        url: first.image.url,
-        mime: first.image.mime,
-        width: first.image.width,
-        height: first.image.height,
-      };
-    }
-    say(en ? "Updating tokens…" : "正在更新 token…");
-    const libUrl = libraryTokenUrl(m, sceneTokenImageBase);
-    const library = await resolveLibraryImage(libUrl, m.type);
-    const n = await setCreatureImage(slug, img, library, libUrl, m.type);
-    if (currentSlug !== slug) return;
-    await openImageMenu(menu);
-    const st = menu.querySelector<HTMLElement>(".img-menu-status");
-    if (st) {
-      st.textContent = en
-        ? `Done — ${n} token${n === 1 ? "" : "s"} updated.`
-        : `完成 — 已更新 ${n} 个 token。`;
-    }
-  } catch (e) {
-    console.warn("[monster-info] token image change failed", e);
-    say(en ? "Couldn't change the image." : "无法更改图片。");
+  if (status) {
+    status.textContent = act === "pick"
+      ? (en ? "Pick an image in the Owlbear Rodeo window…" : "请在 Owlbear Rodeo 窗口中选择图片…")
+      : (en ? "Updating tokens…" : "正在更新 token…");
   }
+  // The background page does the work (OBR's picker + token updates):
+  // this popover may close while the picker is open.
+  const req: CreatureImageRequest = {
+    slug,
+    act,
+    libraryUrl: libraryTokenUrl(m, sceneTokenImageBase),
+    type: m.type,
+    name: stripTags(m.ENG_name ?? m.name ?? ""),
+  };
+  try {
+    await OBR.broadcast.sendMessage(BC_CREATURE_IMAGE, req, { destination: "LOCAL" });
+  } catch (e) {
+    console.warn("[monster-info] token image request failed", e);
+    if (status) status.textContent = en ? "Couldn't change the image." : "无法更改图片。";
+  }
+}
+
+async function onCreatureImageDone(res: CreatureImageResult): Promise<void> {
+  const menu = root.querySelector<HTMLElement>("#token-img-menu");
+  if (!menu || menu.hidden || res?.slug !== currentSlug) return;
+  const en = _curLang === "en";
+  if (res.cancelled) {
+    const st = menu.querySelector<HTMLElement>(".img-menu-status");
+    if (st) st.textContent = "";
+    return;
+  }
+  await openImageMenu(menu);
+  const st = menu.querySelector<HTMLElement>(".img-menu-status");
+  if (!st) return;
+  const n = res.updated ?? 0;
+  st.textContent = !res.ok
+    ? (en ? "Couldn't change the image." : "无法更改图片。")
+    : en
+      ? `Done — ${n} token${n === 1 ? "" : "s"} updated.`
+      : `完成 — 已更新 ${n} 个 token。`;
 }
 
 function bindImageMenu(): void {
@@ -1651,6 +1661,9 @@ bindRollableClickPopup(
 );
 
 OBR.onReady(async () => {
+  OBR.broadcast.onMessage(BC_CREATURE_IMAGE_DONE, (event) => {
+    void onCreatureImageDone(event.data as CreatureImageResult);
+  });
   installDebugOverlay();
   subscribeToSfx();
   // Capture the popover's opened height as the ceiling for future resizes.

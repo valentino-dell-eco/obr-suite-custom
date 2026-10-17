@@ -18,6 +18,30 @@ import OBR, { type Item } from "@owlbear-rodeo/sdk";
 import { GENERIC_PAWN_URL, pawnUrlFor } from "./token-fallback";
 
 export const TOKEN_IMAGES_KEY = "com.obr-suite/bestiary/token-images";
+/** monster card → background: change a creature's image (LOCAL). The
+ *  work runs in the background page because the monster-card popover
+ *  can close while OBR's asset picker is open. */
+export const BC_CREATURE_IMAGE = "com.obr-suite/bestiary/creature-image";
+/** background → monster card: result of BC_CREATURE_IMAGE (LOCAL). */
+export const BC_CREATURE_IMAGE_DONE = "com.obr-suite/bestiary/creature-image-done";
+
+export interface CreatureImageRequest {
+  slug: string;
+  act: "library" | "pick";
+  /** Library image URL for the monster ("" = none). */
+  libraryUrl: string;
+  /** Raw 5etools creature type (to pick its pawn). */
+  type: unknown;
+  /** Search text for OBR's asset picker. */
+  name: string;
+}
+
+export interface CreatureImageResult {
+  slug: string;
+  ok: boolean;
+  cancelled?: boolean;
+  updated?: number;
+}
 const BESTIARY_SLUG_KEY = "com.bestiary/slug";
 
 export interface CreatureImage {
@@ -116,12 +140,24 @@ export async function setCreatureImage(
   await OBR.scene.setMetadata({ [TOKEN_IMAGES_KEY]: all });
 
   const target = img ?? library;
-  // Images that count as "not customised by hand".
+  // Images that count as "not customised by hand": the creature's
+  // previous image, its library image / pawn, and any image the
+  // bestiary itself sets — a 5etools-layout token image from any host
+  // (old tokens spawned via obr.dnd.center or an earlier source) or one
+  // of the suite's pawns. Anything else (an asset from someone's OBR
+  // library put there with "Replace image", a pre-existing token bound
+  // to the bestiary) is left alone.
   const managed = new Set<string>(
     [previous?.url, libraryUrl, library.url, pawnUrlFor(type), GENERIC_PAWN_URL].filter(
       (u): u is string => !!u,
     ),
   );
+  const isManaged = (url: string) =>
+    managed.has(url) ||
+    /\/bestiary\/tokens\//i.test(url) ||
+    /\/5etools-img\//i.test(url) ||
+    /\/pawns\/[a-z]+\.svg(\?|#|$)/i.test(url) ||
+    /\/monster-pawn\.svg(\?|#|$)/i.test(url);
   let items: Item[] = [];
   try {
     items = await OBR.scene.items.getItems(
@@ -133,7 +169,7 @@ export async function setCreatureImage(
   const ids = items
     .filter((it) => {
       const url = (it as Item & { image?: { url?: string } }).image?.url;
-      return !!url && managed.has(url) && url !== target.url;
+      return !!url && isManaged(url) && url !== target.url;
     })
     .map((it) => it.id);
   if (!ids.length) return 0;
@@ -148,4 +184,31 @@ export async function setCreatureImage(
     }
   });
   return ids.length;
+}
+
+/** Background handler for BC_CREATURE_IMAGE. */
+export async function handleCreatureImageRequest(req: CreatureImageRequest): Promise<CreatureImageResult> {
+  const slug = String(req?.slug ?? "");
+  if (!slug) return { slug, ok: false };
+  try {
+    let img: CreatureImage | null = null;
+    if (req.act === "pick") {
+      const res = await OBR.assets.downloadImages(false, String(req.name ?? ""), "CHARACTER");
+      const first = res?.[0];
+      if (!first?.image?.url) return { slug, ok: false, cancelled: true };
+      img = {
+        url: first.image.url,
+        mime: first.image.mime,
+        width: first.image.width,
+        height: first.image.height,
+      };
+    }
+    const libraryUrl = String(req.libraryUrl ?? "");
+    const library = await resolveLibraryImage(libraryUrl, req.type);
+    const updated = await setCreatureImage(slug, img, library, libraryUrl, req.type);
+    return { slug, ok: true, updated };
+  } catch (e) {
+    console.warn("[bestiary] creature image change failed", e);
+    return { slug, ok: false };
+  }
 }
