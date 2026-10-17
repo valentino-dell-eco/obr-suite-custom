@@ -1658,6 +1658,7 @@ bindRollableClickPopup(
   root,
   () => resolveClickRollTarget(),
   iframeOriginGetter,
+  { statSource: "form" },
 );
 
 OBR.onReady(async () => {

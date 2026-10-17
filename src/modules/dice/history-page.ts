@@ -73,6 +73,17 @@ interface HistoryEntry {
   // strip can render `+mod × N` and a `repeat×N` tag instead of a
   // single mod chip whose math no longer matches the total.
   rowStarts?: number[];
+  /** Sheet used for stat keywords: character card / bestiary form. */
+  statSource?: "chara" | "form";
+}
+
+/** "Chara" / "Form" tag for rolls made with the quick roll modal's
+ *  sheet chips (token with both a character card and a bestiary form). */
+function statSourceTag(h: { statSource?: "chara" | "form" }): string {
+  if (h.statSource !== "chara" && h.statSource !== "form") return "";
+  const zh = getLocalLang() === "zh";
+  const txt = h.statSource === "form" ? (zh ? "形态" : "Form") : (zh ? "角色" : "Chara");
+  return `<span class="src-tag src-${h.statSource}">${txt}</span>`;
 }
 
 // Currently-active replay's collective-id (LOCAL state — set when this
@@ -429,7 +440,7 @@ function render(): void {
         <div class="swatch" style="--player-color:${escapeHtml(String(h.rollerColor))}"></div>
         <div class="body">
           <div class="line1">
-            <span class="player">${dmTag}${darkTag}${collTag}${repeatTag}${escapeHtml(rollDisplayName(h))}</span>
+            <span class="player">${dmTag}${darkTag}${collTag}${repeatTag}${statSourceTag(h)}${escapeHtml(rollDisplayName(h))}</span>
             <span class="ago">${formatAgo(Date.now() - h.ts)}</span>
           </div>
           ${bodyTail}
@@ -680,7 +691,7 @@ function renderHistoryBlock(cid: string, members: HistoryEntry[]): string {
     <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${escapeHtml(String(head.rollerColor))}">
       <div class="body">
         <div class="line1">
-          <span class="player">${darkTag}${collTag}${labelOrName}</span>
+          <span class="player">${darkTag}${collTag}${statSourceTag(head)}${labelOrName}</span>
           <span class="ago">${ago}</span>
         </div>
         ${buildMemberStripHtml(members)}
@@ -724,7 +735,7 @@ function renderEntryRow(h: HistoryEntry, cid: string, tight: boolean): string {
     <div class="${cls.join(" ")}" data-cid="${escapeHtml(cid)}" style="--player-color:${escapeHtml(String(h.rollerColor))}">
       <div class="body">
         <div class="line1">
-          <span class="player">${h.hidden && !tight ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>` : ""}${escapeHtml(h.label || rollDisplayName(h))}</span>
+          <span class="player">${h.hidden && !tight ? `<span class="dark-tag">${tt("diceHistDarkTag")}</span>` : ""}${statSourceTag(h)}${escapeHtml(h.label || rollDisplayName(h))}</span>
           <span class="ago">${ago}</span>
         </div>
         ${body}

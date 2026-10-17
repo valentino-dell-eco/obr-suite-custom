@@ -1524,7 +1524,7 @@ bindRollableContextMenu(
   ccIframeOriginGetter,
 );
 // LEFT-click → quick-pick popup (劣势 / 普通 / 优势 + 重击).
-bindRollableClickPopup(root, () => resolveBoundToken(), ccIframeOriginGetter);
+bindRollableClickPopup(root, () => resolveBoundToken(), ccIframeOriginGetter, { statSource: "chara" });
 
 OBR.onReady(async () => {
   installDebugOverlay();

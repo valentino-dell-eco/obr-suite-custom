@@ -74,6 +74,9 @@ export interface ChatCast {
   /** Dice rewritten for the cast level (slot upcast) or the caster's
    *  level (cantrip scaling), e.g. [{ from: "8d6", to: "10d6" }]. */
   scaled?: Array<{ from: string; to: string }>;
+  /** Token of the character card that posted it: dice in the card roll
+   *  for that token (quick roll modal, card stats). */
+  tokenId?: string;
 }
 
 export interface ChatMessage {

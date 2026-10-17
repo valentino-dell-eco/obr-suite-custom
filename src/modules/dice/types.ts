@@ -128,6 +128,8 @@ export interface SanitizedRoll {
   sameHighlight?: boolean;
   collectiveId?: string;
   rowStarts?: number[];
+  /** Sheet used for stat keywords: character card or bestiary form. */
+  statSource?: "chara" | "form";
 }
 
 /** Returns a clean copy of a roll payload, or null if it isn't one. */
@@ -163,6 +165,7 @@ export function sanitizeRollPayload(raw: unknown): SanitizedRoll | null {
   if (r.autoDismiss) out.autoDismiss = true;
   if (r.sameHighlight) out.sameHighlight = true;
   if (typeof r.collectiveId === "string" && r.collectiveId) out.collectiveId = r.collectiveId;
+  if (r.statSource === "chara" || r.statSource === "form") out.statSource = r.statSource;
   if (Array.isArray(r.rowStarts)) {
     out.rowStarts = r.rowStarts
       .map((n) => Number(n))

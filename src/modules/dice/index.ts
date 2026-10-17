@@ -199,6 +199,10 @@ export interface QuickRollRequest {
     resourceId: string;
     delta: number;
   };
+  /** Which sheet the stat keywords used when the token has both a
+   *  character card and a bestiary form (quick roll modal chips).
+   *  Shown as a tag in the roll history. */
+  statSource?: "chara" | "form";
 }
 
 // --- Broadcast payload schema (extended for multi-type dice) ---
@@ -257,6 +261,8 @@ export interface DiceRollPayload {
   // groups them into one row, and the click-to-replay feature uses
   // the id to find every member of the group.
   collectiveId?: string;
+  /** Sheet used for stat keywords (quick roll modal chips). */
+  statSource?: "chara" | "form";
 }
 
 // Legacy payload shape for tolerant decoding.
@@ -1047,6 +1053,7 @@ export async function setupDice(): Promise<void> {
         effectiveReq.critMode ? "1" : "",
         effectiveReq.hidden ? "1" : "",
         effectiveReq.collectiveId ?? "",
+        effectiveReq.statSource ?? "",
       ].join("|");
       const now = Date.now();
       const last = recentQuickRolls.get(sig);
@@ -1227,6 +1234,7 @@ async function handleQuickRoll(req: QuickRollRequest): Promise<void> {
     // correctly regardless of which toggle caused the hide.
     rollerIsGM,
     collectiveId: req.collectiveId,
+    ...(req.statSource === "chara" || req.statSource === "form" ? { statSource: req.statSource } : {}),
   });
 }
 
@@ -1314,6 +1322,7 @@ function normalizePayload(raw: unknown): DiceRollPayload | null {
     ...(Array.isArray((data as any).rowStarts) ? { rowStarts: ((data as any).rowStarts as number[]).filter((n) => Number.isFinite(n)) } : {}),
     ...(((data as any).sameHighlight) ? { sameHighlight: true } : {}),
     ...(((data as any).collectiveId) ? { collectiveId: String((data as any).collectiveId) } : {}),
+    ...(((data as any).statSource === "chara" || (data as any).statSource === "form") ? { statSource: (data as any).statSource } : {}),
   };
 }
 
@@ -1396,6 +1405,8 @@ export async function broadcastDiceRoll(opts: {
   // every emitted broadcast; the history popover treats them as one
   // row and the click-to-replay feature retrieves all members.
   collectiveId?: string;
+  /** Sheet used for stat keywords (see QuickRollRequest.statSource). */
+  statSource?: "chara" | "form";
 }): Promise<string> {
   if (!opts.dice.length) return "";
   const winnerIdx = Math.max(-1, Math.min(opts.dice.length - 1, opts.winnerIdx));
@@ -1458,6 +1469,7 @@ export async function broadcastDiceRoll(opts: {
     ...(opts.rollerIsGM ? { rollerIsGM: true } : {}),
     ...(opts.autoDismiss ? { autoDismiss: true } : {}),
     ...(opts.collectiveId ? { collectiveId: opts.collectiveId } : {}),
+    ...(opts.statSource ? { statSource: opts.statSource } : {}),
   };
 
   try {

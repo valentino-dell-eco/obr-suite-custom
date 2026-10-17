@@ -1371,6 +1371,7 @@ window.addEventListener("message", (event) => {
                   label: `${r.name || "?"} ${t(getLocalLang(), "rpDieRollLabel")}`,
                   itemId,
                   resourceConsume: { itemId, resourceId: r.id, delta },
+                  statSource: "chara",
                 },
                 { x: 0, y: 0 },
               );
@@ -2417,7 +2418,7 @@ OBR.onReady(async () => {
           } catch {}
         }
         try {
-          await openQuickPopupAt({ expression, label, itemId }, { x: 0, y: 0 });
+          await openQuickPopupAt({ expression, label, itemId, statSource: "chara" }, { x: 0, y: 0 });
         } catch (err) {
           console.error(
             "[cc-panel] openQuickPopupAt from cc-roll-dice failed",
@@ -2451,6 +2452,9 @@ OBR.onReady(async () => {
           const out: ChatCast = { ...cast, spellName };
           delete out.spent; // only the host fills this in
           const itemId = cards.find((c) => c.id === cardId)?.boundedTokenId;
+          // Link the chat card to the token, so dice in it roll with the
+          // card's stats (quick roll modal → stat keywords).
+          if (typeof itemId === "string" && itemId) out.tokenId = itemId;
           // A "Die Roll" resource also rolls its dice (quick-roll popup).
           let roll: string | null = null;
           if ((spend || slot) && typeof itemId === "string" && itemId) {
@@ -2477,7 +2481,7 @@ OBR.onReady(async () => {
           if (roll && typeof itemId === "string") {
             try {
               await openQuickPopupAt(
-                { expression: roll, label: `${spellName} · ${out.spent?.name ?? ""}`, itemId, secret },
+                { expression: roll, label: `${spellName} · ${out.spent?.name ?? ""}`, itemId, secret, statSource: "chara" },
                 { x: 0, y: 0 },
               );
             } catch (err) {

@@ -72,6 +72,7 @@ function appendWithDice(
   text: string,
   label: string,
   scaledTo: Set<string>,
+  tokenId?: string,
 ): void {
   let last = 0;
   for (const m of text.matchAll(DICE_RE)) {
@@ -81,6 +82,10 @@ function appendWithDice(
     span.className = "rollable" + (scaledTo.has(m[1]) ? " scaled" : "");
     span.dataset.expr = m[1].replace(/\s+/g, "");
     span.dataset.label = label;
+    if (tokenId) {
+      span.dataset.itemId = tokenId;
+      span.dataset.statSource = "chara";
+    }
     span.title = en ? `Roll ${m[1]}` : `投掷 ${m[1]}`;
     span.textContent = m[1];
     parent.appendChild(span);
@@ -203,6 +208,7 @@ function renderCast(cast: ChatCast, msgId?: string): HTMLElement {
         cast.description,
         cast.spellName,
         new Set((cast.scaled ?? []).map((x) => x.to)),
+        typeof cast.tokenId === "string" && cast.tokenId ? cast.tokenId : undefined,
       );
       body.appendChild(desc);
     }

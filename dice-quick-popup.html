@@ -236,6 +236,37 @@
       }
 
       /* Label — center-aligned, auto-filled */
+      /* "Which stats you want to use?" — token with BOTH a character
+         card and a bestiary form (e.g. a wild-shaped druid). */
+      .stat-src {
+        display: none;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin: 0 0 8px;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.7);
+      }
+      .stat-src.show { display: flex; }
+      .stat-src .q { flex: 1 1 100%; }
+      .stat-chip {
+        appearance: none;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.06);
+        color: #e8ecf4;
+        font: inherit;
+        font-size: 11.5px;
+        font-weight: 700;
+        padding: 3px 12px;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+      .stat-chip:hover { background: rgba(255, 255, 255, 0.12); }
+      .stat-chip[aria-checked="true"] {
+        background: rgba(93, 173, 226, 0.28);
+        border-color: rgba(93, 173, 226, 0.8);
+        color: #fff;
+      }
       .label-input {
         height: 28px;
         width: 100%;
@@ -516,6 +547,12 @@
         </div>
       </div>
 
+      <div class="stat-src" id="statSrc" role="radiogroup">
+        <span class="q" data-l="statQ">Which stats you want to use?</span>
+        <button class="stat-chip" type="button" role="radio" data-src="chara" aria-checked="false" data-l="statChara">Chara</button>
+        <button class="stat-chip" type="button" role="radio" data-src="form" aria-checked="false" data-l="statForm">Form</button>
+      </div>
+
       <input
         class="label-input"
         id="labelInput"
@@ -635,6 +672,11 @@
 
     <script type="module">
       import OBR from "@owlbear-rodeo/sdk";
+      import {
+        loadStatSources,
+        hasStatKeywords,
+        expandStatKeywords,
+      } from "/src/modules/dice/stat-keywords.ts";
 
       // 2026-05-13 — was OBR.popover.open(POPOVER_ID); now OBR.modal.open
       // with the same id (modal/popover IDs share the same namespace).
@@ -671,6 +713,9 @@
           secretRoll: "密普通",
           secretAdv: "密优势",
           secretCrit: "密重击",
+          statQ: "使用哪套属性？",
+          statChara: "角色",
+          statForm: "形态",
         },
         en: {
           roll: "Normal",
@@ -693,6 +738,9 @@
           secretRoll: "Secret normal",
           secretAdv: "Secret adv",
           secretCrit: "Secret crit",
+          statQ: "Which stats you want to use?",
+          statChara: "Chara",
+          statForm: "Form",
         },
       }[LANG];
       document.querySelectorAll("[data-l]").forEach((el) => {
@@ -724,6 +772,35 @@
         const raw = params.get("resourceConsume");
         if (raw) resourceConsume = JSON.parse(raw);
       } catch {}
+
+      // Stat keywords (save(), check(), dex, prof…) resolve against the
+      // token's character card ("chara") or bestiary form ("form"). With
+      // both, the user picks one with the chips; `statSource` in the URL
+      // is the default (who opened the modal).
+      const urlStatSource = params.get("statSource");
+      let statChoice = urlStatSource === "form" ? "form" : "chara";
+      const statSrcEl = document.getElementById("statSrc");
+      function paintStatChips() {
+        statSrcEl.querySelectorAll(".stat-chip").forEach((b) => {
+          b.setAttribute("aria-checked", String(b.dataset.src === statChoice));
+        });
+      }
+      statSrcEl.querySelectorAll(".stat-chip").forEach((b) => {
+        b.addEventListener("click", () => {
+          statChoice = b.dataset.src === "form" ? "form" : "chara";
+          paintStatChips();
+        });
+      });
+      paintStatChips();
+      const sourcesP = itemId
+        ? loadStatSources(itemId).catch(() => ({ card: null, monster: null }))
+        : Promise.resolve({ card: null, monster: null });
+      sourcesP.then((src) => {
+        const both = !!(src.card && src.monster);
+        statSrcEl.classList.toggle("show", both);
+        if (!both) statChoice = src.monster && !src.card ? "form" : "chara";
+        paintStatChips();
+      });
 
       const exprInput = document.getElementById("exprInput");
       const labelInput = document.getElementById("labelInput");
@@ -863,9 +940,23 @@
       }
 
       async function fireRoll(opts) {
-        const expression = exprInput.value.trim();
-        const label = labelInput.value.trim();
+        let expression = exprInput.value.trim();
+        let label = labelInput.value.trim();
         if (!expression) return;
+        // Stat keywords → numbers from the chosen sheet.
+        const src = await sourcesP;
+        const both = !!(src.card && src.monster);
+        let statSource = null;
+        if (hasStatKeywords(expression)) {
+          const kind = both ? statChoice : src.card ? "chara" : src.monster ? "form" : null;
+          const sheet = kind === "form" ? src.monster : kind === "chara" ? src.card : null;
+          if (sheet) {
+            const x = expandStatKeywords(expression, sheet, kind);
+            expression = x.expression;
+            if (!label && x.note) label = x.note;
+          }
+        }
+        if (both) statSource = statChoice;
         try {
           await OBR.broadcast.sendMessage(
             BC_QUICK_ROLL,
@@ -878,6 +969,7 @@
               ...(opts.advMode ? { advMode: opts.advMode } : {}),
               ...(opts.critMode ? { critMode: true } : {}),
               ...(resourceConsume ? { resourceConsume } : {}),
+              ...(statSource ? { statSource } : {}),
             },
             { destination: "LOCAL" },
           );

@@ -297,6 +297,8 @@ async function confirm(): Promise<void> {
     console.warn("[spell-cast] spend failed", e);
   }
 
+  // Link the chat card to the token: dice in it roll with its stats.
+  if (itemId) c.tokenId = itemId;
   try {
     await sendChat({ scope: secret ? "gm" : "all", text: "", cast: c });
     // Show the chat on top once this modal is gone (it may have been
@@ -309,7 +311,7 @@ async function confirm(): Promise<void> {
   }
   if (roll && itemId) {
     try {
-      await openQuickPopupAt({ expression: roll.expression, label: roll.label, itemId, secret }, { x: 0, y: 0 });
+      await openQuickPopupAt({ expression: roll.expression, label: roll.label, itemId, secret, statSource: "chara" }, { x: 0, y: 0 });
     } catch (e) {
       console.warn("[spell-cast] resource roll popup failed", e);
     }

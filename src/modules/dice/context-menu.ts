@@ -115,6 +115,10 @@ export async function openQuickPopupAt(
     /** Every button rolls hidden (secret / dark): only the roller and
      *  the GM see the result. */
     secret?: boolean;
+    /** Default sheet for stat keywords when the token has both a
+     *  character card and a bestiary form: the one that opened the
+     *  modal (cc → "chara", bestiary card → "form"). */
+    statSource?: "chara" | "form";
   },
   _viewportPos: { x: number; y: number },
 ): Promise<void> {
@@ -123,6 +127,7 @@ export async function openQuickPopupAt(
   params.set("expr", args.expression);
   params.set("label", args.label);
   if (args.itemId) params.set("itemId", args.itemId);
+  if (args.statSource) params.set("statSource", args.statSource);
   if (args.resourceConsume) {
     params.set("resourceConsume", JSON.stringify(args.resourceConsume));
   }
@@ -157,6 +162,7 @@ export function bindRollableClickPopup(
   root: HTMLElement,
   itemIdResolver?: () => Promise<string | null>,
   iframeOrigin?: IframeOriginGetter,
+  opts: { statSource?: "chara" | "form" } = {},
 ): void {
   if ((root as any)._rollableClickPopupBound) return;
   (root as any)._rollableClickPopupBound = true;
@@ -170,9 +176,15 @@ export function bindRollableClickPopup(
     const expression = target.dataset.expr ?? "";
     if (!expression) return;
     const label = target.dataset.label ?? "";
-    const itemId = itemIdResolver
-      ? await itemIdResolver()
-      : await resolveClickRollTarget();
+    // A rollable can carry its own token (e.g. a chat card posted from
+    // a character card) — that wins over the resolver.
+    const itemId = target.dataset.itemId
+      ? target.dataset.itemId
+      : itemIdResolver
+        ? await itemIdResolver()
+        : await resolveClickRollTarget();
+    const ds = target.dataset.statSource;
+    const statSource = ds === "chara" || ds === "form" ? ds : opts.statSource;
 
     // 2026-05-13 — viewport position is no longer needed (modal
     // centers itself via CSS), but iframeOrigin / e.clientX are
@@ -189,7 +201,7 @@ export function bindRollableClickPopup(
     target.classList.add("rollable-flash");
 
     try {
-      await openQuickPopupAt({ expression, label, itemId }, viewportPos);
+      await openQuickPopupAt({ expression, label, itemId, statSource }, viewportPos);
     } catch (err) {
       console.error("[obr-suite/dice] openRollableQuickPopup failed", err);
     }
@@ -221,9 +233,11 @@ export function bindRollableContextMenu(
     const expression = target.dataset.expr ?? "";
     if (!expression) return;
     const label = target.dataset.label ?? "";
-    const itemId = itemIdResolver
-      ? await itemIdResolver()
-      : await resolveClickRollTarget();
+    const itemId = target.dataset.itemId
+      ? target.dataset.itemId
+      : itemIdResolver
+        ? await itemIdResolver()
+        : await resolveClickRollTarget();
 
     let viewportPos: { x: number; y: number };
     if (iframeOrigin) {
