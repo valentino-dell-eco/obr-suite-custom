@@ -792,8 +792,24 @@
         });
       });
       paintStatChips();
+      // The SDK (scene items, room id for the card URL) only works once
+      // OBR is ready — loading earlier found neither sheet.
+      const obrReady = new Promise((resolve) => {
+        if (OBR.isReady) resolve();
+        else OBR.onReady(() => resolve());
+      });
       const sourcesP = itemId
-        ? loadStatSources(itemId).catch(() => ({ card: null, monster: null }))
+        ? obrReady
+            .then(() => loadStatSources(itemId))
+            .then((src) => {
+              console.debug("[rollable-quick] stat sheets", {
+                itemId,
+                card: !!src.card,
+                form: !!src.monster,
+              });
+              return src;
+            })
+            .catch(() => ({ card: null, monster: null }))
         : Promise.resolve({ card: null, monster: null });
       sourcesP.then((src) => {
         const both = !!(src.card && src.monster);
