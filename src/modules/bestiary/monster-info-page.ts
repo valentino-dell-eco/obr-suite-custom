@@ -989,9 +989,9 @@ function render(m: any) {
       const saveExpr = `1d20${saveBn >= 0 ? `+${saveBn}` : saveBn}`;
       const saveLbl = `${FULL_FOR_LANG[k] ?? ABBR_FOR_LANG[k]}${saveSuffix}`;
       return `<div class="abl${isProf ? " prof" : ""}">
-        <span class="a rollable" data-expr="${saveExpr}" data-label="${escapeHtml(saveLbl)}" title="${escapeHtml(saveLbl)} ${saveExpr}">${ABBR_FOR_LANG[k]}</span>
+        <span class="a rollable" data-expr="save(${k})" data-fallback="${saveExpr}" data-label="${escapeHtml(saveLbl)}" title="${escapeHtml(saveLbl)} ${saveExpr}">${ABBR_FOR_LANG[k]}</span>
         <span class="t">${score}</span>
-        <span class="m rollable" data-expr="${aExpr}" data-label="${escapeHtml(aLbl)}" title="${escapeHtml(aLbl)} ${aExpr}">${fmtMod(aMod)}</span>
+        <span class="m rollable" data-expr="check(${k})" data-fallback="${aExpr}" data-label="${escapeHtml(aLbl)}" title="${escapeHtml(aLbl)} ${aExpr}">${fmtMod(aMod)}</span>
       </div>`;
     })
     .join("");

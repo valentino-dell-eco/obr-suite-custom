@@ -2395,11 +2395,15 @@ OBR.onReady(async () => {
         minimizeOnRollCard = current.id;
       }
       const payload = e.data.payload as
-        | { expression?: string; label?: string }
+        | { expression?: string; label?: string; fallbackExpression?: string }
         | undefined;
       const expression = payload?.expression?.trim();
       if (!expression) return;
       const label = payload?.label ?? "";
+      const fallbackExpression =
+        typeof payload?.fallbackExpression === "string" && payload.fallbackExpression.trim()
+          ? payload.fallbackExpression.trim()
+          : undefined;
       void (async () => {
         // Resolve the token bound to the CURRENTLY OPEN card (if any)
         // so the roll anchors/focuses exactly like info-page.ts's
@@ -2418,7 +2422,7 @@ OBR.onReady(async () => {
           } catch {}
         }
         try {
-          await openQuickPopupAt({ expression, label, itemId, statSource: "chara" }, { x: 0, y: 0 });
+          await openQuickPopupAt({ expression, label, itemId, statSource: "chara", fallbackExpression }, { x: 0, y: 0 });
         } catch (err) {
           console.error(
             "[cc-panel] openQuickPopupAt from cc-roll-dice failed",

@@ -778,6 +778,8 @@
       // both, the user picks one with the chips; `statSource` in the URL
       // is the default (who opened the modal).
       const urlStatSource = params.get("statSource");
+      // Plain expression to roll when save()/check() can't be resolved.
+      const fallbackExpression = params.get("fallback") || "";
       let statChoice = urlStatSource === "form" ? "form" : "chara";
       const statSrcEl = document.getElementById("statSrc");
       function paintStatChips() {
@@ -970,6 +972,8 @@
             const x = expandStatKeywords(expression, sheet, kind);
             expression = x.expression;
             if (!label && x.note) label = x.note;
+          } else if (fallbackExpression) {
+            expression = fallbackExpression;
           }
         }
         if (both) statSource = statChoice;

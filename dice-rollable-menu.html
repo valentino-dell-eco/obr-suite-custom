@@ -89,6 +89,9 @@ const params = new URLSearchParams(location.search);
 const expression = params.get("expr") ?? "";
 const label = params.get("label") ?? "";
 const itemId = params.get("itemId") || null;
+// Plain expression for when save()/check() can't be resolved (no sheet).
+const fallbackExpression = params.get("fallback") || "";
+const fb = fallbackExpression ? { fallbackExpression } : {};
 
 // "Group save" mode — drop the add-to-tray item (each token has its
 // own per-bonus expression so a single tray entry can't represent the
@@ -152,19 +155,19 @@ OBR.onReady(() => {
         } else if (act === "roll") {
           await OBR.broadcast.sendMessage(
             BC_QUICK_ROLL,
-            { expression, label, itemId, focus: !!itemId, hidden: false },
+            { expression, label, itemId, focus: !!itemId, hidden: false, ...fb },
             { destination: "LOCAL" },
           );
         } else if (act === "dark") {
           await OBR.broadcast.sendMessage(
             BC_QUICK_ROLL,
-            { expression, label, itemId, focus: !!itemId, hidden: true },
+            { expression, label, itemId, focus: !!itemId, hidden: true, ...fb },
             { destination: "LOCAL" },
           );
         } else if (act === "adv" || act === "dis") {
           await OBR.broadcast.sendMessage(
             BC_QUICK_ROLL,
-            { expression, label, itemId, focus: !!itemId, hidden: false, advMode: act },
+            { expression, label, itemId, focus: !!itemId, hidden: false, advMode: act, ...fb },
             { destination: "LOCAL" },
           );
         } else if (act === "crit") {
@@ -173,7 +176,7 @@ OBR.onReady(() => {
           // QuickRollRequest.critMode in src/modules/dice/index.ts).
           await OBR.broadcast.sendMessage(
             BC_QUICK_ROLL,
-            { expression, label, itemId, focus: !!itemId, hidden: false, critMode: true },
+            { expression, label, itemId, focus: !!itemId, hidden: false, critMode: true, ...fb },
             { destination: "LOCAL" },
           );
         }

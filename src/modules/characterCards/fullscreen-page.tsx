@@ -142,13 +142,19 @@ function quickRoll(
   expression: string,
   label: string = "",
   mode?: "adv" | "dis",
+  /** Plain expression for when save()/check() can't be resolved
+   *  (card not bound to a token). */
+  fallback?: string,
 ) {
   let finalExpr = expression.trim();
+  let finalFallback = (fallback ?? "").trim();
 
   if (mode === "adv") {
     finalExpr = `adv(${finalExpr})`;
+    if (finalFallback) finalFallback = `adv(${finalFallback})`;
   } else if (mode === "dis") {
     finalExpr = `dis(${finalExpr})`;
+    if (finalFallback) finalFallback = `dis(${finalFallback})`;
   }
 
   try {
@@ -158,6 +164,7 @@ function quickRoll(
         payload: {
           expression: finalExpr,
           label: label.trim(),
+          ...(finalFallback ? { fallbackExpression: finalFallback } : {}),
         },
       },
       "*",
@@ -1677,14 +1684,15 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
                 <div
                   class="abl-mod"
                   onClick={() =>
-                    quickRoll(aExpr, `${ablLabel(k)}${T("ccCheckSuffix")}`)
+                    quickRoll(`check(${k})`, `${ablLabel(k)}${T("ccCheckSuffix")}`, undefined, aExpr)
                   }
                   onContextMenu={(e) => {
                     e.preventDefault();
                     quickRoll(
-                      aExpr,
+                      `check(${k})`,
                       `${ablLabel(k)}${T("ccCheckAdvSuffix")}`,
                       "adv",
+                      aExpr,
                     );
                   }}
                   title={`${ablLabel(k)}${T("ccCheckSuffix")} ${aExpr}\n${T("ccRollHint")}`}
@@ -1695,7 +1703,7 @@ function AbilitiesAndSkills({ data }: { data: CharacterData }) {
                 <div
                   class={`abl-save ${a.save?.proficient ? "is-prof" : ""}`}
                   onClick={() =>
-                    quickRoll(sExpr, `${ablLabel(k)}${T("ccSaveSuffix")}`)
+                    quickRoll(`save(${k})`, `${ablLabel(k)}${T("ccSaveSuffix")}`, undefined, sExpr)
                   }
                   title={`${ablLabel(k)}${T("ccSaveSuffix")} ${sExpr}`}
                 >

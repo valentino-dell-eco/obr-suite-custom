@@ -967,9 +967,9 @@ function render(
     const saveLbl = `${FULL[k] ?? ABBR[k] ?? k}${t(getLocalLang(), "ccInfoSaveSuffix")}`;
     return `<div class="abl${prof ? " prof" : ""}">
         <div class="abl-head">
-          <span class="a rollable" data-expr="${escapeHtml(saveExpr)}" data-label="${escapeHtml(saveLbl)}" title="${escapeHtml(saveLbl)} ${escapeHtml(saveExpr)}">${ABBR[k]}</span>
+          <span class="a rollable" data-expr="save(${k})" data-fallback="${escapeHtml(saveExpr)}" data-label="${escapeHtml(saveLbl)}" title="${escapeHtml(saveLbl)} ${escapeHtml(saveExpr)}">${ABBR[k]}</span>
           <span class="t" style="padding-left: 5px !important;">${escapeHtml(a.total)}</span>
-          <span class="m rollable" data-expr="${escapeHtml(aExpr)}" data-label="${escapeHtml(aLbl)}" title="${escapeHtml(aLbl)} ${escapeHtml(aExpr)}">${fmtMod(a.modifier)}</span>
+          <span class="m rollable" data-expr="check(${k})" data-fallback="${escapeHtml(aExpr)}" data-label="${escapeHtml(aLbl)}" title="${escapeHtml(aLbl)} ${escapeHtml(aExpr)}">${fmtMod(a.modifier)}</span>
         </div>
         ${skHtml ? `<div class="abl-skills">${skHtml}</div>` : ""}
       </div>`;

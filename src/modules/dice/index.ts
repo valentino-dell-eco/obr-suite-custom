@@ -3,6 +3,7 @@ import { getLocalLang } from "../../state";
 import { t } from "../../i18n";
 import { DiceType, DIE_SIDES, DieResult, rollDie, sidesOf, safeColor } from "./types";
 import { readSkinsForPlayer } from "./dice-skins";
+import { expandStatKeywords, hasStatKeywords, loadStatSources } from "./stat-keywords";
 import { assetUrl } from "../../asset-base";
 import { onViewportResize } from "../../utils/viewportAnchor";
 import { updateResource } from "../resourceTracker/storage";
@@ -203,6 +204,8 @@ export interface QuickRollRequest {
    *  character card and a bestiary form (quick roll modal chips).
    *  Shown as a tag in the roll history. */
   statSource?: "chara" | "form";
+  /** Plain expression rolled when stat keywords can't be resolved. */
+  fallbackExpression?: string;
 }
 
 // --- Broadcast payload schema (extended for multi-type dice) ---
@@ -1142,7 +1145,28 @@ function rollSimpleExpression(expr: string): { dice: DieResult[]; modifier: numb
   return { dice, modifier };
 }
 
-async function handleQuickRoll(req: QuickRollRequest): Promise<void> {
+/** Stat keywords (save(dex), check(wis), dex, prof…) → numbers from
+ *  the token's sheet; the fallback expression when there's no sheet.
+ *  (The quick roll modal already expands them; this covers the
+ *  right-click menu and any other sender.) */
+async function resolveQuickRollStats(req: QuickRollRequest): Promise<QuickRollRequest> {
+  if (!hasStatKeywords(req.expression)) return req;
+  const src = await loadStatSources(req.itemId ?? null).catch(() => ({ card: null, monster: null }));
+  const kind =
+    req.statSource === "form" && src.monster ? "form"
+      : req.statSource === "chara" && src.card ? "chara"
+        : src.card ? "chara"
+          : src.monster ? "form"
+            : null;
+  if (!kind) {
+    return req.fallbackExpression ? { ...req, expression: req.fallbackExpression } : req;
+  }
+  const x = expandStatKeywords(req.expression, kind === "form" ? src.monster : src.card, kind);
+  return { ...req, expression: x.expression, label: req.label || x.note };
+}
+
+async function handleQuickRoll(reqIn: QuickRollRequest): Promise<void> {
+  const req = await resolveQuickRollStats(reqIn);
   const parsed = rollSimpleExpression(req.expression);
   let { dice } = parsed;
   const { modifier } = parsed;

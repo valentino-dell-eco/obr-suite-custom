@@ -51,11 +51,13 @@ async function openMenuPopoverAt(
     label: string;
     kind: RollableMenuKind;
     itemId: string | null;
+    fallbackExpression?: string;
   },
   viewportPos: { x: number; y: number },
 ): Promise<void> {
   const params = new URLSearchParams();
   params.set("expr", args.expression);
+  if (args.fallbackExpression) params.set("fallback", args.fallbackExpression);
   params.set("label", args.label);
   params.set("kind", args.kind);
   if (args.itemId) params.set("itemId", args.itemId);
@@ -119,6 +121,10 @@ export async function openQuickPopupAt(
      *  character card and a bestiary form: the one that opened the
      *  modal (cc → "chara", bestiary card → "form"). */
     statSource?: "chara" | "form";
+    /** Plain expression to roll when the stat keywords in `expression`
+     *  (save(dex), check(wis)…) can't be resolved — no token, or the
+     *  token has no sheet. */
+    fallbackExpression?: string;
   },
   _viewportPos: { x: number; y: number },
 ): Promise<void> {
@@ -128,6 +134,7 @@ export async function openQuickPopupAt(
   params.set("label", args.label);
   if (args.itemId) params.set("itemId", args.itemId);
   if (args.statSource) params.set("statSource", args.statSource);
+  if (args.fallbackExpression) params.set("fallback", args.fallbackExpression);
   if (args.resourceConsume) {
     params.set("resourceConsume", JSON.stringify(args.resourceConsume));
   }
@@ -201,7 +208,8 @@ export function bindRollableClickPopup(
     target.classList.add("rollable-flash");
 
     try {
-      await openQuickPopupAt({ expression, label, itemId, statSource }, viewportPos);
+      const fallbackExpression = target.dataset.fallback || undefined;
+      await openQuickPopupAt({ expression, label, itemId, statSource, fallbackExpression }, viewportPos);
     } catch (err) {
       console.error("[obr-suite/dice] openRollableQuickPopup failed", err);
     }
@@ -251,7 +259,7 @@ export function bindRollableContextMenu(
 
     try {
       await openMenuPopoverAt(
-        { expression, label, kind: kindFor(target), itemId },
+        { expression, label, kind: kindFor(target), itemId, fallbackExpression: target.dataset.fallback || undefined },
         viewportPos,
       );
     } catch (err) {
