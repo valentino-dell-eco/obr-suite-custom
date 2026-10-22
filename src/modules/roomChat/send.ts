@@ -46,6 +46,8 @@ export async function sendChat(input: SendChatInput): Promise<boolean> {
     text,
     ...(input.cast ? { cast: input.cast } : {}),
     ...(input.tool ? { tool: input.tool } : {}),
+    // Sent for someone else = for a phone (Echo Companion).
+    ...(input.from ? { via: "app" as const } : {}),
   };
   await OBR.broadcast.sendMessage(BC_CHAT_MESSAGE, msg, { destination: "ALL" });
   return true;

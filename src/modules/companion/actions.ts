@@ -36,8 +36,14 @@ import { cleanSpend, dieRollFormula, spendResource, spendSpellSlot } from "../ch
 import { buildCast, buildFeatureUse, cardSaveDc, castLevelOptions } from "../characterCards/cast-core";
 import { effectiveSpellDetail } from "../characterCards/spell-detail";
 import type { ChatCast } from "../roomChat/types";
+import { formOfToken, type FormInfo } from "./forms";
+import { readLibrary } from "../statusTester/library";
+import { iconUrl, readApplied, textColorFor, titleParts } from "../statusTester/types";
+import { emojiImageUrl } from "../statusTester/emoji";
 import { loadCardById } from "../dice/stat-keywords";
 import { sendChat } from "../roomChat/send";
+import { loadHistory } from "../roomChat/history";
+import { MAX_TEXT, isVisibleTo, type ChatMessage, type ChatScope } from "../roomChat/types";
 import { getLocalLang } from "../../state";
 import { t } from "../../i18n";
 
@@ -64,6 +70,57 @@ export interface CharacterState {
   hasDawn: boolean;
   hasDusk: boolean;
   conMod: number;
+  /** Bestiary form on the token (Wild Shape…), or null. */
+  form: FormInfo | null;
+  /** Status Tracker chips on the token, as a player sees them. */
+  statuses: StatusChip[];
+}
+
+/** One status on the token, ready to draw (Status Tracker chip). */
+export interface StatusChip {
+  title: string;
+  /** "3", "(30 ft)", or "" without levels. */
+  level: string;
+  /** Chip colour "#rrggbb" and the text colour that reads on it. */
+  color: string;
+  text: string;
+  emoji?: string;
+  /** OpenMoji picture of the emoji (same look as the map). */
+  emojiUrl?: string;
+  /** Base icon (white or black SVG to match the chip). */
+  iconUrl?: string;
+}
+
+/** The statuses a PLAYER sees on the token: hidden ones (GM only) and
+ *  everything on a hidden token are left out, like on the map. */
+async function statusChips(item: any): Promise<StatusChip[]> {
+  if (!item || item.visible === false) return [];
+  const applied = readApplied(item).filter((a) => !a.hidden);
+  if (!applied.length) return [];
+  let defs: Awaited<ReturnType<typeof readLibrary>> = [];
+  try {
+    defs = await readLibrary();
+  } catch {
+    return [];
+  }
+  const byId = new Map(defs.map((d) => [d.id, d]));
+  const out: StatusChip[] = [];
+  for (const a of applied) {
+    const def = byId.get(a.defId);
+    if (!def) continue;
+    const p = titleParts(def, a);
+    const text = textColorFor(def.color);
+    const chip: StatusChip = { title: p.title, level: p.level, color: def.color, text };
+    if (def.emoji) {
+      chip.emoji = def.emoji;
+      const url = emojiImageUrl(def.emoji);
+      if (url) chip.emojiUrl = url;
+    } else if (def.icon) {
+      chip.iconUrl = iconUrl(def.icon, text !== "#ffffff");
+    }
+    out.push(chip);
+  }
+  return out;
 }
 
 /** First token on the map bound to this character card. */
@@ -89,12 +146,14 @@ export async function characterState(card: string): Promise<CharacterState> {
   const tok = await tokenForCard(card);
   const conMod = await conModFor(card).catch(() => 0);
   if (!tok) {
-    return { tokenId: null, tokenName: "", hp: null, resources: [], hasDawn: false, hasDusk: false, conMod };
+    return { tokenId: null, tokenName: "", hp: null, resources: [], hasDawn: false, hasDusk: false, conMod, form: null, statuses: [] };
   }
   let resources: Resource[] = [];
+  let statuses: StatusChip[] = [];
   try {
     const [item] = await OBR.scene.items.getItems([tok.id]);
     resources = readResources(item ?? null);
+    statuses = await statusChips(item);
   } catch {}
   const b = await readBubbles(tok.id);
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -106,6 +165,8 @@ export async function characterState(card: string): Promise<CharacterState> {
     hasDawn: resources.some((r) => r.recovery === "DW"),
     hasDusk: resources.some((r) => r.recovery === "DS"),
     conMod,
+    form: await formOfToken(tok.id),
+    statuses,
   };
 }
 
@@ -458,6 +519,50 @@ async function cast(a: Actor, data: any) {
   return { spent: c.spent ?? null, roll };
 }
 
+// --- Room Chat ------------------------------------------------------------------
+// The phone reads the chat through this GM client (its history has every
+// message) and writes into it in the player's name.
+
+/** Send a chat message: to everyone, a whisper to the GM, or to a player. */
+async function chat(a: Actor, data: any) {
+  const scope = data?.scope as ChatScope;
+  if (scope !== "all" && scope !== "gm" && scope !== "player") throw new Error("bad scope");
+  const text = str(data?.text, MAX_TEXT);
+  if (!text) throw new Error("empty");
+  const toId = scope === "player" ? str(data?.toId, 100) : "";
+  if (scope === "player" && !toId) throw new Error("no recipient");
+  const ok = await sendChat({
+    scope,
+    text,
+    ...(scope === "player" ? { toId, toName: str(data?.toName, 100) || "?" } : {}),
+    from: chatFrom(a),
+  });
+  if (!ok) throw new Error("not sent");
+  return { ok: true };
+}
+
+/** What the player may see of the chat history (last messages) and who
+ *  they can whisper to. */
+async function chatHistory(a: Actor) {
+  const all = loadHistory(OBR.room.id || "room").filter((m) => isVisibleTo(m, a.player, "PLAYER"));
+  // Newest first until ~300 KB, then back in time order.
+  const out: ChatMessage[] = [];
+  let size = 0;
+  for (let i = all.length - 1; i >= 0 && out.length < 150; i--) {
+    size += JSON.stringify(all[i]).length;
+    if (size > 300_000) break;
+    out.push(all[i]);
+  }
+  out.reverse();
+  let players: Array<{ id: string; name: string }> = [];
+  try {
+    players = (await OBR.party.getPlayers())
+      .filter((p) => p.role !== "GM" && p.id !== a.player)
+      .map((p) => ({ id: p.id, name: p.name || "?" }));
+  } catch {}
+  return { messages: out, players };
+}
+
 /** Runs one action from the phone; returns what goes back to it. */
 export async function runAction(kind: string, a: Actor, data: unknown): Promise<unknown> {
   switch (kind) {
@@ -475,6 +580,10 @@ export async function runAction(kind: string, a: Actor, data: unknown): Promise<
       return cast(a, data);
     case "spellInfo":
       return spellInfo(a, data);
+    case "chat":
+      return chat(a, data);
+    case "chatHistory":
+      return chatHistory(a);
     default:
       throw new Error(`unknown action ${kind}`);
   }

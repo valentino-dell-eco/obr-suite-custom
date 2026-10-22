@@ -14,7 +14,11 @@
 //    the map for everybody, hidden rolls stay hidden) and send the
 //    result back to the phone.
 //
-// Both need this browser to hold the room key (Settings → Echo
+// 3. Room Chat for the phones. Every chat message this GM client
+//    receives (the GM sees them all) goes to the bridge, which passes it
+//    to the phones allowed to see it (bridge.ts → exec.chat).
+//
+// All need this browser to hold the room key (Settings → Echo
 // Companion → Activate). Without it, nothing happens.
 
 import OBR from "@owlbear-rodeo/sdk";
@@ -23,6 +27,9 @@ import { CC_ORIGIN } from "../characterCards/backend";
 import { rollForCompanion } from "../dice";
 import { BC_CHANGED, BC_HELLO, readSecret, roomKey } from "./shared";
 import { characterState, runAction, type Actor } from "./actions";
+import { syncForms } from "./forms";
+import { stampChatMessage } from "../roomChat";
+import { BC_CHAT_MESSAGE } from "../roomChat/types";
 
 const BOUND_CARD_KEY = "com.character-cards/boundCardId";
 
@@ -56,6 +63,16 @@ export async function setupCompanionRelay(): Promise<void> {
       console.warn("[obr-suite/companion] relay failed", e);
     }
   });
+  // Room Chat → phones (only while the bridge is connected).
+  OBR.broadcast.onMessage(BC_CHAT_MESSAGE, (ev) => {
+    const sock = ws;
+    if (!sock || sock.readyState !== WebSocket.OPEN) return;
+    const msg = stampChatMessage(ev);
+    if (!msg) return;
+    try {
+      sock.send(JSON.stringify({ t: "exec.chat", msg }));
+    } catch {}
+  });
   void startExecutor();
 }
 
@@ -73,6 +90,8 @@ interface ExecRoll {
   card: string | null;
   /** The card's name (from the backend): "Name (Player)" without a token. */
   cardName?: string;
+  /** Stat keywords from the character ("chara", default) or its form. */
+  source?: "chara" | "form";
   expr: string;
   label: string;
   mode: "normal" | "adv" | "dis";
@@ -120,15 +139,19 @@ async function startExecutor(): Promise<void> {
     OBR.party.onChange((players) => rememberColors(players));
   } catch {}
   // Characters' state: re-send to the phones when tokens change
-  // (HP, resources) or the scene changes.
+  // (HP, resources, form) or the scene changes. First the saved bestiary
+  // forms are put back on / taken from the tokens (forms.ts).
   let t: ReturnType<typeof setTimeout> | null = null;
   const refresh = () => {
     if (t) clearTimeout(t);
     t = setTimeout(() => {
       t = null;
-      for (const card of watched) void pushState(card, false);
+      void syncForms().finally(() => {
+        for (const card of watched) void pushState(card, false);
+      });
     }, 200);
   };
+  refresh();
   try {
     OBR.scene.items.onChange(refresh);
     OBR.scene.onReadyChange(refresh);
@@ -255,7 +278,7 @@ async function execRoll(sock: WebSocket, m: ExecRoll): Promise<void> {
         hidden: m.hidden,
         advMode: m.mode === "adv" ? "adv" : m.mode === "dis" ? "dis" : undefined,
         critMode: m.crit,
-        ...(m.card ? { cardId: m.card, statSource: "chara" as const } : {}),
+        ...(m.card ? { cardId: m.card, statSource: m.source === "form" ? ("form" as const) : ("chara" as const) } : {}),
       },
       { id: m.player, name: m.name || "?", color, via: "app", tokenName: m.cardName || undefined },
     );
@@ -333,7 +356,7 @@ async function execAction(sock: WebSocket, m: any): Promise<void> {
     };
     const result = await runAction(String(m.kind ?? ""), actor, m.data);
     reply({ t: "exec.action.done", result });
-    void pushState(actor.card, false);
+    if (actor.card) void pushState(actor.card, false); // chat has no card
   } catch (e) {
     reply({ t: "exec.action.fail", message: String((e as Error)?.message ?? e).slice(0, 200) });
   }

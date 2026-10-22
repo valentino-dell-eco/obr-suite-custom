@@ -93,6 +93,10 @@ export interface ChatMessage {
   cast?: ChatCast;
   /** Set by tool announcements (status changes, rests…). */
   tool?: ChatTool;
+  /** "app": posted by the GM's suite for a player using the Echo
+   *  Companion phone app (from* = that player). Trusted only when the
+   *  real sender is a GM — see stampChatMessage. */
+  via?: "app";
 }
 
 export function isChatMessage(v: unknown): v is ChatMessage {

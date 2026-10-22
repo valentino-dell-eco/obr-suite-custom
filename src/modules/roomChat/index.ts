@@ -104,23 +104,42 @@ function preview(msg: ChatMessage): string {
   return body.length > 80 ? body.slice(0, 77) + "…" : body;
 }
 
-async function onMessage(ev: { data: unknown; connectionId?: string }): Promise<void> {
-  if (!isChatMessage(ev.data)) return;
-  // Never trust the sender identity inside the payload — anyone can
-  // broadcast a ChatMessage claiming to be the GM. Stamp the real
-  // sender (from the connectionId OBR attaches) over the from* fields.
+/** A received chat message with its REAL sender. Never trust the sender
+ *  identity inside the payload — anyone can broadcast a ChatMessage
+ *  claiming to be the GM — so the real sender (from the connectionId
+ *  OBR attaches) is stamped over the from* fields. One exception: a GM
+ *  posting for a player who uses the Echo Companion app (`via: "app"`)
+ *  keeps that player's name — the GM is trusted. Null = unknown sender. */
+export function stampChatMessage(ev: { data: unknown; connectionId?: string }): ChatMessage | null {
+  if (!isChatMessage(ev.data)) return null;
   const sender = senderOf(ev);
-  if (!sender) return;
-  const raw: ChatMessage = {
-    ...ev.data,
-    fromId: sender.id,
-    fromName: sender.name || "?",
-    fromColor: sender.color || "#9aa0b3",
-    fromRole: sender.role,
-  };
+  if (!sender) return null;
+  const forApp = sender.role === "GM" && ev.data.via === "app" && !!ev.data.fromId;
+  const raw: ChatMessage = forApp
+    ? {
+        ...ev.data,
+        fromName: ev.data.fromName || "?",
+        fromColor: ev.data.fromColor || "#9aa0b3",
+        fromRole: "PLAYER",
+        via: "app",
+      }
+    : {
+        ...ev.data,
+        fromId: sender.id,
+        fromName: sender.name || "?",
+        fromColor: sender.color || "#9aa0b3",
+        fromRole: sender.role,
+      };
+  if (!forApp) delete raw.via;
   // Keep only a known tool tag (it is shown as a coloured notice).
   const tool = toolOf(raw);
   if (raw.cast || !tool) delete raw.tool;
+  return raw;
+}
+
+async function onMessage(ev: { data: unknown; connectionId?: string }): Promise<void> {
+  const raw = stampChatMessage(ev);
+  if (!raw) return;
   if (!meId) return;
   if (!isVisibleTo(raw, meId, meRole)) return;
   if (!roomId) roomId = OBR.room.id || "room";

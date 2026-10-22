@@ -47,6 +47,11 @@ let channel: ChatScope = "all";
 let pickable: Array<{ id: string; name: string }> = [];
 let messages: ChatMessage[] = [];
 
+/** 📱 after the name: sent from the Echo Companion phone app. */
+function appMark(m: ChatMessage): string {
+  return m.via === "app" ? " 📱" : "";
+}
+
 function fmtTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -270,7 +275,7 @@ function renderNotice(m: ChatMessage, tool: ChatTool): HTMLElement {
   meta.appendChild(tname);
   const from = document.createElement("span");
   from.className = "from";
-  from.textContent = m.fromId === meId ? (en ? "You" : "你") : m.fromName;
+  from.textContent = (m.fromId === meId ? (en ? "You" : "你") : m.fromName) + appMark(m);
   from.style.color = m.fromColor;
   meta.appendChild(from);
   const badge = scopeBadge(m);
@@ -304,7 +309,7 @@ function renderCastMessage(m: ChatMessage): HTMLElement {
   meta.className = "meta";
   const from = document.createElement("span");
   from.className = "from";
-  from.textContent = own ? (en ? "You" : "你") : m.fromName;
+  from.textContent = (own ? (en ? "You" : "你") : m.fromName) + appMark(m);
   from.style.color = m.fromColor;
   meta.appendChild(from);
   const badge = scopeBadge(m);
@@ -338,7 +343,7 @@ function renderMessage(m: ChatMessage): HTMLElement {
   meta.className = "meta";
   const from = document.createElement("span");
   from.className = "from";
-  from.textContent = own ? (en ? "You" : "你") : m.fromName;
+  from.textContent = (own ? (en ? "You" : "你") : m.fromName) + appMark(m);
   from.style.color = m.fromColor;
   meta.appendChild(from);
   const badge = scopeBadge(m);
