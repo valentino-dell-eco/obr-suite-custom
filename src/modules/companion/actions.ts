@@ -48,6 +48,7 @@ import { getLocalLang } from "../../state";
 import { t } from "../../i18n";
 
 const BOUND_CARD_KEY = "com.character-cards/boundCardId";
+const CARD_LIST_KEY = "com.character-cards/list";
 
 /** Who the action is for (from the bridge). */
 export interface Actor {
@@ -124,13 +125,24 @@ async function statusChips(item: any): Promise<StatusChip[]> {
 }
 
 /** First token on the map bound to this character card. */
+/** The character's token: the same one the suite's card uses — the
+ *  scene's card list says which (com.character-cards/list →
+ *  boundedTokenId). A copied token keeps the card link too, so "the
+ *  first token with this card" could be the copy; that is only the
+ *  fallback when the list doesn't name one on the map. */
 export async function tokenForCard(card: string): Promise<{ id: string; name: string } | null> {
   try {
-    const items = await OBR.scene.items.getItems(
+    const items = (await OBR.scene.items.getItems(
       (it: any) => (it.metadata as Record<string, unknown> | undefined)?.[BOUND_CARD_KEY] === card,
-    );
-    const it = items[0] as any;
-    return it ? { id: it.id, name: String(it.text?.plainText || it.name || "").trim() } : null;
+    )) as any[];
+    if (!items.length) return null;
+    let bound: unknown = null;
+    try {
+      const list = (await OBR.scene.getMetadata())[CARD_LIST_KEY];
+      if (Array.isArray(list)) bound = list.find((c: any) => c?.id === card)?.boundedTokenId ?? null;
+    } catch {}
+    const it = items.find((x) => x.id === bound) ?? items[0];
+    return { id: it.id, name: String(it.text?.plainText || it.name || "").trim() };
   } catch {
     return null;
   }

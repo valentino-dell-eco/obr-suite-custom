@@ -26,12 +26,10 @@ import { initBroadcastAuth, senderOf } from "../../utils/broadcastAuth";
 import { CC_ORIGIN } from "../characterCards/backend";
 import { rollForCompanion } from "../dice";
 import { BC_CHANGED, BC_HELLO, readSecret, roomKey } from "./shared";
-import { characterState, runAction, type Actor } from "./actions";
+import { characterState, runAction, tokenForCard as characterToken, type Actor } from "./actions";
 import { syncForms } from "./forms";
 import { stampChatMessage } from "../roomChat";
 import { BC_CHAT_MESSAGE } from "../roomChat/types";
-
-const BOUND_CARD_KEY = "com.character-cards/boundCardId";
 
 let started = false;
 
@@ -244,14 +242,8 @@ function closeSocket(): void {
 
 /** First token on the map bound to this character card. */
 async function tokenForCard(card: string): Promise<string | null> {
-  try {
-    const items = await OBR.scene.items.getItems(
-      (it: any) => (it.metadata as Record<string, unknown> | undefined)?.[BOUND_CARD_KEY] === card,
-    );
-    return items[0]?.id ?? null;
-  } catch {
-    return null;
-  }
+  // Same token as the card's (actions.ts → tokenForCard).
+  return (await characterToken(card))?.id ?? null;
 }
 
 async function execRoll(sock: WebSocket, m: ExecRoll): Promise<void> {
