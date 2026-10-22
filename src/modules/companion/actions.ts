@@ -1,6 +1,7 @@
 // Echo Companion — what the GM's suite does for a phone, besides rolls:
 // the character's state (HP + resources of its token) and actions
-// (rest, recharge, hit dice, HP, resources). Called by index.ts (the
+// (rest, recharge, hit dice, HP, resources, spell casts, feature uses).
+// Called by index.ts (the
 // executor).
 //
 // Everything goes through the suite's own code (resourceTracker
@@ -31,7 +32,10 @@ import {
 } from "../characterCards/recovery";
 import { conModFromCard } from "../characterCards/hit-dice";
 import { broadcastDiceRoll, rollForCompanion } from "../dice";
-import { dieRollFormula } from "../characterCards/spend";
+import { cleanSpend, dieRollFormula, spendResource, spendSpellSlot } from "../characterCards/spend";
+import { buildCast, buildFeatureUse, cardSaveDc, castLevelOptions } from "../characterCards/cast-core";
+import { effectiveSpellDetail } from "../characterCards/spell-detail";
+import type { ChatCast } from "../roomChat/types";
 import { loadCardById } from "../dice/stat-keywords";
 import { sendChat } from "../roomChat/send";
 import { getLocalLang } from "../../state";
@@ -284,6 +288,27 @@ async function hp(a: Actor, data: any) {
   return { current: after.health ?? cur, temp: after["temporary health"] ?? temp, max: after["max health"] ?? max };
 }
 
+/** Roll at the table in the player's name; returns the roll for the
+ *  phone's History (null when nothing was rolled). */
+async function rollAtTable(a: Actor, expression: string, label: string, itemId: string, hidden: boolean) {
+  const { payload } = await rollForCompanion(
+    { expression, label, itemId, hidden },
+    { id: a.player, name: a.name, color: a.color, via: "app", tokenName: a.cardName },
+  );
+  if (!payload) return null;
+  return {
+    total: payload.total,
+    modifier: payload.modifier,
+    label: payload.label,
+    expression,
+    hidden: !!payload.hidden,
+    tokenName: payload.tokenName ?? "",
+    rollerName: payload.rollerName,
+    rollerColor: payload.rollerColor,
+    dice: payload.dice.map((d) => ({ type: d.type, value: d.value, ...(d.loser ? { loser: true } : {}) })),
+  };
+}
+
 /** Use / restore a resource: like a click on the suite's resource
  *  panel. `current` = the new value; for spell slots also `level`
  *  (0 = 1st), for hit dice `die` ("d8"). Using a "die roll" resource
@@ -320,28 +345,117 @@ async function res(a: Actor, data: any) {
   if (r.type === "dieRoll" && delta < 0 && r.dieInfo) {
     const expression = dieRollFormula(r, -delta) ?? r.dieInfo;
     const label = `${r.name} ${t(getLocalLang(), "rpDieRollLabel")}`.trim();
-    const tok = await tokenForCard(a.card);
-    const { payload } = await rollForCompanion(
-      { expression, label, itemId: tok?.id ?? null, hidden: data?.hidden === true },
-      { id: a.player, name: a.name, color: a.color, via: "app", tokenName: a.cardName },
-    );
-    if (payload) {
-      roll = {
-        total: payload.total,
-        modifier: payload.modifier,
-        label: payload.label,
-        expression,
-        hidden: !!payload.hidden,
-        tokenName: payload.tokenName ?? "",
-        rollerName: payload.rollerName,
-        rollerColor: payload.rollerColor,
-        dice: payload.dice.map((d) => ({ type: d.type, value: d.value, ...(d.loser ? { loser: true } : {}) })),
-      };
-    }
+    roll = await rollAtTable(a, expression, label, itemId, data?.hidden === true);
   }
   const updated = await updateResource(itemId, r.id, () => next);
   if (updated) void broadcastChanged(itemId, updated, delta, r.current);
   return { current: next.current, max: next.max, roll };
+}
+
+// --- Spell casts and feature uses ---------------------------------------------
+// The suite's "Activation" windows (fullscreen-page.tsx → CastSpellModal /
+// UseFeatureModal, host side in panel-page.ts → cc-cast-spell), for the
+// phone: same chat card (cast-core.ts), same spending (spend.ts).
+
+const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+/** A spell object from the player's card (name, level, stored fields).
+ *  Size-capped: it comes from the phone. */
+function cleanSpell(raw: unknown): any {
+  if (!raw || typeof raw !== "object") throw new Error("bad spell");
+  const spell = raw as Record<string, unknown>;
+  const name = str(spell.name, 200);
+  if (!name) throw new Error("bad spell");
+  if (JSON.stringify(spell).length > 40_000) throw new Error("spell too large");
+  return { ...spell, name };
+}
+
+/** 1–9, or null. */
+function slotLevel(raw: unknown): number | null {
+  const n = Math.floor(Number(raw));
+  return n >= 1 && n <= 9 ? n : null;
+}
+
+/** The spell's details from the suite's libraries, for the cast window. */
+async function spellInfo(_a: Actor, data: any) {
+  const d = await effectiveSpellDetail(cleanSpell(data?.spell));
+  return {
+    meta: d.meta,
+    hasSave: d.hasSave,
+    body: d.body.slice(0, 6000),
+    higher: d.higher.slice(0, 2000),
+  };
+}
+
+/** Cast a spell / use a feature: spend the chosen spell slot or
+ *  resource, post the card to Room Chat in the player's name, and roll a
+ *  "die roll" resource's dice (the roll comes back for History). */
+async function cast(a: Actor, data: any) {
+  const itemId = await requireToken(a);
+  const secret = data?.secret === true;
+  const isFeature = data?.kind === "feature";
+  let c: ChatCast;
+  let slot = slotLevel(data?.slot);
+  if (isFeature) {
+    const f = (data?.feature ?? {}) as Record<string, unknown>;
+    const name = str(f.name, 200);
+    if (!name) throw new Error("bad feature");
+    const lv = Math.floor(Number(f.level));
+    c = buildFeatureUse({
+      name,
+      label: str(f.label, 80) || undefined,
+      description: str(f.description, 8000),
+      meta: Number.isFinite(lv) && f.level != null ? `Lv ${lv}` : undefined,
+    });
+  } else {
+    const spell = cleanSpell(data?.spell);
+    const baseLevel = Math.min(9, Math.max(0, Math.floor(Number(spell.level) || 0)));
+    if (baseLevel === 0) slot = null; // cantrips never use a slot
+    if (slot != null && slot < baseLevel) throw new Error("slot below spell level");
+    const want = Math.floor(Number(data?.castLevel));
+    const castLevel = slot ?? (castLevelOptions(baseLevel).includes(want) ? want : baseLevel);
+    let detail = null;
+    try {
+      detail = await effectiveSpellDetail(spell);
+    } catch {}
+    const dc = Number(data?.dc);
+    const charLv = Math.floor(Number(data?.characterLevel));
+    c = buildCast({
+      spellName: spell.name,
+      baseLevel,
+      castLevel,
+      dcInput: data?.dc != null && Number.isFinite(dc) ? Math.round(dc) : null,
+      cardDc: cardSaveDc(data?.cardDc),
+      detail,
+      characterLevel: charLv > 0 ? charLv : null,
+    });
+  }
+
+  // A spell slot or an eligible resource — never both.
+  let rollExpr: string | null = null;
+  if (slot != null) {
+    const spent = await spendSpellSlot(itemId, slot, { secret });
+    if (!spent) throw new Error("no_slot");
+    c.spent = spent;
+  } else {
+    const pick = cleanSpend(data?.spend);
+    if (pick) {
+      const res = await spendResource(itemId, pick, { secret });
+      if (res) {
+        const { roll, ...spent } = res;
+        c.spent = spent;
+        rollExpr = roll ?? null;
+      }
+    }
+  }
+
+  // Link the chat card to the token: dice in it roll with its stats.
+  c.tokenId = itemId;
+  await sendChat({ scope: secret ? "gm" : "all", text: "", cast: c, from: chatFrom(a) });
+  const roll = rollExpr
+    ? await rollAtTable(a, rollExpr, `${c.spellName} · ${c.spent?.name ?? ""}`, itemId, secret)
+    : null;
+  return { spent: c.spent ?? null, roll };
 }
 
 /** Runs one action from the phone; returns what goes back to it. */
@@ -357,6 +471,10 @@ export async function runAction(kind: string, a: Actor, data: unknown): Promise<
       return hp(a, data);
     case "res":
       return res(a, data);
+    case "cast":
+      return cast(a, data);
+    case "spellInfo":
+      return spellInfo(a, data);
     default:
       throw new Error(`unknown action ${kind}`);
   }
