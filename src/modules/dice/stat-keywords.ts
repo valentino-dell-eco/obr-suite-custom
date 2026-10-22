@@ -179,6 +179,18 @@ export async function loadStatSources(itemId: string | null): Promise<StatSource
   return out;
 }
 
+/** A character card read straight from the backend by its id — for
+ *  rolls with no token on the map (Echo Companion app rolls). */
+export async function loadCardById(cardId: string): Promise<any | null> {
+  try {
+    const roomId = (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const res = await fetch(cardDataUrl(roomId, cardId), { cache: "no-store" });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
 // --- Expansion ----------------------------------------------------------------
 
 const WRAP_RE = /(save|check)\s*[(（]([^()（）]*)[)）]/gi;

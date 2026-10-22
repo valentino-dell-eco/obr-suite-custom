@@ -3,7 +3,7 @@ import { getLocalLang } from "../../state";
 import { t } from "../../i18n";
 import { DiceType, DIE_SIDES, DieResult, rollDie, sidesOf, safeColor } from "./types";
 import { readSkinsForPlayer } from "./dice-skins";
-import { expandStatKeywords, hasStatKeywords, loadStatSources } from "./stat-keywords";
+import { expandStatKeywords, hasStatKeywords, loadCardById, loadStatSources } from "./stat-keywords";
 import { assetUrl } from "../../asset-base";
 import { onViewportResize } from "../../utils/viewportAnchor";
 import { updateResource } from "../resourceTracker/storage";
@@ -206,6 +206,18 @@ export interface QuickRollRequest {
   statSource?: "chara" | "form";
   /** Plain expression rolled when stat keywords can't be resolved. */
   fallbackExpression?: string;
+  /** Character card for the stat keywords when the token has none (or
+   *  there is no token): Echo Companion app rolls. */
+  cardId?: string;
+}
+
+/** Roll made for someone else (Echo Companion: the GM's suite rolls
+ *  for a player's phone). Shown in the room in that player's name. */
+export interface QuickRollFor {
+  id: string;
+  name: string;
+  color?: string;
+  via: "app";
 }
 
 // --- Broadcast payload schema (extended for multi-type dice) ---
@@ -266,6 +278,8 @@ export interface DiceRollPayload {
   collectiveId?: string;
   /** Sheet used for stat keywords (quick roll modal chips). */
   statSource?: "chara" | "form";
+  /** "app" = rolled from the Echo Companion phone app (by the GM's suite). */
+  via?: "app";
 }
 
 // Legacy payload shape for tolerant decoding.
@@ -1152,6 +1166,8 @@ function rollSimpleExpression(expr: string): { dice: DieResult[]; modifier: numb
 async function resolveQuickRollStats(req: QuickRollRequest): Promise<QuickRollRequest> {
   if (!hasStatKeywords(req.expression)) return req;
   const src = await loadStatSources(req.itemId ?? null).catch(() => ({ card: null, monster: null }));
+  // No card on the token (or no token): the card named in the request.
+  if (!src.card && req.cardId) src.card = await loadCardById(req.cardId);
   const kind =
     req.statSource === "form" && src.monster ? "form"
       : req.statSource === "chara" && src.card ? "chara"
@@ -1165,7 +1181,20 @@ async function resolveQuickRollStats(req: QuickRollRequest): Promise<QuickRollRe
   return { ...req, expression: x.expression, label: req.label || x.note };
 }
 
-async function handleQuickRoll(reqIn: QuickRollRequest): Promise<void> {
+/** Echo Companion: the GM's suite rolls for a player's phone. Same
+ *  pipeline as every quick roll (so the room sees it in the player's
+ *  name); returns what was broadcast + the expression actually rolled. */
+export async function rollForCompanion(
+  req: QuickRollRequest,
+  roller: QuickRollFor,
+): Promise<{ payload: DiceRollPayload | null; expression: string }> {
+  return handleQuickRoll(req, roller);
+}
+
+async function handleQuickRoll(
+  reqIn: QuickRollRequest,
+  roller?: QuickRollFor,
+): Promise<{ payload: DiceRollPayload | null; expression: string }> {
   const req = await resolveQuickRollStats(reqIn);
   const parsed = rollSimpleExpression(req.expression);
   let { dice } = parsed;
@@ -1213,7 +1242,7 @@ async function handleQuickRoll(reqIn: QuickRollRequest): Promise<void> {
     dice = doubled;
   }
 
-  if (!dice.length && modifier === 0) return;
+  if (!dice.length && modifier === 0) return { payload: null, expression: req.expression };
 
   // Camera focus on the requested token (only if explicitly asked
   // AND there's a real token id — empty string means "no token").
@@ -1237,9 +1266,15 @@ async function handleQuickRoll(reqIn: QuickRollRequest): Promise<void> {
 
   let rollerId = "";
   let rollerIsGM = false;
-  try { rollerId = await OBR.player.getId(); } catch {}
-  try { rollerIsGM = (await OBR.player.getRole()) === "GM"; } catch {}
+  if (roller) {
+    // Rolled for a player's phone: the player is the roller.
+    rollerId = roller.id;
+  } else {
+    try { rollerId = await OBR.player.getId(); } catch {}
+    try { rollerIsGM = (await OBR.player.getRole()) === "GM"; } catch {}
+  }
 
+  let sent: DiceRollPayload | null = null;
   await broadcastDiceRoll({
     itemId: req.itemId ?? null,
     dice,
@@ -1259,7 +1294,12 @@ async function handleQuickRoll(reqIn: QuickRollRequest): Promise<void> {
     rollerIsGM,
     collectiveId: req.collectiveId,
     ...(req.statSource === "chara" || req.statSource === "form" ? { statSource: req.statSource } : {}),
+    ...(roller ? { rollerName: roller.name, rollerColor: roller.color, via: roller.via } : {}),
+    onPayload: (p) => {
+      sent = p;
+    },
   });
+  return { payload: sent, expression: req.expression };
 }
 
 
@@ -1347,6 +1387,7 @@ function normalizePayload(raw: unknown): DiceRollPayload | null {
     ...(((data as any).sameHighlight) ? { sameHighlight: true } : {}),
     ...(((data as any).collectiveId) ? { collectiveId: String((data as any).collectiveId) } : {}),
     ...(((data as any).statSource === "chara" || (data as any).statSource === "form") ? { statSource: (data as any).statSource } : {}),
+    ...(((data as any).via === "app") ? { via: "app" as const } : {}),
   };
 }
 
@@ -1431,14 +1472,21 @@ export async function broadcastDiceRoll(opts: {
   collectiveId?: string;
   /** Sheet used for stat keywords (see QuickRollRequest.statSource). */
   statSource?: "chara" | "form";
+  /** Colour of the roller when rolling for someone else (Echo Companion). */
+  rollerColor?: string;
+  /** "app" = rolled from the Echo Companion phone app. */
+  via?: "app";
+  /** Gets the exact payload that is broadcast (Echo Companion sends it
+   *  back to the phone). */
+  onPayload?: (payload: DiceRollPayload) => void;
 }): Promise<string> {
   if (!opts.dice.length) return "";
   const winnerIdx = Math.max(-1, Math.min(opts.dice.length - 1, opts.winnerIdx));
 
-  let rollerColor = "#5dade2";
+  let rollerColor = opts.rollerColor || "#5dade2";
   let rollerName = opts.rollerName ?? "";
   try {
-    const c = await OBR.player.getColor();
+    const c = opts.rollerColor ? "" : await OBR.player.getColor();
     if (typeof c === "string" && c) rollerColor = c;
     if (!rollerName) {
       const n = await OBR.player.getName();
@@ -1494,7 +1542,9 @@ export async function broadcastDiceRoll(opts: {
     ...(opts.autoDismiss ? { autoDismiss: true } : {}),
     ...(opts.collectiveId ? { collectiveId: opts.collectiveId } : {}),
     ...(opts.statSource ? { statSource: opts.statSource } : {}),
+    ...(opts.via ? { via: opts.via } : {}),
   };
+  opts.onPayload?.(payload);
 
   try {
     if (opts.hidden) {
@@ -1525,4 +1575,4 @@ export async function broadcastDiceRoll(opts: {
     console.error("[obr-suite/dice] broadcast failed", e);
   }
   return rollId;
-}
+}

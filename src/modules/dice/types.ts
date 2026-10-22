@@ -130,6 +130,8 @@ export interface SanitizedRoll {
   rowStarts?: number[];
   /** Sheet used for stat keywords: character card or bestiary form. */
   statSource?: "chara" | "form";
+  /** "app" = rolled from the Echo Companion phone app (via the GM's suite). */
+  via?: "app";
 }
 
 /** Returns a clean copy of a roll payload, or null if it isn't one. */
@@ -166,6 +168,7 @@ export function sanitizeRollPayload(raw: unknown): SanitizedRoll | null {
   if (r.sameHighlight) out.sameHighlight = true;
   if (typeof r.collectiveId === "string" && r.collectiveId) out.collectiveId = r.collectiveId;
   if (r.statSource === "chara" || r.statSource === "form") out.statSource = r.statSource;
+  if (r.via === "app") out.via = "app";
   if (Array.isArray(r.rowStarts)) {
     out.rowStarts = r.rowStarts
       .map((n) => Number(n))

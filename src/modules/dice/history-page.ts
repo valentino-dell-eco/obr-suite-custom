@@ -75,15 +75,19 @@ interface HistoryEntry {
   rowStarts?: number[];
   /** Sheet used for stat keywords: character card / bestiary form. */
   statSource?: "chara" | "form";
+  /** "app" = rolled from the Echo Companion phone app. */
+  via?: "app";
 }
 
 /** "Chara" / "Form" tag for rolls made with the quick roll modal's
  *  sheet chips (token with both a character card and a bestiary form). */
-function statSourceTag(h: { statSource?: "chara" | "form" }): string {
-  if (h.statSource !== "chara" && h.statSource !== "form") return "";
+function statSourceTag(h: { statSource?: "chara" | "form"; via?: "app" }): string {
+  // 📱 = rolled from the Echo Companion phone app.
+  const phone = h.via === "app" ? `<span class="src-tag src-app" title="Echo Companion">📱</span>` : "";
+  if (h.statSource !== "chara" && h.statSource !== "form") return phone;
   const zh = getLocalLang() === "zh";
   const txt = h.statSource === "form" ? (zh ? "形态" : "Form") : (zh ? "角色" : "Chara");
-  return `<span class="src-tag src-${h.statSource}">${txt}</span>`;
+  return `${phone}<span class="src-tag src-${h.statSource}">${txt}</span>`;
 }
 
 // Currently-active replay's collective-id (LOCAL state — set when this
