@@ -68,6 +68,8 @@ interface ExecRoll {
   player: string;
   name: string;
   card: string | null;
+  /** The card's name (from the backend): "Name (Player)" without a token. */
+  cardName?: string;
   expr: string;
   label: string;
   mode: "normal" | "adv" | "dis";
@@ -81,7 +83,39 @@ let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
 let connectedWith = "";
 
+// Players' OBR colours, remembered: a player rolling from the phone
+// without being in the room still gets their own colour.
+const COLORS_LS = "obr-suite/companion/player-colors";
+
+function readColors(): Record<string, string> {
+  try {
+    const v = JSON.parse(localStorage.getItem(COLORS_LS) ?? "{}");
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+function rememberColors(players: Array<{ id: string; color: string }>): void {
+  const map = readColors();
+  let changed = false;
+  for (const p of players) {
+    if (p.id && p.color && map[p.id] !== p.color) {
+      map[p.id] = p.color;
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  try {
+    localStorage.setItem(COLORS_LS, JSON.stringify(map));
+  } catch {}
+}
+
 async function startExecutor(): Promise<void> {
+  try {
+    rememberColors(await OBR.party.getPlayers());
+    OBR.party.onChange((players) => rememberColors(players));
+  } catch {}
   // The room key is saved by the Settings page (same origin): connect
   // as soon as it appears, reconnect if it changes.
   window.addEventListener("storage", (e) => {
@@ -185,6 +219,7 @@ async function execRoll(sock: WebSocket, m: ExecRoll): Promise<void> {
     try {
       color = (await OBR.party.getPlayers()).find((p) => p.id === m.player)?.color;
     } catch {}
+    color ??= readColors()[m.player];
     const itemId = m.card ? await tokenForCard(m.card) : null;
     const { payload, expression } = await rollForCompanion(
       {
@@ -196,7 +231,7 @@ async function execRoll(sock: WebSocket, m: ExecRoll): Promise<void> {
         critMode: m.crit,
         ...(m.card ? { cardId: m.card, statSource: "chara" as const } : {}),
       },
-      { id: m.player, name: m.name || "?", color, via: "app" },
+      { id: m.player, name: m.name || "?", color, via: "app", tokenName: m.cardName || undefined },
     );
     if (!payload) {
       reply({ t: "exec.roll.fail", message: "nothing to roll" });

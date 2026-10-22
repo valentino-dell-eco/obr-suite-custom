@@ -218,6 +218,9 @@ export interface QuickRollFor {
   name: string;
   color?: string;
   via: "app";
+  /** Name shown as "Name (Player)" when no token on the map is used
+   *  (the character card's name). */
+  tokenName?: string;
 }
 
 // --- Broadcast payload schema (extended for multi-type dice) ---
@@ -1294,7 +1297,15 @@ async function handleQuickRoll(
     rollerIsGM,
     collectiveId: req.collectiveId,
     ...(req.statSource === "chara" || req.statSource === "form" ? { statSource: req.statSource } : {}),
-    ...(roller ? { rollerName: roller.name, rollerColor: roller.color, via: roller.via } : {}),
+    ...(roller
+      ? {
+          rollerName: roller.name,
+          // Never the GM's own colour: the player's, or the default blue.
+          rollerColor: roller.color || "#5dade2",
+          via: roller.via,
+          tokenNameFallback: roller.tokenName,
+        }
+      : {}),
     onPayload: (p) => {
       sent = p;
     },
@@ -1474,6 +1485,8 @@ export async function broadcastDiceRoll(opts: {
   statSource?: "chara" | "form";
   /** Colour of the roller when rolling for someone else (Echo Companion). */
   rollerColor?: string;
+  /** "Name (Player)" when there's no token (or it's hidden): Echo Companion. */
+  tokenNameFallback?: string;
   /** "app" = rolled from the Echo Companion phone app. */
   via?: "app";
   /** Gets the exact payload that is broadcast (Echo Companion sends it
@@ -1523,6 +1536,7 @@ export async function broadcastDiceRoll(opts: {
       }
     } catch {}
   }
+  if (!tokenName && opts.tokenNameFallback) tokenName = opts.tokenNameFallback.trim().slice(0, 80);
 
   const payload: DiceRollPayload = {
     itemId: opts.itemId,
