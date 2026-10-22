@@ -22,6 +22,7 @@ import { initBroadcastAuth, senderOf } from "../../utils/broadcastAuth";
 import { CC_ORIGIN } from "../characterCards/backend";
 import { rollForCompanion } from "../dice";
 import { BC_CHANGED, BC_HELLO, readSecret, roomKey } from "./shared";
+import { characterState, runAction, type Actor } from "./actions";
 
 const BOUND_CARD_KEY = "com.character-cards/boundCardId";
 
@@ -118,6 +119,20 @@ async function startExecutor(): Promise<void> {
     rememberColors(await OBR.party.getPlayers());
     OBR.party.onChange((players) => rememberColors(players));
   } catch {}
+  // Characters' state: re-send to the phones when tokens change
+  // (HP, resources) or the scene changes.
+  let t: ReturnType<typeof setTimeout> | null = null;
+  const refresh = () => {
+    if (t) clearTimeout(t);
+    t = setTimeout(() => {
+      t = null;
+      for (const card of watched) void pushState(card, false);
+    }, 200);
+  };
+  try {
+    OBR.scene.items.onChange(refresh);
+    OBR.scene.onReadyChange(refresh);
+  } catch {}
   // The room key is saved by the Settings page (same origin): connect
   // as soon as it appears, reconnect if it changes.
   window.addEventListener("storage", (e) => {
@@ -173,7 +188,11 @@ async function connect(): Promise<void> {
       return;
     }
     if (m?.t === "exec.roll") void execRoll(sock, m as ExecRoll);
-    else if (m?.t === "exec.ok" || m?.t === "exec.active") {
+    else if (m?.t === "exec.action") void execAction(sock, m);
+    else if (m?.t === "exec.watch" && typeof m.card === "string") {
+      watched.add(m.card);
+      void pushState(m.card, true);
+    } else if (m?.t === "exec.ok" || m?.t === "exec.active") {
       console.info(`[obr-suite/companion] bridge connected — ${m.active ? "rolling for phones" : "standby (another GM tab rolls)"}`);
     }
   };
@@ -267,5 +286,55 @@ async function execRoll(sock: WebSocket, m: ExecRoll): Promise<void> {
     });
   } catch (e) {
     reply({ t: "exec.roll.fail", message: String((e as Error)?.message ?? e).slice(0, 200) });
+  }
+}
+
+// --- Character state + actions (actions.ts) -------------------------------------
+
+/** Cards some phone is showing (the bridge tells us with exec.watch). */
+const watched = new Set<string>();
+const lastSent = new Map<string, string>();
+
+/** Send a character's HP + resources to the phones watching it — only
+ *  when something changed, unless forced (a phone just asked). */
+async function pushState(card: string, force: boolean): Promise<void> {
+  const sock = ws;
+  if (!sock || sock.readyState !== WebSocket.OPEN) return;
+  try {
+    const state = await characterState(card);
+    const json = JSON.stringify(state);
+    if (!force && lastSent.get(card) === json) return;
+    lastSent.set(card, json);
+    sock.send(JSON.stringify({ t: "exec.state", card, state }));
+  } catch (e) {
+    console.warn("[obr-suite/companion] state failed", e);
+  }
+}
+
+async function execAction(sock: WebSocket, m: any): Promise<void> {
+  const reply = (msg: Record<string, unknown>) => {
+    if (sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify({ ...msg, rid: m.rid, to: m.to }));
+  };
+  try {
+    let color: string | undefined =
+      typeof m.color === "string" && /^#[0-9a-fA-F]{6}$/.test(m.color) ? m.color : undefined;
+    if (!color) {
+      try {
+        color = (await OBR.party.getPlayers()).find((p) => p.id === m.player)?.color;
+      } catch {}
+    }
+    color ??= readColors()[m.player] ?? "#5dade2";
+    const actor: Actor = {
+      player: String(m.player ?? ""),
+      name: String(m.name ?? "") || "?",
+      color: color!,
+      card: String(m.card ?? ""),
+      cardName: String(m.cardName ?? ""),
+    };
+    const result = await runAction(String(m.kind ?? ""), actor, m.data);
+    reply({ t: "exec.action.done", result });
+    void pushState(actor.card, false);
+  } catch (e) {
+    reply({ t: "exec.action.fail", message: String((e as Error)?.message ?? e).slice(0, 200) });
   }
 }

@@ -15,7 +15,7 @@ import {
 } from "../resourceTracker/types";
 import { writeRecoveryPass, rechargeCharges, RechargeResult } from "../resourceTracker/storage";
 import { broadcastDiceRoll } from "../dice";
-import { sendChat } from "../roomChat/send";
+import { sendChat, type SendChatInput } from "../roomChat/send";
 import { getLocalLang } from "../../state";
 import { t } from "../../i18n";
 
@@ -140,6 +140,8 @@ export function announceRestInChat(
   /** LR only: the Dawn / Dusk resources were restored too — chained
    *  onto the same line ("… took a long rest and saw a new dawn"). */
   extras: { dawn?: boolean; dusk?: boolean } = {},
+  /** Post in a player's name (Echo Companion, see roomChat/send.ts). */
+  from?: SendChatInput["from"],
 ): void {
   const names = characterNames.map((n) => n.trim()).filter(Boolean);
   if (names.length === 0 || recoveryType === "none") return;
@@ -158,7 +160,7 @@ export function announceRestInChat(
       : "rcvChatAndDusk";
     text += t(lang, key);
   }
-  void sendChat({ scope: "all", text, tool: "rest" }).catch((e) => {
+  void sendChat({ scope: "all", text, tool: "rest", ...(from ? { from } : {}) }).catch((e) => {
     console.warn("[obr-suite/recovery] chat announce failed", e);
   });
 }
@@ -248,4 +250,4 @@ export async function rollChargeResource(
     // back, the toast is a nice-to-have, not the source of truth.
   }
   return result;
-}
+}

@@ -16,6 +16,9 @@ export interface SendChatInput {
   text: string;
   cast?: ChatCast;
   tool?: ChatTool;
+  /** Send in someone else's name (Echo Companion: the GM's suite posts
+   *  for a player using the phone app). Default: this client's player. */
+  from?: { id: string; name: string; color: string; role: ChatRole };
 }
 
 export async function sendChat(input: SendChatInput): Promise<boolean> {
@@ -23,12 +26,14 @@ export async function sendChat(input: SendChatInput): Promise<boolean> {
   if (!text && !input.cast) return false;
   if (input.scope === "player" && !input.toId) return false;
 
-  const [fromId, fromName, fromColor, role] = await Promise.all([
-    OBR.player.getId(),
-    OBR.player.getName(),
-    OBR.player.getColor(),
-    OBR.player.getRole(),
-  ]);
+  const [fromId, fromName, fromColor, role] = input.from
+    ? [input.from.id, input.from.name, input.from.color, input.from.role]
+    : await Promise.all([
+        OBR.player.getId(),
+        OBR.player.getName(),
+        OBR.player.getColor(),
+        OBR.player.getRole(),
+      ]);
   const msg: ChatMessage = {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     ts: Date.now(),
