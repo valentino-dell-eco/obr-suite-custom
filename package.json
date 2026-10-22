@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@owlbear-rodeo/sdk": "^3.1.0",
-    "preact": "^10.29.1"
+    "preact": "^10.29.1",
+    "qrcode-generator": "^1.4.4"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.5",

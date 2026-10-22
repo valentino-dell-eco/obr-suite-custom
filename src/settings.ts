@@ -38,6 +38,7 @@ import {
   type LocalFileMeta,
 } from "./utils/localContent";
 import { repairLegacyHiddenBubbles } from "./modules/bubbles";
+import { renderCompanionBody, wireCompanionBody } from "./modules/companion/settings-tab";
 import {
   chaseOptionsHtml,
   chatOptionsHtml,
@@ -2722,6 +2723,14 @@ const TABS: TabDef[] = [
            </div>`;
       return `${desc}${btns}`;
     },
+  },
+  {
+    // Phone app (Echo Companion): QR codes per player.
+    id: "companion",
+    zh: `${ICONS.idCard} 手机应用`,
+    en: `${ICONS.idCard} Phone App`,
+    dynamicBody: (lang, gm) => renderCompanionBody(lang, gm),
+    afterRender: (root, gm) => wireCompanionBody(root, gm),
   },
   {
     id: "initiative",
