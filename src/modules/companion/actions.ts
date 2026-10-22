@@ -1,6 +1,7 @@
 // Echo Companion — what the GM's suite does for a phone, besides rolls:
 // the character's state (HP + resources of its token) and actions
-// (rest, recharge, hit dice). Called by index.ts (the executor).
+// (rest, recharge, hit dice, HP, resources). Called by index.ts (the
+// executor).
 //
 // Everything goes through the suite's own code (resourceTracker
 // storage, recovery.ts, the dice pipeline, Room Chat), so the room sees
@@ -11,7 +12,15 @@ import OBR from "@owlbear-rodeo/sdk";
 import { readBubbles, patchBubbles } from "../../utils/statEdit";
 import { readResources, updateResource } from "../resourceTracker/storage";
 import { broadcastChanged } from "../resourceTracker/panel";
-import { cleanPools, dieSides, hitDieSize, slotTotals, type HitDiePool, type Resource } from "../resourceTracker/types";
+import {
+  cleanPools,
+  cleanSlots,
+  dieSides,
+  hitDieSize,
+  slotTotals,
+  type HitDiePool,
+  type Resource,
+} from "../resourceTracker/types";
 import {
   announceRestInChat,
   expandRecoveryTypes,
@@ -21,7 +30,8 @@ import {
   type RecoveryType,
 } from "../characterCards/recovery";
 import { conModFromCard } from "../characterCards/hit-dice";
-import { broadcastDiceRoll } from "../dice";
+import { broadcastDiceRoll, rollForCompanion } from "../dice";
+import { dieRollFormula } from "../characterCards/spend";
 import { loadCardById } from "../dice/stat-keywords";
 import { sendChat } from "../roomChat/send";
 import { getLocalLang } from "../../state";
@@ -243,6 +253,97 @@ async function hitDice(a: Actor, data: any) {
   };
 }
 
+// --- HP and resources (the suite's stat banner + resource panel) ---------------
+
+/** HP of the token: set current / temp / max, or damage / heal
+ *  (damage takes temporary HP first; heal stops at max). */
+async function hp(a: Actor, data: any) {
+  const itemId = await requireToken(a);
+  const b = await readBubbles(itemId);
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
+  let cur = n(b.health) ?? 0;
+  let temp = n(b["temporary health"]) ?? 0;
+  let max = n(b["max health"]);
+  const damage = n(data?.damage);
+  const heal = n(data?.heal);
+  if (damage != null && damage > 0) {
+    const fromTemp = Math.min(temp, damage);
+    temp -= fromTemp;
+    cur -= damage - fromTemp;
+  }
+  if (heal != null && heal > 0) cur = max != null ? Math.min(max, cur + heal) : cur + heal;
+  if (n(data?.current) != null) cur = n(data.current)!;
+  if (n(data?.temp) != null) temp = Math.max(0, n(data.temp)!);
+  if (n(data?.max) != null) max = Math.max(1, n(data.max)!);
+  cur = Math.max(-999, cur);
+  const after = await patchBubbles(itemId, {
+    health: cur,
+    "temporary health": temp,
+    ...(max != null ? { "max health": max } : {}),
+  });
+  return { current: after.health ?? cur, temp: after["temporary health"] ?? temp, max: after["max health"] ?? max };
+}
+
+/** Use / restore a resource: like a click on the suite's resource
+ *  panel. `current` = the new value; for spell slots also `level`
+ *  (0 = 1st), for hit dice `die` ("d8"). Using a "die roll" resource
+ *  rolls its dice at the table first (the roll comes back too). */
+async function res(a: Actor, data: any) {
+  const itemId = await requireToken(a);
+  const [item] = await OBR.scene.items.getItems([itemId]);
+  const r = readResources(item ?? null).find((x) => x.id === data?.resourceId);
+  if (!r) throw new Error("no such resource");
+  const want = Math.round(Number(data?.current));
+  if (!Number.isFinite(want)) throw new Error("bad value");
+  let next: Resource;
+  if (r.type === "spellSlots") {
+    const lv = Math.floor(Number(data?.level));
+    const slots = cleanSlots(r.slots);
+    if (!slots[lv]) throw new Error("bad level");
+    slots[lv] = { ...slots[lv], current: Math.max(0, Math.min(slots[lv].max, want)) };
+    const tot = slotTotals(slots);
+    next = { ...r, slots, current: tot.current, max: tot.max };
+  } else if (r.type === "hitDice" && typeof data?.die === "string") {
+    const pools = readPools(r).map((p) => (p.die === data.die ? { ...p, current: Math.max(0, Math.min(p.max, want)) } : p));
+    const tot = slotTotals(pools);
+    next = { ...r, pools, current: tot.current, max: tot.max };
+  } else {
+    // "number" may go above max (as in the suite); the others stop at max.
+    const top = r.type === "number" ? Number.POSITIVE_INFINITY : r.max;
+    next = { ...r, current: Math.max(0, Math.min(top, want)) };
+  }
+  const delta = next.current - r.current;
+  if (delta === 0) return { current: r.current, max: r.max };
+
+  // Die roll resource used → roll its dice first (in the player's name).
+  let roll: unknown = null;
+  if (r.type === "dieRoll" && delta < 0 && r.dieInfo) {
+    const expression = dieRollFormula(r, -delta) ?? r.dieInfo;
+    const label = `${r.name} ${t(getLocalLang(), "rpDieRollLabel")}`.trim();
+    const tok = await tokenForCard(a.card);
+    const { payload } = await rollForCompanion(
+      { expression, label, itemId: tok?.id ?? null, hidden: data?.hidden === true },
+      { id: a.player, name: a.name, color: a.color, via: "app", tokenName: a.cardName },
+    );
+    if (payload) {
+      roll = {
+        total: payload.total,
+        modifier: payload.modifier,
+        label: payload.label,
+        expression,
+        hidden: !!payload.hidden,
+        tokenName: payload.tokenName ?? "",
+        rollerName: payload.rollerName,
+        rollerColor: payload.rollerColor,
+        dice: payload.dice.map((d) => ({ type: d.type, value: d.value, ...(d.loser ? { loser: true } : {}) })),
+      };
+    }
+  }
+  const updated = await updateResource(itemId, r.id, () => next);
+  if (updated) void broadcastChanged(itemId, updated, delta, r.current);
+  return { current: next.current, max: next.max, roll };
+}
+
 /** Runs one action from the phone; returns what goes back to it. */
 export async function runAction(kind: string, a: Actor, data: unknown): Promise<unknown> {
   switch (kind) {
@@ -252,6 +353,10 @@ export async function runAction(kind: string, a: Actor, data: unknown): Promise<
       return recharge(a, data);
     case "hitDice":
       return hitDice(a, data);
+    case "hp":
+      return hp(a, data);
+    case "res":
+      return res(a, data);
     default:
       throw new Error(`unknown action ${kind}`);
   }
