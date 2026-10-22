@@ -32,7 +32,7 @@ import {
   showLrExtraConfirm,
   showChargesRollModal,
 } from "./recovery-ui";
-import { CC_ORIGIN } from "./backend";
+import { CC_ORIGIN, saveCardOrAsk } from "./backend";
 
 // 2026-05-13 — Was previously dev-only (gated through STABLE_HIDES /
 // STABLE_HIDES_CC) until cc-fullscreen + hp-bar integration matured.
@@ -577,7 +577,6 @@ const cardCache = new Map<string, CardCacheEntry>();
 
 // const SERVER_ORIGIN = "https://obr.dnd.center";
 const SERVER_ORIGIN = CC_ORIGIN;
-const API_BASE = `${SERVER_ORIGIN}/api/character`;
 const LS_PREFIX = "character-cards/";
 
 // Broadcast ids mirrored from panel-page.ts / fullscreen-page.tsx.
@@ -659,19 +658,22 @@ async function uploadDirtyCardToServer(cardId: string): Promise<void> {
   updateSyncButtons("loading");
   try {
     const parsed = JSON.parse(stored);
-    const url = `${API_BASE}/${encodeURIComponent(currentRoomId)}/${encodeURIComponent(cardId)}/data`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed),
-      signal: controller.signal,
-    });
+    // The local copy still carries the version it was loaded at
+    // (`_version`): if someone saved the card since, ask before
+    // overwriting. Saying no keeps the local copy (still "dirty").
+    const res = await saveCardOrAsk(
+      currentRoomId,
+      cardId,
+      parsed,
+      () => window.confirm(tt("ccConflictConfirm")),
+      { signal: controller.signal },
+    );
     clearTimeout(timeout);
     if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`HTTP ${res.status} — ${errText.slice(0, 120)}`);
+      if (res.conflict) throw new Error(tt("ccConflictAborted"));
+      throw new Error(`HTTP ${res.status} — ${res.message.slice(0, 120)}`);
     }
 
     localStorage.removeItem(dirtyKey);

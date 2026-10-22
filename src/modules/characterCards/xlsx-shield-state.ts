@@ -1,5 +1,5 @@
 import { readBooleanFlag } from "./data-normalize.js";
-import { cardDataUrl } from "./backend";
+import { patchCardData } from "./backend";
 
 const EOCD_SIG = 0x06054b50;
 const CEN_SIG = 0x02014b50;
@@ -131,6 +131,7 @@ export async function readShieldEquippedFromXlsx(source: Blob | ArrayBuffer | Ui
 }
 
 export async function reconcileUploadedCardShieldState(params: {
+  /** Unused (kept for the callers): the save URL comes from backend.ts. */
   apiBase: string;
   roomId: string;
   cardId: string;
@@ -139,32 +140,26 @@ export async function reconcileUploadedCardShieldState(params: {
   const equipped = await readShieldEquippedFromXlsx(params.xlsx);
   if (equipped == null) return false;
 
-  const dataUrl = cardDataUrl(params.roomId, params.cardId);
-  const res = await fetch(dataUrl, { cache: "no-cache" });
-  if (!res.ok) throw new Error(`fetch data.json failed: HTTP ${res.status}`);
-  const data = await res.json();
-  const cur = readBooleanFlag(data?.combat?.shield?.equipped);
-  if (cur === equipped) return false;
-
-  const next = {
-    ...data,
-    combat: {
-      ...(data?.combat || {}),
-      shield: {
-        ...(data?.combat?.shield || {}),
-        equipped,
+  // Read → fix the shield flag → save; retried if someone else saved
+  // the card at the same moment (409).
+  const saved = await patchCardData(params.roomId, params.cardId, (data) => {
+    const cur = readBooleanFlag(data?.combat?.shield?.equipped);
+    if (cur === equipped) return null;
+    return {
+      ...data,
+      combat: {
+        ...(data?.combat || {}),
+        shield: {
+          ...(data?.combat?.shield || {}),
+          equipped,
+        },
       },
-    },
-  };
-  const putUrl = `${params.apiBase}/${encodeURIComponent(params.roomId)}/${encodeURIComponent(params.cardId)}/data`;
-  const put = await fetch(putUrl, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(next),
+    };
   });
-  if (!put.ok) {
-    const body = await put.text();
-    throw new Error(`save corrected shield state failed: HTTP ${put.status} ${body.slice(0, 120)}`);
+  if (!saved) return false;
+  if (!saved.ok) {
+    const why = saved.conflict ? "conflict" : `HTTP ${saved.status} ${saved.message.slice(0, 120)}`;
+    throw new Error(`save corrected shield state failed: ${why}`);
   }
   return true;
 }

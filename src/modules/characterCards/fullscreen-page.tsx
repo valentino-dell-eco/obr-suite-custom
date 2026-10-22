@@ -54,7 +54,7 @@ import { ICON_LIBRARY } from "../resourceTracker/icons";
 import { amountFromClick, ensureSpendVisualStyles, spendVisualHtml } from "./spend-visual";
 import { bestNameMatch, getSecretPref, setSecretPref } from "./spend";
 import type { IconId } from "../resourceTracker/types";
-import { CC_ORIGIN } from "./backend";
+import { CC_ORIGIN, cardVersion, saveCardOrAsk, withCardVersion } from "./backend";
 import { UnsupportedSheetError, srdSheetToCard } from "./xlsx-import";
 
 // [CC-FLOW] Module-evaluation marker for the fullscreen iframe document.
@@ -4925,8 +4925,13 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  // Optimistic-concurrency bookkeeping for saves (see checkServerConflict).
-  const loadedSavedAtRef = useRef<string | null>(null);
+  // Save bookkeeping.
+  //   loadedVersionRef — the card version (`_version`) this window is
+  //     based on: sent with every save, so the backend refuses it (409)
+  //     if someone else saved the card in the meantime.
+  //   lastOwnSavedAtRef — `_saved_at` of our own last save, to ignore
+  //     the echo of our own BC_CARD_UPDATED.
+  const loadedVersionRef = useRef<number | null>(null);
   const lastOwnSavedAtRef = useRef<string | null>(null);
   // Someone else saved this card while we have unsaved edits open.
   const [remoteChanged, setRemoteChanged] = useState(false);
@@ -5027,10 +5032,7 @@ function App() {
       console.log(`[cc-fullscreen] Committing data for card ${cardId}`);
       setError(null);
       setData(normalized);
-      loadedSavedAtRef.current =
-        typeof (normalized as any)?._saved_at === "string"
-          ? (normalized as any)._saved_at
-          : null;
+      loadedVersionRef.current = cardVersion(normalized);
       setRemoteChanged(false);
       const isOwner = normalized.owners_id?.indexOf(myId) ?? -1;
       setCanEdit(isOwner !== -1);
@@ -5230,28 +5232,19 @@ function App() {
     };
   }, [cardId, loadData]);
 
-  /** Optimistic concurrency check before a PUT. Re-reads the server
-   *  copy: if its `_saved_at` differs from the one we loaded, someone
-   *  else saved in the meantime → ask before overwriting.
-   *  Returns true when it is safe (or the user chose) to write. */
-  const checkServerConflict = useCallback(async (): Promise<boolean> => {
-    if (!roomId || !cardId || cardId.startsWith("imported_")) return true;
-    try {
-      const url = `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) return true; // can't tell — don't block the save
-      const remote = await res.json();
-      const remoteTs =
-        typeof remote?._saved_at === "string" ? remote._saved_at : null;
-      if (remoteTs === loadedSavedAtRef.current) return true;
-      if (remoteTs && remoteTs === lastOwnSavedAtRef.current) return true;
-      const overwrite = window.confirm(T("ccConflictConfirm"));
-      if (!overwrite) setRemoteChanged(true);
-      return overwrite;
-    } catch {
-      return true;
-    }
-  }, [roomId, cardId]);
+  /** Asked when the backend refuses a save because someone else saved
+   *  the card after this window loaded it (409). OK = overwrite. */
+  const askOverwrite = useCallback((): boolean => {
+    const overwrite = window.confirm(T("ccConflictConfirm"));
+    if (!overwrite) setRemoteChanged(true);
+    return overwrite;
+  }, []);
+
+  /** After a successful save: this window is now based on `version`. */
+  const adoptSavedVersion = useCallback((version: number | null) => {
+    loadedVersionRef.current = version;
+    setData((prev) => (prev ? withCardVersion(prev, version) : prev));
+  }, []);
 
   const onPatch = useCallback((patch: Partial<CharacterData>) => {
     setData((prev) => (prev ? safeNormalize({ ...prev, ...patch }) : prev));
@@ -5371,24 +5364,23 @@ function App() {
       }
 
       const dirtyKey = `cc-dirty/${cardId}`;
-      if (!(await checkServerConflict())) {
-        return `✕ ${source} ${T("ccConflictAborted")}`;
-      }
       const savedAt = new Date().toISOString();
-      parsed = { ...parsed, _saved_at: savedAt };
+      // Based on the version this window loaded (pasted JSON included:
+      // it replaces the card the user is looking at).
+      parsed = withCardVersion({ ...parsed, _saved_at: savedAt }, loadedVersionRef.current);
       try {
-        const url = `${SERVER_ORIGIN}/api/character/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data`;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(url, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(parsed),
+        const res = await saveCardOrAsk(roomId, cardId, parsed, askOverwrite, {
           signal: controller.signal,
         });
         clearTimeout(timeout);
+        if (!res.ok && res.conflict) {
+          // The user chose not to overwrite: edits stay open, nothing saved.
+          return `✕ ${source} ${T("ccConflictAborted")}`;
+        }
         if (!res.ok) {
-          const body = await res.text();
+          const body = res.message;
           localStorage.setItem(dirtyKey, JSON.stringify(parsed));
           localStorage.setItem(
             `cc-dirty-ts/${cardId}`,
@@ -5399,9 +5391,9 @@ function App() {
           } catch {}
           return `⚠ ${source} ${T("ccSaveFailHttp").replace("{status}", String(res.status)).replace("{body}", body.slice(0, 120))}\n💾 ${T("ccDirtySave")}`;
         }
-        const result = await res.json();
+        const result = res.entry;
         lastOwnSavedAtRef.current = savedAt;
-        loadedSavedAtRef.current = savedAt;
+        adoptSavedVersion(res.version);
         try {
           localStorage.removeItem(dirtyKey);
         } catch {}
@@ -5433,7 +5425,7 @@ function App() {
         return `⚠ ${source} ${T("ccSaveFail").replace("{err}", e?.message || String(e))}\n💾 ${T("ccDirtySave")}`;
       }
     },
-    [roomId, cardId, checkServerConflict],
+    [roomId, cardId, askOverwrite, adoptSavedVersion],
   );
 
   const createCardFromJson = useCallback(
@@ -5518,29 +5510,27 @@ function App() {
               summary.push(`✕ ${f.name} ${T("ccNotCardJson")}`);
               continue;
             }
-            if (!(await checkServerConflict())) {
-              summary.push(`✕ ${f.name} ${T("ccConflictAborted")}`);
-              continue;
-            }
             const importSavedAt = new Date().toISOString();
-            const stamped = { ...parsed, _saved_at: importSavedAt };
+            // The imported file replaces the card on screen, so it's
+            // based on the version this window loaded.
+            const stamped = withCardVersion(
+              { ...parsed, _saved_at: importSavedAt },
+              loadedVersionRef.current,
+            );
             setData(safeNormalize(stamped));
             try {
-              const url = `${SERVER_ORIGIN}/api/character/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data`;
-              const res = await fetch(url, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(stamped),
-              });
-              if (!res.ok) {
-                const body = await res.text();
+              const res = await saveCardOrAsk(roomId, cardId, stamped, askOverwrite);
+              if (!res.ok && res.conflict) {
+                summary.push(`✕ ${f.name} ${T("ccConflictAborted")}`);
+              } else if (!res.ok) {
+                const body = res.message;
                 summary.push(
                   `⚠ ${f.name} ${T("ccSaveFailHttp").replace("{status}", String(res.status)).replace("{body}", body.slice(0, 120))}`,
                 );
               } else {
-                const result = await res.json();
+                const result = res.entry;
                 lastOwnSavedAtRef.current = importSavedAt;
-                loadedSavedAtRef.current = importSavedAt;
+                adoptSavedVersion(res.version);
                 try {
                   const updatedPayload = {
                     cardId,
@@ -5588,7 +5578,7 @@ function App() {
         `${T("ccImportResultHead").replace("{n}", String(files.length))}\n\n${summary.join("\n")}\n\n${T("ccImportResultNote")}`,
       );
     },
-    [roomId, cardId],
+    [roomId, cardId, askOverwrite, adoptSavedVersion],
   );
 
   useEffect(() => {

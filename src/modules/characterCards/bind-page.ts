@@ -2,7 +2,7 @@ import OBR from "@owlbear-rodeo/sdk";
 import { ICONS } from "../../icons";
 import { applyI18nDom, t } from "../../i18n";
 import { getLocalLang } from "../../state";
-import { CC_ORIGIN } from "./backend";
+import { CC_ORIGIN, patchCardData } from "./backend";
 
 const lang = getLocalLang();
 const tt = (k: Parameters<typeof t>[1]) => t(lang, k);
@@ -85,30 +85,21 @@ async function persistBoundedTokenInCardContent(
     return;
   }
 
-  // 2) Server cards: GET data.json → patch meta only → PUT
-  const roomId = roomKey();
-  const getUrl = `${SERVER_ORIGIN}/characters/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data.json`;
-  const putUrl = `${SERVER_ORIGIN}/api/character/${encodeURIComponent(roomId)}/${encodeURIComponent(cardId)}/data`;
-
+  // 2) Server cards: GET data.json → patch meta only → PUT.
+  //    patchCardData re-reads and retries if someone else saved the
+  //    card at the same moment (409), so their edit isn't lost.
   try {
-    const res = await fetch(getUrl, { cache: "no-store" });
-    if (!res.ok) return;
-    const data = await res.json();
-    if (!data || typeof data !== "object") return;
-    if (!data.meta || typeof data.meta !== "object") data.meta = {};
-    if ((data.meta.boundedTokenId ?? null) === tokenId) return;
-    data.meta.boundedTokenId = tokenId;
-
-    const put = await fetch(putUrl, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+    const saved = await patchCardData(roomKey(), cardId, (data) => {
+      if (!data || typeof data !== "object") return null;
+      if (!data.meta || typeof data.meta !== "object") data.meta = {};
+      if ((data.meta.boundedTokenId ?? null) === tokenId) return null;
+      data.meta.boundedTokenId = tokenId;
+      return data;
     });
-    if (!put.ok) {
+    if (saved && !saved.ok) {
       console.warn(
         "[character-cards] persist meta.boundedTokenId PUT failed",
-        put.status,
-        await put.text().catch(() => ""),
+        saved.conflict ? "conflict" : `${saved.status} ${saved.message}`,
       );
     }
   } catch (e) {

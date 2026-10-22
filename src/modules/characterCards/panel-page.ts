@@ -42,7 +42,7 @@ import {
   showChargesRollModal,
   ChargesGroup,
 } from "./recovery-ui";
-import { CC_API, cardDataUrl } from "./backend";
+import { CC_API, cardDataUrl, cardVersion, saveCardOrAsk, withCardVersion } from "./backend";
 import { UnsupportedSheetError, srdSheetToCard } from "./xlsx-import";
 
 // Mirrors fullscreen-page.tsx's own BIND_META_KEY — the token-binding
@@ -979,21 +979,30 @@ async function refreshCardFromPicker(card: CardEntry): Promise<void> {
     // Re-convert the sheet and replace the card, keeping what the
     // suite added to it (token binding, owners).
     const next = await convertSheet(file);
+    let base: any = null;
     try {
       const curRes = await fetch(cardDataUrl(roomId, card.id), { cache: "no-store" });
       if (curRes.ok) {
         const cur = await curRes.json();
         if (cur?.meta?.boundedTokenId) next.meta = { ...next.meta, boundedTokenId: cur.meta.boundedTokenId };
         if (Array.isArray(cur?.owners_id)) next.owners_id = cur.owners_id;
+        base = cur;
       }
     } catch {}
     next._saved_at = new Date().toISOString();
-    const r = await fetch(
-      `${API_BASE}/${encodeURIComponent(roomId)}/${encodeURIComponent(card.id)}/data`,
-      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) },
+    // Based on the version just read: if someone saves the card in the
+    // meantime, ask before overwriting their changes with the sheet.
+    const r = await saveCardOrAsk(
+      roomId,
+      card.id,
+      withCardVersion(next, cardVersion(base)),
+      () => window.confirm(tt("ccConflictConfirm")),
     );
-    if (!r.ok) throw new Error((await r.text()) || `HTTP ${r.status}`);
-    const updated = (await r.json()) as CardEntry;
+    if (!r.ok) {
+      if (r.conflict) throw new Error(tt("ccConflictAborted"));
+      throw new Error(r.message || `HTTP ${r.status}`);
+    }
+    const updated = r.entry as CardEntry;
     cards = cards.map((c) => (c.id === updated.id ? { ...c, ...updated } : c));
     await writeCardsToScene(cards);
     // No iframe to refresh here anymore — cc-fullscreen.html is its own
@@ -1588,20 +1597,23 @@ async function uploadDirtyCardToServer(card: CardEntry): Promise<void> {
 
   try {
     const parsed = JSON.parse(stored);
-    const url = `${API_BASE}/${encodeURIComponent(roomId)}/${encodeURIComponent(card.id)}/data`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(parsed),
-      signal: controller.signal,
-    });
+    // The local copy still carries the version it was loaded at
+    // (`_version`): if someone saved the card since, ask before
+    // overwriting. Saying no keeps the local copy (still "dirty").
+    const res = await saveCardOrAsk(
+      roomId,
+      card.id,
+      parsed,
+      () => window.confirm(tt("ccConflictConfirm")),
+      { signal: controller.signal },
+    );
     clearTimeout(timeout);
 
     if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`HTTP ${res.status} — ${errText.slice(0, 120)}`);
+      if (res.conflict) throw new Error(tt("ccConflictAborted"));
+      throw new Error(`HTTP ${res.status} — ${res.message.slice(0, 120)}`);
     }
 
     // Successo — rimuovi dirty e aggiorna nuvola a verde
