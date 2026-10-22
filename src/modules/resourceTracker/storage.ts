@@ -133,6 +133,52 @@ export function restoredResource(r: Resource): Resource {
   return { ...r, current: r.max };
 }
 
+// --- One "Spell slots" and one "Hit dice" per token ---------------------------
+// They are special (shown in the character sheet, not in the resource
+// list), and everything — sheet, casts, rests, the phone app — uses the
+// FIRST one of each. A second one is invisible and only confuses, so it
+// can't be added (see addResource) and is removed on every write and by
+// the GM's clean-up pass (removeDuplicateSpecials).
+
+const SPECIAL_TYPES = new Set(["spellSlots", "hitDice"]);
+
+/** The array without a second "Spell slots" / "Hit dice" (the first of
+ *  each type is kept). */
+export function dedupeSpecial<T>(arr: T[]): T[] {
+  const seen = new Set<string>();
+  return arr.filter((r: any) => {
+    const t = r?.type;
+    if (!SPECIAL_TYPES.has(t)) return true;
+    if (seen.has(t)) return false;
+    seen.add(t);
+    return true;
+  });
+}
+
+/** GM clean-up: drop the extra "Spell slots" / "Hit dice" from every
+ *  token in the scene that has more than one. */
+export async function removeDuplicateSpecials(): Promise<number> {
+  let ids: string[] = [];
+  try {
+    const items = await OBR.scene.items.getItems((it: any) => {
+      const arr = (it.metadata as any)?.[RESOURCES_KEY];
+      return Array.isArray(arr) && dedupeSpecial(arr).length !== arr.length;
+    });
+    ids = items.map((i) => i.id);
+    if (!ids.length) return 0;
+    await OBR.scene.items.updateItems(ids, (drafts) => {
+      for (const d of drafts) {
+        const arr = (d.metadata as any)?.[RESOURCES_KEY];
+        if (Array.isArray(arr)) (d.metadata as any)[RESOURCES_KEY] = dedupeSpecial(arr);
+      }
+    });
+    console.info(`[obr-suite/resources] removed duplicate spell slots / hit dice on ${ids.length} token(s)`);
+  } catch (e) {
+    console.warn("[obr-suite/resources] duplicate clean-up failed", e);
+  }
+  return ids.length;
+}
+
 /** Replace the entire resources array for one token. */
 export async function writeResources(
   itemId: string,
@@ -142,7 +188,7 @@ export async function writeResources(
     await OBR.scene.items.updateItems([itemId], (drafts) => {
       const d = drafts[0];
       if (!d) return;
-      (d.metadata as any)[RESOURCES_KEY] = next;
+      (d.metadata as any)[RESOURCES_KEY] = dedupeSpecial(next);
     });
   } catch (e) {
     console.error("[obr-suite/resources] writeResources failed", e);
@@ -178,7 +224,9 @@ export async function updateResource(
   return next;
 }
 
-/** Add a new resource to the end of the array. */
+/** Add a new resource to the end of the array. A "Spell slots" /
+ *  "Hit dice" when the token already has one REPLACES that one (same id
+ *  and place) instead: there is only ever one of each. */
 export async function addResource(
   itemId: string,
   resource: Resource,
@@ -189,8 +237,10 @@ export async function addResource(
       if (!d) return;
       const arr = (d.metadata as any)?.[RESOURCES_KEY];
       const next = Array.isArray(arr) ? [...arr] : [];
-      next.push(resource);
-      (d.metadata as any)[RESOURCES_KEY] = next;
+      const same = SPECIAL_TYPES.has(resource.type) ? next.findIndex((r: any) => r?.type === resource.type) : -1;
+      if (same >= 0) next[same] = { ...resource, id: next[same].id, order: next[same].order ?? resource.order };
+      else next.push(resource);
+      (d.metadata as any)[RESOURCES_KEY] = dedupeSpecial(next);
     });
   } catch (e) {
     console.error("[obr-suite/resources] addResource failed", e);

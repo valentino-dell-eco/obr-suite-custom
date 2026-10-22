@@ -1,7 +1,7 @@
 import OBR from "@owlbear-rodeo/sdk";
 import { assetUrl } from "../../asset-base";
 import { getLocalLang } from "../../state";
-import { addResource, deleteResource, updateResource } from "./storage";
+import { addResource, deleteResource, removeDuplicateSpecials, updateResource } from "./storage";
 import { Resource, PLUGIN_ID } from "./types";
 import {
   registerSuiteItem,
@@ -189,6 +189,23 @@ export async function setupResourceTracker(): Promise<void> {
       else await closeToastOverlay();
     }),
   );
+
+  // GM only: keep one "Spell slots" and one "Hit dice" per token (extra
+  // ones left by older versions, or by two windows creating them at the
+  // same moment). On scene load and after token changes, debounced.
+  if (role === "GM") {
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const clean = () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => {
+        t = null;
+        void OBR.scene.isReady().then((r) => (r ? removeDuplicateSpecials() : 0)).catch(() => {});
+      }, 1500);
+    };
+    unsubs.push(OBR.scene.onReadyChange((ready) => { if (ready) clean(); }));
+    unsubs.push(OBR.scene.items.onChange(clean));
+    clean();
+  }
   try {
     const ready = await OBR.scene.isReady();
     if (ready) await openToastOverlay();
