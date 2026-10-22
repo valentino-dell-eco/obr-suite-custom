@@ -67,6 +67,8 @@ interface ExecRoll {
   to: string;
   player: string;
   name: string;
+  /** Colour chosen in the app's Settings ("#rrggbb"), or null. */
+  color?: string | null;
   card: string | null;
   /** The card's name (from the backend): "Name (Player)" without a token. */
   cardName?: string;
@@ -215,10 +217,15 @@ async function execRoll(sock: WebSocket, m: ExecRoll): Promise<void> {
     if (sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify({ ...msg, rid: m.rid, to: m.to }));
   };
   try {
-    let color: string | undefined;
-    try {
-      color = (await OBR.party.getPlayers()).find((p) => p.id === m.player)?.color;
-    } catch {}
+    // Colour: the one chosen in the app, else OBR's (in the room now,
+    // or remembered from the last time).
+    let color: string | undefined =
+      typeof m.color === "string" && /^#[0-9a-fA-F]{6}$/.test(m.color) ? m.color : undefined;
+    if (!color) {
+      try {
+        color = (await OBR.party.getPlayers()).find((p) => p.id === m.player)?.color;
+      } catch {}
+    }
     color ??= readColors()[m.player];
     const itemId = m.card ? await tokenForCard(m.card) : null;
     const { payload, expression } = await rollForCompanion(
