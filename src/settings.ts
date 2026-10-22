@@ -2727,8 +2727,8 @@ const TABS: TabDef[] = [
   {
     // Phone app (Echo Companion): QR codes per player.
     id: "companion",
-    zh: `${ICONS.idCard} 手机应用`,
-    en: `${ICONS.idCard} Phone App`,
+    zh: `${ICONS.idCard} Echo Companion`,
+    en: `${ICONS.idCard} Echo Companion`,
     dynamicBody: (lang, gm) => renderCompanionBody(lang, gm),
     afterRender: (root, gm) => wireCompanionBody(root, gm),
   },

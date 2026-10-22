@@ -31,6 +31,7 @@ import { setupFullFog, teardownFullFog } from "./modules/fullFog";
 import { setupMusicBoard, teardownMusicBoard } from "./modules/musicBoard";
 import { setupTransform, teardownTransform } from "./modules/transform";
 import { setupCrossSceneCards } from "./modules/cross-scene-cards";
+import { setupCompanionRelay } from "./modules/companion";
 import { setupPerfWindow } from "./modules/perfWindow";
 import { assetUrl } from "./asset-base";
 import { onViewportResize } from "./utils/viewportAnchor";
@@ -738,6 +739,10 @@ OBR.onReady(async () => {
   // is cheap (just a localStorage read + maybe one popover.open) so
   // we always run it; it's a no-op when the user hasn't enabled it.
   void setupPerfWindow();
+
+  // Echo Companion: lets players pick up their phone QR code in their
+  // own Settings (GM side; no-op without the room key).
+  void setupCompanionRelay();
 
   // (resourceTracker is now wired through the module registry above —
   // its enable flag lives in state.enabled.resourceTracker and is

@@ -11,7 +11,10 @@
 //   3. For each player: "QR code" makes a new code (the old one stops
 //      working), "Revoke" turns the phone off.
 //
-// Players only see a short explanation: the GM gives them their code.
+// Players see their own QR code here once the GM has made it. It is
+// never sent through OBR broadcast (every client receives those): the
+// player's suite proves it is that player with a secret only it has
+// (see shared.ts → pickupNonce and the GM relay in index.ts).
 //
 // Backend routes: echo-version-backend/src/companion.ts.
 
@@ -19,28 +22,9 @@ import OBR from "@owlbear-rodeo/sdk";
 import qrcode from "qrcode-generator";
 import { CC_ORIGIN } from "../characterCards/backend";
 import type { Language } from "../../state";
+import { BC_CHANGED, BC_HELLO, pickupNonce, readSecret, roomKey, sha256Hex, writeSecret } from "./shared";
 
-const SECRET_LS = "obr-suite/companion/room-secret/";
 const CARD_LIST_KEY = "com.character-cards/list";
-
-function roomKey(): string {
-  return (OBR.room?.id || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
-function readSecret(room: string): string {
-  try {
-    return localStorage.getItem(SECRET_LS + room) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function writeSecret(room: string, secret: string): void {
-  try {
-    if (secret) localStorage.setItem(SECRET_LS + room, secret);
-    else localStorage.removeItem(SECRET_LS + room);
-  } catch {}
-}
 
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -48,13 +32,22 @@ function esc(s: string): string {
 
 const TXT = {
   title: { zh: "Echo Companion（手机应用）", en: "Echo Companion (phone app)" },
+  yourQr: { zh: "你的二维码", en: "Your QR code" },
+  yourQrHint: {
+    zh: "用 Echo Companion 应用扫描。不要分享：任何扫描它的人都能使用你的角色卡。",
+    en: "Scan it with the Echo Companion app. Don't share it: anyone who scans it can use your cards.",
+  },
+  waiting: {
+    zh: "DM 还没有为你生成二维码（或 DM 不在房间里）。生成后会自动显示在这里。",
+    en: "The GM hasn't made your QR code yet (or isn't in the room). It will show up here by itself.",
+  },
   intro: {
     zh: "玩家用手机扫描二维码后，可以在手机上查看和编辑自己的角色卡、投骰。每个玩家一个二维码，可以访问分配给他的所有角色卡。",
     en: "Players scan a QR code with the phone app to view and edit their own character cards and roll dice. One code per player, giving access to every card assigned to them.",
   },
   playerNote: {
-    zh: "向 DM 索取你的二维码。注意：需要登录 Owlbear Rodeo 账号（访客每次进入 ID 都会变化）。",
-    en: "Ask the GM for your QR code. Note: you need to be logged in to an Owlbear Rodeo account (guests get a new id every time).",
+    zh: "你的二维码由 DM 生成，生成后会显示在这里。注意：需要登录 Owlbear Rodeo 账号（访客每次进入 ID 都会变化）。",
+    en: "The GM makes your QR code; it then shows up here. Note: you need to be logged in to an Owlbear Rodeo account (guests get a new id every time).",
   },
   noBackend: { zh: "未配置角色卡后端（VITE_CC_BACKEND）。", en: "Character-card backend not configured (VITE_CC_BACKEND)." },
   activate: { zh: "为此房间启用", en: "Activate for this room" },
@@ -125,15 +118,82 @@ export function renderCompanionBody(l: Language, isGM: boolean): string {
   lang = l;
   const head = `<h3>${tx("title")}</h3><p>${tx("intro")}</p>`;
   if (!CC_ORIGIN) return `${head}<p class="role-notice">${tx("noBackend")}</p>`;
-  if (!isGM) return `${head}<p class="role-notice">${tx("playerNote")}</p>`;
+  if (!isGM) return `${head}<div id="companion-player"><p class="role-notice">${tx("playerNote")}</p></div>`;
   // The GM part is filled in by wireCompanionBody (it needs the network).
   return `${head}<div id="companion-root"><p style="color:var(--text-dim)">…</p></div>`;
 }
 
 export function wireCompanionBody(root: HTMLElement, isGM: boolean): void {
-  if (!isGM || !CC_ORIGIN) return;
+  if (!CC_ORIGIN) return;
+  if (!isGM) {
+    const pbox = root.querySelector<HTMLElement>("#companion-player");
+    if (pbox) void drawPlayer(pbox);
+    return;
+  }
   const box = root.querySelector<HTMLElement>("#companion-root");
   if (box) void drawGM(box);
+}
+
+/** Tell the player their code changed (new / revoked). No secret inside. */
+function announceChanged(player: string): void {
+  void OBR.broadcast.sendMessage(BC_CHANGED, { player }, { destination: "REMOTE" }).catch(() => {});
+}
+
+// --- Player side ---------------------------------------------------------------------
+
+let playerUnsub: (() => void) | null = null;
+
+async function drawPlayer(box: HTMLElement): Promise<void> {
+  const room = roomKey();
+  let me = "";
+  try {
+    me = await OBR.player.getId();
+  } catch {
+    return;
+  }
+  const nonce = pickupNonce(room);
+  const hash = await sha256Hex(nonce);
+
+  const pickup = async (): Promise<boolean> => {
+    if (!box.isConnected) return false;
+    try {
+      const res = await fetch(`${CC_ORIGIN}/companion/pickup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ room, player: me, nonce }),
+      });
+      if (!res.ok) {
+        box.innerHTML = `<p class="role-notice">${tx("playerNote")}</p><p>${tx("waiting")}</p>`;
+        return false;
+      }
+      const { link } = (await res.json()) as { link: string };
+      box.innerHTML = `<p>${tx("yourQrHint")}</p><div data-slot="qr"></div>`;
+      showQr(box, tx("yourQr"), link, false);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Ask the GM's suite to register our hash, then try to pick up.
+  const hello = () => void OBR.broadcast.sendMessage(BC_HELLO, { hash }, { destination: "REMOTE" }).catch(() => {});
+
+  // The GM answers with BC_CHANGED when our code is ready / changed.
+  playerUnsub?.();
+  playerUnsub = OBR.broadcast.onMessage(BC_CHANGED, (event) => {
+    if (!box.isConnected) {
+      playerUnsub?.();
+      playerUnsub = null;
+      return;
+    }
+    if ((event.data as { player?: string } | undefined)?.player !== me) return;
+    // A new code replaces the old one: register our hash on it again.
+    void pickup().then((ok) => {
+      if (!ok) hello();
+    });
+  });
+
+  if (!(await pickup())) hello();
 }
 
 async function drawGM(box: HTMLElement): Promise<void> {
@@ -265,6 +325,7 @@ async function drawPlayers(box: HTMLElement, room: string, secret: string): Prom
           body: JSON.stringify({ room, player, player_name: name }),
         });
         showQr(box, name, r.link);
+        announceChanged(player);
         await drawPlayers(box, room, secret);
       } catch (e: any) {
         msg(`${tx("err")}: ${e?.message ?? e}`);
@@ -279,6 +340,7 @@ async function drawPlayers(box: HTMLElement, room: string, secret: string): Prom
             secret,
           });
           box.querySelector<HTMLElement>('[data-slot="qr"]')!.innerHTML = "";
+          announceChanged(player);
           await drawPlayers(box, room, secret);
         } catch (e: any) {
           msg(`${tx("err")}: ${e?.message ?? e}`);
@@ -287,7 +349,7 @@ async function drawPlayers(box: HTMLElement, room: string, secret: string): Prom
   });
 }
 
-function showQr(box: HTMLElement, name: string, link: string): void {
+function showQr(box: HTMLElement, name: string, link: string, closable = true): void {
   const qr = qrcode(0, "M");
   qr.addData(link);
   qr.make();
@@ -296,10 +358,11 @@ function showQr(box: HTMLElement, name: string, link: string): void {
     <div style="margin-top:12px;padding:12px;border-radius:8px;background:#fff;color:#111;text-align:center">
       <div style="font-weight:600;margin-bottom:6px">${esc(name)}</div>
       <img alt="QR" src="${qr.createDataURL(5, 4)}" style="image-rendering:pixelated;max-width:100%" />
-      <div style="font-size:11.5px;margin:6px 0">${tx("scanHint")}</div>
+      ${closable ? `<div style="font-size:11.5px;margin:6px 0">${tx("scanHint")}</div>` : ""}
       <button type="button" class="dl-btn" data-act="copylink">${tx("copyLink")}</button>
-      <button type="button" class="dl-btn" data-act="closeqr">${tx("close")}</button>
+      ${closable ? `<button type="button" class="dl-btn" data-act="closeqr">${tx("close")}</button>` : ""}
     </div>`;
   slot.querySelector<HTMLButtonElement>('[data-act="copylink"]')!.onclick = () => void navigator.clipboard?.writeText(link);
-  slot.querySelector<HTMLButtonElement>('[data-act="closeqr"]')!.onclick = () => (slot.innerHTML = "");
+  const closeBtn = slot.querySelector<HTMLButtonElement>('[data-act="closeqr"]');
+  if (closeBtn) closeBtn.onclick = () => (slot.innerHTML = "");
 }

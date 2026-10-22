@@ -1610,4 +1610,4 @@ OBR.onReady(async () => {
   // The stat banner self-syncs on scene.items.onChange (it's the
   // shared mountStatBanner component now); the resource panel does
   // too. No card-level items.onChange hook needed here anymore.
-});
+});
