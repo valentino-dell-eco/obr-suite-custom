@@ -36,7 +36,7 @@ import { cleanSpend, dieRollFormula, spendResource, spendSpellSlot } from "../ch
 import { buildCast, buildFeatureUse, cardSaveDc, castLevelOptions } from "../characterCards/cast-core";
 import { effectiveSpellDetail } from "../characterCards/spell-detail";
 import type { ChatCast } from "../roomChat/types";
-import { formOfToken, type FormInfo } from "./forms";
+import { formOfToken, formStatBlock, type FormInfo } from "./forms";
 import { readLibrary } from "../statusTester/library";
 import { iconUrl, readApplied, textColorFor, titleParts } from "../statusTester/types";
 import { emojiImageUrl } from "../statusTester/emoji";
@@ -594,6 +594,9 @@ export async function runAction(kind: string, a: Actor, data: unknown): Promise<
       return spellInfo(a, data);
     case "chat":
       return chat(a, data);
+    case "formStatblock":
+      // Read only: the form itself is bound in the suite.
+      return { statblock: await formStatBlock(await requireToken(a)) };
     case "chatHistory":
       return chatHistory(a);
     default:
