@@ -211,6 +211,10 @@ async function execRoll(sock: WebSocket, m: ExecRoll): Promise<void> {
         expression,
         hidden: !!payload.hidden,
         tokenName: payload.tokenName ?? "",
+        // So the phone can draw the row like the suite's history.
+        rollerName: payload.rollerName,
+        rollerColor: payload.rollerColor,
+        statSource: payload.statSource ?? null,
         dice: payload.dice.map((d) => ({
           type: d.type,
           value: d.value,

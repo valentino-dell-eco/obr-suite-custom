@@ -81,13 +81,18 @@ interface HistoryEntry {
 
 /** "Chara" / "Form" tag for rolls made with the quick roll modal's
  *  sheet chips (token with both a character card and a bestiary form). */
-function statSourceTag(h: { statSource?: "chara" | "form"; via?: "app" }): string {
-  // 📱 = rolled from the Echo Companion phone app.
-  const phone = h.via === "app" ? `<span class="src-tag src-app" title="Echo Companion">📱</span>` : "";
-  if (h.statSource !== "chara" && h.statSource !== "form") return phone;
+function statSourceTag(h: { statSource?: "chara" | "form" }): string {
+  if (h.statSource !== "chara" && h.statSource !== "form") return "";
   const zh = getLocalLang() === "zh";
   const txt = h.statSource === "form" ? (zh ? "形态" : "Form") : (zh ? "角色" : "Chara");
-  return `${phone}<span class="src-tag src-${h.statSource}">${txt}</span>`;
+  return `<span class="src-tag src-${h.statSource}">${txt}</span>`;
+}
+
+/** 📱 right after the total: rolled from the Echo Companion phone app. */
+function viaAppMark(h: { via?: "app" }): string {
+  return h.via === "app"
+    ? `<span class="via-app" title="Echo Companion" style="flex-shrink:0;margin-left:2px;font-size:11px;line-height:1;align-self:center">📱</span>`
+    : "";
 }
 
 // Currently-active replay's collective-id (LOCAL state — set when this
@@ -265,7 +270,7 @@ function buildFormula(entry: HistoryEntry, showLabel = true): string {
       ? `<span class="label-tag">${escapeHtml(entry.label)}</span>`
       : "";
   const list = `<div class="dice-list">${repeatTag}${chips}${modStr}${labelStr}<span class="eq">=</span></div>`;
-  const total = `<span class="total">${entry.total}</span>`;
+  const total = `<span class="total">${entry.total}</span>${viaAppMark(entry)}`;
   return list + total;
 }
 
@@ -291,7 +296,7 @@ function buildMemberCard(m: HistoryEntry): string {
   if (isCrit) cardCls.push("crit");
   else if (isFail) cardCls.push("fail");
   if (m.hidden) cardCls.push("hidden-roll");
-  return `<div class="${cardCls.join(" ")}" data-rollid="${escapeHtml(m.rollId)}" data-cid="${escapeHtml(m.collectiveId ?? m.rollId)}">${chips}${modStr}<span class="eq">=</span><span class="total">${m.total}</span></div>`;
+  return `<div class="${cardCls.join(" ")}" data-rollid="${escapeHtml(m.rollId)}" data-cid="${escapeHtml(m.collectiveId ?? m.rollId)}">${chips}${modStr}<span class="eq">=</span><span class="total">${m.total}</span>${viaAppMark(m)}</div>`;
 }
 
 function buildMemberStripHtml(members: HistoryEntry[]): string {
