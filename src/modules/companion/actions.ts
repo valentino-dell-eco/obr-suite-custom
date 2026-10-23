@@ -65,7 +65,7 @@ export interface CharacterState {
    *  or the character isn't placed). Actions then can't run. */
   tokenId: string | null;
   tokenName: string;
-  hp: { current: number | null; max: number | null; temp: number } | null;
+  hp: { current: number | null; max: number | null; temp: number; ac: number | null } | null;
   resources: Resource[];
   /** Resting: the long-rest choice "also Dawn / Dusk" applies. */
   hasDawn: boolean;
@@ -172,7 +172,12 @@ export async function characterState(card: string): Promise<CharacterState> {
   return {
     tokenId: tok.id,
     tokenName: tok.name,
-    hp: { current: num(b.health), max: num(b["max health"]), temp: num(b["temporary health"]) ?? 0 },
+    hp: {
+      current: num(b.health),
+      max: num(b["max health"]),
+      temp: num(b["temporary health"]) ?? 0,
+      ac: num(b["armor class"]),
+    },
     resources,
     hasDawn: resources.some((r) => r.recovery === "DW"),
     hasDusk: resources.some((r) => r.recovery === "DS"),
@@ -332,7 +337,7 @@ async function hitDice(a: Actor, data: any) {
 
 // --- HP and resources (the suite's stat banner + resource panel) ---------------
 
-/** HP of the token: set current / temp / max, or damage / heal
+/** HP of the token: set current / temp / max / AC, or damage / heal
  *  (damage takes temporary HP first; heal stops at max). */
 async function hp(a: Actor, data: any) {
   const itemId = await requireToken(a);
@@ -352,13 +357,20 @@ async function hp(a: Actor, data: any) {
   if (n(data?.current) != null) cur = n(data.current)!;
   if (n(data?.temp) != null) temp = Math.max(0, n(data.temp)!);
   if (n(data?.max) != null) max = Math.max(1, n(data.max)!);
+  const ac = n(data?.ac) != null ? Math.max(0, n(data.ac)!) : null;
   cur = Math.max(-999, cur);
   const after = await patchBubbles(itemId, {
     health: cur,
     "temporary health": temp,
     ...(max != null ? { "max health": max } : {}),
+    ...(ac != null ? { "armor class": ac } : {}),
   });
-  return { current: after.health ?? cur, temp: after["temporary health"] ?? temp, max: after["max health"] ?? max };
+  return {
+    current: after.health ?? cur,
+    temp: after["temporary health"] ?? temp,
+    max: after["max health"] ?? max,
+    ac: after["armor class"] ?? ac,
+  };
 }
 
 /** Roll at the table in the player's name; returns the roll for the
