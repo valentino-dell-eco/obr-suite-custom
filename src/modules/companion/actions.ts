@@ -10,7 +10,7 @@
 // their own browser — in the player's name.
 
 import OBR from "@owlbear-rodeo/sdk";
-import { readBubbles, patchBubbles } from "../../utils/statEdit";
+import { readBubbles, patchBubbles, MONSTER_OVERRIDE_META_KEY } from "../../utils/statEdit";
 import { readResources, updateResource } from "../resourceTracker/storage";
 import { broadcastChanged } from "../resourceTracker/panel";
 import {
@@ -73,6 +73,10 @@ export interface CharacterState {
   conMod: number;
   /** Bestiary form on the token (Wild Shape…), or null. */
   form: FormInfo | null;
+  /** The form's own HP / temp / AC (the suite's separate "creature"
+   *  stats of a card + bestiary token: bubbles/monster-override), or
+   *  null without a form. Never written yet → the creature's defaults. */
+  formHp: { current: number | null; max: number | null; temp: number; ac: number | null } | null;
   /** Status Tracker chips on the token, as a player sees them. */
   statuses: StatusChip[];
 }
@@ -158,7 +162,18 @@ export async function characterState(card: string): Promise<CharacterState> {
   const tok = await tokenForCard(card);
   const conMod = await conModFor(card).catch(() => 0);
   if (!tok) {
-    return { tokenId: null, tokenName: "", hp: null, resources: [], hasDawn: false, hasDusk: false, conMod, form: null, statuses: [] };
+    return {
+      tokenId: null,
+      tokenName: "",
+      hp: null,
+      resources: [],
+      hasDawn: false,
+      hasDusk: false,
+      conMod,
+      form: null,
+      formHp: null,
+      statuses: [],
+    };
   }
   let resources: Resource[] = [];
   let statuses: StatusChip[] = [];
@@ -182,8 +197,31 @@ export async function characterState(card: string): Promise<CharacterState> {
     hasDawn: resources.some((r) => r.recovery === "DW"),
     hasDusk: resources.some((r) => r.recovery === "DS"),
     conMod,
-    form: await formOfToken(tok.id),
+    ...(await formWithHp(tok.id)),
     statuses,
+  };
+}
+
+/** The form on the token and its own HP / AC (see CharacterState.formHp). */
+async function formWithHp(itemId: string): Promise<{ form: FormInfo | null; formHp: CharacterState["formHp"] }> {
+  const form = await formOfToken(itemId);
+  if (!form) return { form: null, formHp: null };
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  let b: Record<string, unknown> = {};
+  try {
+    b = (await readBubbles(itemId, MONSTER_OVERRIDE_META_KEY)) as Record<string, unknown>;
+  } catch {}
+  const written = num(b.health) != null || num(b["armor class"]) != null;
+  return {
+    form,
+    formHp: written
+      ? {
+          current: num(b.health),
+          max: num(b["max health"]),
+          temp: num(b["temporary health"]) ?? 0,
+          ac: num(b["armor class"]),
+        }
+      : { current: form.hp, max: form.hp, temp: 0, ac: form.ac },
   };
 }
 
@@ -341,7 +379,28 @@ async function hitDice(a: Actor, data: any) {
  *  (damage takes temporary HP first; heal stops at max). */
 async function hp(a: Actor, data: any) {
   const itemId = await requireToken(a);
-  const b = await readBubbles(itemId);
+  // "form": the creature's own stats (bubbles/monster-override), like the
+  // suite's monster panel; seeded with the creature's defaults first.
+  let metaKey: string | undefined;
+  if (data?.target === "form") {
+    const f = await formWithHp(itemId);
+    if (!f.form || !f.formHp) throw new Error("no form");
+    metaKey = MONSTER_OVERRIDE_META_KEY;
+    const cur0 = await readBubbles(itemId, metaKey);
+    if (typeof cur0.health !== "number" && typeof cur0["armor class"] !== "number") {
+      await patchBubbles(
+        itemId,
+        {
+          health: f.formHp.current ?? 0,
+          "max health": f.formHp.max ?? 1,
+          "temporary health": 0,
+          "armor class": f.formHp.ac ?? 10,
+        },
+        metaKey,
+      );
+    }
+  }
+  const b = await readBubbles(itemId, metaKey);
   const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.round(v) : null);
   let cur = n(b.health) ?? 0;
   let temp = n(b["temporary health"]) ?? 0;
@@ -359,12 +418,16 @@ async function hp(a: Actor, data: any) {
   if (n(data?.max) != null) max = Math.max(1, n(data.max)!);
   const ac = n(data?.ac) != null ? Math.max(0, n(data.ac)!) : null;
   cur = Math.max(-999, cur);
-  const after = await patchBubbles(itemId, {
-    health: cur,
-    "temporary health": temp,
-    ...(max != null ? { "max health": max } : {}),
-    ...(ac != null ? { "armor class": ac } : {}),
-  });
+  const after = await patchBubbles(
+    itemId,
+    {
+      health: cur,
+      "temporary health": temp,
+      ...(max != null ? { "max health": max } : {}),
+      ...(ac != null ? { "armor class": ac } : {}),
+    },
+    metaKey,
+  );
   return {
     current: after.health ?? cur,
     temp: after["temporary health"] ?? temp,
