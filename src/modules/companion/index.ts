@@ -22,14 +22,14 @@
 // Companion → Activate). Without it, nothing happens.
 
 import OBR from "@owlbear-rodeo/sdk";
-import { initBroadcastAuth, senderOf } from "../../utils/broadcastAuth";
+import { initBroadcastAuth, isFromGM, senderOf } from "../../utils/broadcastAuth";
 import { CC_ORIGIN } from "../characterCards/backend";
 import { rollForCompanion } from "../dice";
 import { BC_CHANGED, BC_HELLO, readSecret, roomKey } from "./shared";
 import { characterState, runAction, tokenForCard as characterToken, type Actor } from "./actions";
 import { syncForms } from "./forms";
 import { stampChatMessage } from "../roomChat";
-import { BC_CHAT_MESSAGE } from "../roomChat/types";
+import { BC_CHAT_CLEAR, BC_CHAT_MESSAGE } from "../roomChat/types";
 
 let started = false;
 
@@ -69,6 +69,15 @@ export async function setupCompanionRelay(): Promise<void> {
     if (!msg) return;
     try {
       sock.send(JSON.stringify({ t: "exec.chat", msg }));
+    } catch {}
+  });
+  // GM "Clear for everyone" → the phones wipe their chat too.
+  OBR.broadcast.onMessage(BC_CHAT_CLEAR, (ev) => {
+    if (!isFromGM(ev)) return;
+    const sock = ws;
+    if (!sock || sock.readyState !== WebSocket.OPEN) return;
+    try {
+      sock.send(JSON.stringify({ t: "exec.chatClear" }));
     } catch {}
   });
   void startExecutor();
