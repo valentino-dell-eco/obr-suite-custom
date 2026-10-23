@@ -79,6 +79,90 @@ export interface CharacterState {
   formHp: { current: number | null; max: number | null; temp: number; ac: number | null } | null;
   /** Status Tracker chips on the token, as a player sees them. */
   statuses: StatusChip[];
+  /** "Character Companions": tokens the card's players own that are
+   *  bound to a bestiary creature (familiar, animal companion…) and to
+   *  no character card. */
+  companions: CompanionInfo[];
+}
+
+export interface CompanionInfo {
+  /** Token id. */
+  id: string;
+  /** Token name on the map. */
+  name: string;
+  slug: string;
+  /** The creature ("Wolf"). */
+  creature: string;
+  hp: { current: number | null; max: number | null; temp: number; ac: number | null };
+}
+
+const SLUG_KEY = "com.bestiary/slug";
+const MONSTERS_KEY = "com.bestiary/monsters";
+
+/** The card's players (owners_id), cached for a minute. */
+const ownersCache = new Map<string, { at: number; ids: string[] }>();
+async function cardOwners(card: string): Promise<string[]> {
+  const hit = ownersCache.get(card);
+  if (hit && Date.now() - hit.at < 60_000) return hit.ids;
+  const data = await loadCardById(card).catch(() => null);
+  const ids = Array.isArray(data?.owners_id) ? data.owners_id.filter((x: unknown): x is string => typeof x === "string" && !!x) : [];
+  ownersCache.set(card, { at: Date.now(), ids });
+  return ids;
+}
+
+/** The card's players' companions on the map (visible ones only). */
+async function companionsFor(card: string): Promise<CompanionInfo[]> {
+  const owners = await cardOwners(card);
+  if (!owners.length) return [];
+  let items: any[] = [];
+  try {
+    items = await OBR.scene.items.getItems((it: any) => {
+      const meta = (it.metadata ?? {}) as Record<string, unknown>;
+      return (
+        it.type === "IMAGE" &&
+        it.visible !== false &&
+        owners.includes(it.createdUserId) &&
+        typeof meta[SLUG_KEY] === "string" &&
+        !!meta[SLUG_KEY] &&
+        !meta[BOUND_CARD_KEY]
+      );
+    });
+  } catch {
+    return [];
+  }
+  if (!items.length) return [];
+  let table: Record<string, any> = {};
+  try {
+    table = ((await OBR.scene.getMetadata())[MONSTERS_KEY] as Record<string, any>) ?? {};
+  } catch {}
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const out: CompanionInfo[] = [];
+  for (const it of items) {
+    const slug = String(it.metadata[SLUG_KEY]);
+    const b = await readBubbles(it.id).catch(() => ({}) as Record<string, unknown>);
+    const m = table[slug];
+    out.push({
+      id: it.id,
+      name: String(it.text?.plainText || it.name || "").trim() || slug.split("::")[1] || "?",
+      slug,
+      creature: String(m?.name || m?.ENG_name || slug.split("::")[1] || slug),
+      hp: {
+        current: num((b as any).health),
+        max: num((b as any)["max health"]),
+        temp: num((b as any)["temporary health"]) ?? 0,
+        ac: num((b as any)["armor class"]),
+      },
+    });
+  }
+  return out.sort((x, y) => x.name.localeCompare(y.name));
+}
+
+/** A companion token of this card's players (or an error). */
+async function requireCompanion(a: Actor, id: unknown): Promise<string> {
+  const list = await companionsFor(a.card);
+  const c = list.find((x) => x.id === id);
+  if (!c) throw new Error("no such companion");
+  return c.id;
 }
 
 /** One status on the token, ready to draw (Status Tracker chip). */
@@ -173,6 +257,7 @@ export async function characterState(card: string): Promise<CharacterState> {
       form: null,
       formHp: null,
       statuses: [],
+      companions: await companionsFor(card),
     };
   }
   let resources: Resource[] = [];
@@ -199,6 +284,7 @@ export async function characterState(card: string): Promise<CharacterState> {
     conMod,
     ...(await formWithHp(tok.id)),
     statuses,
+    companions: await companionsFor(card),
   };
 }
 
@@ -378,11 +464,12 @@ async function hitDice(a: Actor, data: any) {
 /** HP of the token: set current / temp / max / AC, or damage / heal
  *  (damage takes temporary HP first; heal stops at max). */
 async function hp(a: Actor, data: any) {
-  const itemId = await requireToken(a);
+  // A companion's HP / AC (its own token), else the character's.
+  const itemId = data?.companion ? await requireCompanion(a, data.companion) : await requireToken(a);
   // "form": the creature's own stats (bubbles/monster-override), like the
   // suite's monster panel; seeded with the creature's defaults first.
   let metaKey: string | undefined;
-  if (data?.target === "form") {
+  if (data?.target === "form" && !data?.companion) {
     const f = await formWithHp(itemId);
     if (!f.form || !f.formHp) throw new Error("no form");
     metaKey = MONSTER_OVERRIDE_META_KEY;
@@ -669,9 +756,13 @@ export async function runAction(kind: string, a: Actor, data: unknown): Promise<
       return spellInfo(a, data);
     case "chat":
       return chat(a, data);
-    case "formStatblock":
-      // Read only: the form itself is bound in the suite.
-      return { statblock: await formStatBlock(await requireToken(a)) };
+    case "formStatblock": {
+      // Read only: the form itself is bound in the suite. With
+      // `companion`: the stat block of one of the player's companions.
+      const d = data as any;
+      const id = d?.companion ? await requireCompanion(a, d.companion) : await requireToken(a);
+      return { statblock: await formStatBlock(id) };
+    }
     case "chatHistory":
       return chatHistory(a);
     default:
